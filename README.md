@@ -85,10 +85,6 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 *Hub motors, shocks, and wheel assembly*
 
-https://github.com/user-attachments/assets/320d0de8-24c2-415b-bd44-c744f2a7602f
-
-*Final assembly and wiring*
-
 ---
 
 ## 🎯 The Vision
