@@ -2,15 +2,15 @@
 
 # 🤖 Cemani Homestead Robot
 
-### Autonomous 4WD Tank Platform for Homestead Automation
+### Autonomous Dual-Armed Tank Platform for Homestead Automation
 
 ![Made with](https://img.shields.io/badge/Made_with-Blood_Sweat_Tears-red?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Pulling_Firewood-green?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Mobile_Platform_Complete-green?style=for-the-badge)
 ![Power](https://img.shields.io/badge/Power-24V_LiFePO4-orange?style=for-the-badge)
 
-**Built to protect chickens, haul firewood, and automate homestead tasks**
+**Built to protect chickens, automate chores, and give kids rides around the homestead**
 
-[📹 Demo Video](#demo) • [🔧 Hardware](#hardware) • [💻 Code](#code) • [🚧 Current Status](#current-status)
+[📹 Demo Video](#demo) • [🔧 Hardware](#hardware) • [🤖 The Vision](#the-vision) • [💻 Code](#code)
 
 </div>
 
@@ -22,45 +22,134 @@
 
 https://github.com/user-attachments/assets/robot-pulling-firewood.mp4
 
-*The robot successfully pulling a metal cart loaded with firewood - proof of concept for autonomous hauling tasks.*
+*Successfully pulling a loaded metal cart - first real-world test after 6 months of building and learning.*
 
 ---
 
-## 🎯 The Mission
+## 🎯 The Vision
 
-**The Problem:** Predators attacking my chickens at night. Manual labor for homestead tasks.
+**The Problem:** Backyard predators attacking my chickens. Manual homestead labor. Kids want robot rides.
 
-**The Solution:** Build an autonomous robot that can:
-- 🐔 Patrol the property and detect predators using computer vision
-- 🪵 Haul firewood and materials autonomously
-- 📦 Transport feed, water, and supplies
-- 🚜 Perform repetitive homestead chores
+**The Solution:** Build a dual-armed autonomous robot that can:
+
+### Primary Mission: Chicken Protection
+- 🐔 **Patrol property** using computer vision to detect predators
+- 👁️ **601-class object detection** via [RealTime AI Cam](https://github.com/nicedreamzapp/RealTimeAICam)
+- 🔊 **Scare off predators** through motion and sound
+- ⏰ **Automated feeding** at scheduled times
+
+### Dual-Arm Manipulation (OpenArm 0.1 Integration Planned)
+Using two robotic arms for human-like bilateral manipulation:
+- 🥣 **Feed chickens** by scooping from containers
+- 📦 **Pack boxes** for shipping
+- 🧺 **Carry laundry** from dryer to basket
+- 🍽️ **Handle dishware** and containers
+- 🏗️ **Grab parts** from stockroom shelves
+- 🪵 **Load/unload** materials autonomously
+
+### Family Fun
+- 🚂 **Train engine body** (cardboard/3D printed) for kids to ride in cars behind it
+- 🏴‍☠️ **Swappable bodies** - pirate ship, fire truck, space shuttle
+- 🐠 **Fish-controlled mode** (aquarium on top, fish steers via camera tracking)
+
+---
+
+## 📊 Current Status
+
+**Weight:** 65 lbs (can handle 80+ lbs more with reinforcement)  
+**Build Time:** 6 months from zero robotics knowledge  
+**Status:** Mobile platform complete ✅ | Adding autonomy next 🚧
+
+### Phase Completion
+- ✅ **Phase 1:** Tank chassis with 4WD hub motors
+- ✅ **Phase 2:** Xbox controller → ESP32 → Teensy → Motors  
+- ✅ **Phase 3:** RS-485 Modbus communication working
+- ✅ **Phase 4:** Successfully pulled loaded cart
+- 🚧 **Phase 5:** Wire management (goal: gaming PC aesthetic)
+- 🚧 **Phase 6:** Fine-tune acceleration curves
+- 🔜 **Phase 7:** Add computer vision (RealTime AI Cam integration)
+- 🔜 **Phase 8:** Mount dual OpenArm 0.1 manipulators
+- 🔜 **Phase 9:** Autonomous navigation and task planning
 
 ---
 
 ## 🔧 Hardware
 
-### Complete Bill of Materials
+### Mobile Platform (Complete)
 
 | Component | Specs | Purpose |
 |-----------|-------|---------|
-| **4x Hub Motors** | ZLLG80ASM250 Brushless | Tank drive (2 per side) |
-| **2x Motor Drivers** | ZLAC8015D Dual-Channel | Each controls one side |
+| **4x Hub Motors** | ZLLG80ASM250, 9 lbs each | Tank drive (2 per side, encoded) |
+| **2x Motor Drivers** | ZLAC8015D Dual-Channel | Each controls one side via Modbus |
 | **Teensy 4.1** | 600MHz ARM Cortex-M7 | Main controller & Modbus master |
 | **ESP32** | Bluetooth 5.0 | Xbox controller receiver (Bluepad32) |
 | **RS-485 Module** | MAX3485 | Modbus RTU communication |
-| **2x 12V LiFePO4** | In series for 24V | Motor power |
+| **2x 12V LiFePO4** | Series = 24V | Motor power (low CoG mounting) |
 | **Buck Converter** | DROK 24V→5V | Logic power with filtering |
 | **Xbox Controller** | Bluetooth 5.0 | Wireless control |
-| **2020 Extrusion** | Aluminum rails | Chassis frame |
-| **Aluminum Plates** | Various sizes | Mounting & structure |
-| **4x Shocks** | From electric scooter | Suspension |
-| **Fuses & Breakers** | 10A input, 2A output | Overcurrent protection |
+| **2020 Extrusion** | Aluminum | Chassis frame |
+| **Aluminum Plates** | Various | Mounting & structure |
+| **4x Shocks** | Electric scooter | Suspension for terrain |
+| **Fuses & Breakers** | 10A input, 2A output | Protection |
 | **Capacitors** | 100µF input/output | Power filtering |
-| **Terminal Blocks** | Various | Power distribution |
-| **DuPont Cables** | Various gauges | Signal connections |
 
-### System Architecture
+### Planned Additions
+
+| Component | Specs | Purpose |
+|-----------|-------|---------|
+| **2x OpenArm 0.1** | 3-5kg lift each | Bilateral manipulation |
+| **Camera Array** | 360° coverage | Computer vision & navigation |
+| **iPhone/iPad** | Running RealTime AI Cam | 601-class object detection |
+| **GPS Module** | Outdoor navigation | Property coverage |
+| **LiDAR** | Optional 3D mapping | Obstacle avoidance |
+| **Train Body** | Cardboard/3D printed | Kid transport mode |
+
+---
+
+## 🤖 The Vision: Dual-Armed Autonomy
+
+### Why Two Arms?
+OpenArm 0.1 provides **bilateral manipulation** - the ability to coordinate two arms like a human:
+- One arm stabilizes a container while the other scoops
+- Both arms work together to pack boxes efficiently  
+- Coordinate lifting and placing objects
+- Handle larger items that need two-point grip
+
+### Planned Tasks
+
+**Daily Chicken Care:**
+1. Robot navigates to feed storage at scheduled time
+2. Uses object detection to locate chicken feed container
+3. One arm opens/stabilizes lid, other arm scoops feed
+4. Distributes feed to multiple feeding stations
+5. Chickens learn to gather when they see/hear the robot
+
+**Package Handling:**
+1. Vision system identifies box on shelf
+2. Retrieves box with coordinated arm movement
+3. Places in packing area
+4. Fills with items from stockroom
+5. Closes and labels for shipping
+
+**Laundry Assistance:**
+1. Detects dryer completion signal
+2. Opens dryer door with one arm
+3. Retrieves clothing with other arm
+4. Places in basket for transport
+5. Delivers to folding area
+
+**Predator Patrol:**
+- Autonomous perimeter patrol on schedule
+- Computer vision detects animals (raccoons, foxes, coyotes)
+- Approaches with lights/sounds to scare them away
+- Arms can wave/gesture to appear larger
+- Logs encounters for analysis
+
+---
+
+## 💻 Software Architecture
+
+### Current Stack (Platform Control)
 ```
 Xbox Controller (BT 5.0)
     ↓
@@ -76,133 +165,48 @@ ZLAC8015D (ID=1)   ZLAC8015D (ID=2)
 └─ Motor 2 (RL)    └─ Motor 2 (RR)
 ```
 
----
-
-## 💻 Software Stack
-
-### ESP32 (Bluepad32)
-- **Framework:** Arduino + Bluepad32 library
-- **Purpose:** Xbox controller input via Bluetooth
-- **Output:** Serial event stream to Teensy
-- **Baud Rate:** 115200
-
-### Teensy 4.1
-- **Framework:** Arduino
-- **Libraries:** ModbusMaster (for ZLAC drivers)
-- **Purpose:** 
-  - Parse controller events from ESP32
-  - Convert joystick input to tank drive speeds
-  - Send Modbus RTU commands to motors
-- **Communication:**
-  - Serial1 (RX/TX): ESP32 input
-  - Serial2 (via MAX3485): RS-485 to drivers
-
-### ZLAC8015D Drivers
-- **Protocol:** Modbus RTU over RS-485
-- **Baud Rate:** 115200
-- **Registers:**
-  - `0x2088`: Left motor velocity
-  - `0x2089`: Right motor velocity
-  - `0x2000`: Control word
-- **Speed Range:** -3000 to +3000 RPM
+### Planned Stack (Full Autonomy)
+```
+High-Level Planning (Python/ROS)
+    ├─ Task Scheduler
+    ├─ Path Planning
+    └─ Object Detection (RealTime AI Cam)
+         ↓
+    Teensy 4.1 (Motion Control)
+         ├─ Motor Control (Modbus)
+         ├─ Arm Control (OpenArm)
+         └─ Sensor Fusion
+```
 
 ---
 
-## 🚀 Features
+## 🎨 Design Philosophy
 
-### ✅ Currently Working
-- Xbox controller wireless connection
-- ESP32 → Teensy serial communication
-- Modbus RTU communication with both drivers
-- Tank-style steering (left joystick)
-- Emergency stop (B button)
-- Smooth acceleration ramping
-- Speed limiting for stability
-- Deadzone handling for joystick drift
-- Power system with proper filtering
+### "Gaming Desktop" Aesthetic
+**Current:** Functional prototype with exposed wiring  
+**Goal:** Clean cable management with:
+- Cable sleeves matching chassis color
+- RGB LED accent lighting
+- Transparent panels to show internals
+- Custom 3D-printed cable guides
+- Professional wire routing
 
-### 🚧 In Progress
-- Computer vision for predator detection
-- Autonomous waypoint navigation
-- Encoder feedback integration
-- Path planning and obstacle avoidance
-- Dual-arm manipulation (OpenArm integration planned)
-
-### 🔮 Planned
-- GPS navigation for property coverage
-- LiDAR for 3D mapping
-- Camera array for 360° vision
-- Automatic chicken feeding
-- Box packing automation
-- Laundry retrieval
-- Dishware handling
-
----
-
-## 📊 Current Status
-
-### Recent Milestones
-- ✅ Successfully pulled loaded cart with firewood
-- ✅ Fixed motor direction inversion issues
-- ✅ Implemented smooth acceleration curves
-- ✅ Stable 24V→5V power delivery
-- ✅ Clean event-based controller input (no spam)
-- ✅ Reliable Modbus communication
-
-### Active Challenges
-1. **Motor Direction Asymmetry**
-   - Issue: Left and right sides sometimes spin opposite when given same command
-   - Current workaround: Driver-specific inversion in code
-   - Root cause: Investigating CCW/CW parameter differences between drivers
-
-2. **Encoder Integration**
-   - Each hub motor has built-in encoders
-   - Not yet utilized for closed-loop speed control
-   - Planned: PID speed control using encoder feedback
-
-3. **Weight Distribution**
-   - Cart pulling works but needs suspension tuning
-   - Adding adjustable shock preload
-
----
-
-## 🔨 Build Log
-
-### Phase 1: Power System ✅
-- Wired 2x 12V LiFePO4 in series for 24V
-- Added DROK buck converter (24V→5V)
-- Implemented input/output capacitors (100µF each)
-- Added fuse protection (10A input, 2A output)
-- **Result:** Stable power, both Teensy and ESP32 running
-
-### Phase 2: Communication ✅  
-- ESP32 running Bluepad32 for Xbox controller
-- Teensy receiving clean event stream (no spam)
-- RS-485 wiring with twisted pair A/B lines
-- MAX3485 module properly configured
-- **Result:** Full communication chain working
-
-### Phase 3: Motor Control ✅
-- Modbus RTU commands reaching both drivers
-- Tank drive algorithm implemented
-- Acceleration ramping added for smoothness
-- Emergency stop functionality
-- **Result:** Robot moves and responds to controller
-
-### Phase 4: Real-World Testing 🚧
-- Successfully pulled cart loaded with firewood
-- Identified motor direction issues
-- Testing suspension under load
-- Tuning speed curves for different terrains
+### Modular Bodies
+Swappable top structures for different modes:
+- 🚂 **Train Engine** - For pulling kids in cars
+- 🏴‍☠️ **Pirate Ship** - Cardboard sails and cannons
+- 🐠 **Fish Tank** - Let fish control movement via tracking
+- 🚜 **Utility Bed** - Open platform for cargo
+- 🤖 **Humanoid Torso** - With dual arms exposed
 
 ---
 
 ## 📝 Code Examples
 
-### Tank Drive Calculation
+### Tank Drive with Acceleration Ramping
 ```cpp
 void calculateTankSpeeds(int16_t lx, int16_t ly, int16_t& left_out, int16_t& right_out) {
-  // Apply deadzone
+  // Deadzone handling
   if (abs(lx) < 20) lx = 0;
   if (abs(ly) < 20) ly = 0;
   
@@ -214,26 +218,30 @@ void calculateTankSpeeds(int16_t lx, int16_t ly, int16_t& left_out, int16_t& rig
   float left_f = forward + turn;
   float right_f = forward - turn;
   
-  // Constrain and convert
+  // Smooth acceleration ramping
+  left_f = rampSpeed(prevLeft, left_f, ACCEL_RATE);
+  right_f = rampSpeed(prevRight, right_f, ACCEL_RATE);
+  
+  // Constrain and output
   left_out = constrain((int16_t)left_f, -MAX_SPEED, MAX_SPEED);
   right_out = constrain((int16_t)right_f, -MAX_SPEED, MAX_SPEED);
 }
 ```
 
-### Modbus Command
+### Modbus Command Structure
 ```cpp
 void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
   uint8_t frame[8];
-  frame[0] = driver_id;
-  frame[1] = 0x06;  // Write Single Register
-  frame[2] = 0x20;  // Register 0x2088/0x2089
+  frame[0] = driver_id;          // 1=left, 2=right
+  frame[1] = 0x06;               // Write Single Register
+  frame[2] = 0x20;               // Register hi byte
   frame[3] = (driver_id == 1) ? 0x88 : 0x89;
-  frame[4] = (rpm >> 8);
-  frame[5] = (rpm & 0xFF);
+  frame[4] = (rpm >> 8);         // Speed hi byte
+  frame[5] = (rpm & 0xFF);       // Speed lo byte
   
   uint16_t crc = crc16(frame, 6);
-  frame[6] = (crc & 0xFF);
-  frame[7] = (crc >> 8);
+  frame[6] = (crc & 0xFF);       // CRC lo
+  frame[7] = (crc >> 8);         // CRC hi
   
   Serial2.write(frame, 8);
 }
@@ -241,71 +249,155 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 
 ---
 
-## 🐛 Troubleshooting
+## 🚧 Technical Challenges & Solutions
 
-### Motor Direction Issues
-**Problem:** Left and right sides spin opposite when given same command  
-**Solutions Tried:**
-- Changed CCW/CW settings in ZLAC software
-- Inverted speed values in code for specific drivers
-- Verified wiring polarity
+### Challenge 1: Motor Direction Asymmetry ✅
+**Problem:** Left/right sides spinning opposite when given same command  
+**Root Cause:** Driver CCW/CW parameters differed between units  
+**Solution:** Driver-specific inversion in code, works reliably now
 
-**Current Status:** Working workaround in code, investigating root cause
+### Challenge 2: Power Stability ✅
+**Problem:** Brown-outs during motor acceleration  
+**Solution:** 100µF capacitors on buck converter input/output + proper fusing
 
-### Power Issues (Solved)
-**Problem:** Teensy/ESP32 brown-outs during motor acceleration  
-**Solution:** Added 100µF capacitors on buck converter input/output
+### Challenge 3: Tip-Over Risk 🚧
+**Problem:** Adding arms on top raises center of gravity  
+**Solution:** 
+- Batteries mounted at lowest point, evenly distributed
+- Each 9 lb wheel provides low CoG
+- Total 65 lbs well-balanced
+- Can add 80+ lbs more if needed with reinforcement
 
-### RS-485 Communication (Solved)
-**Problem:** Intermittent Modbus failures  
-**Solution:** Proper twisted pair wiring + 120Ω termination resistor
+### Challenge 4: Encoder Integration 🔜
+**Status:** Each hub motor has encoders but not yet utilized  
+**Plan:** Implement closed-loop PID speed control using encoder feedback
 
 ---
 
-## 🤝 Contributing
+## 🎓 What I Learned (6 Months from Zero)
 
-This is a personal homestead project, but I'm sharing it to help others building similar robots! 
+### Month 1-2: Basic Electronics
+- Power distribution and voltage regulation
+- Fuse/breaker selection for protection
+- Why capacitors matter for motor loads
 
-**Useful for:**
-- ZLAC8015D motor driver integration
-- Teensy + ESP32 communication
-- Modbus RTU over RS-485
-- Tank drive algorithms
-- Xbox controller input via Bluepad32
+### Month 3-4: Communication Protocols
+- Serial UART between microcontrollers
+- RS-485 physical layer
+- Modbus RTU protocol implementation
+- CRC16 checksum calculations
 
-Found this helpful? ⭐ Star the repo!
+### Month 5: Motor Control Theory
+- Tank drive kinematics
+- Acceleration ramping for smoothness
+- Deadzone handling
+- PID concepts (still learning!)
+
+### Month 6: Real-World Testing
+- Weight distribution matters
+- Cable management is critical
+- Testing reveals what theory misses
+- Iterative improvement beats perfection
+
+---
+
+## 🌟 Community Feedback
+
+From r/robotics discussion:
+
+> *"Very impressive! Epic vision for dual-arm homestead automation!"*
+
+> *"With cardboard, anything is possible for swappable bodies. Do a pirate ship!"* 
+
+> *"I'd like to see an aquarium in that box and let a fish control the bot 🐠"* - Challenge accepted!
+
+**Community Concerns Addressed:**
+- ✅ Top-heavy risk: Batteries at lowest point, 65 lbs well-balanced
+- ✅ Center of gravity: Can handle 80+ lbs more with reinforcement
+- ✅ Modbus requirement: ZLAC drivers don't support simpler protocols
+- ✅ Tipping during acceleration: Suspension + weight distribution mitigates
 
 ---
 
 ## 📚 Resources
 
-### Documentation
-- [ZLAC8015D Manual](hardware/motor-controllers/ZLAC8015D_manual.pdf)
-- [Modbus RTU Specification](docs/modbus-rtu-spec.pdf)
-- [Bluepad32 Library](https://github.com/ricardoquesada/bluepad32)
+### This Project
+- [Teensy Code](hardware/teensy/) - Motor control firmware
+- [ESP32 Code](hardware/esp32/) - Bluepad32 controller interface
+- [ZLAC Documentation](hardware/motor-controllers/) - Driver manuals
+- [Wiring Diagrams](docs/wiring/) - Coming soon
 
 ### Related Projects
-- [My Parkinson's ML Predictor](https://github.com/nicedreamzapp/parkinsons-vulnerability-predictor)
-- [RealTime AI Camera](https://github.com/nicedreamzapp/RealTimeAICam)
-- [CogVideoX on Mac Guide](https://github.com/nicedreamzapp/CogVideoX-Mac-Setup)
+- [RealTime AI Cam](https://github.com/nicedreamzapp/RealTimeAICam) - 601-class object detection
+- [Parkinson's ML Predictor](https://github.com/nicedreamzapp/parkinsons-vulnerability-predictor) - Medical AI
+- [CogVideoX Mac Guide](https://github.com/nicedreamzapp/CogVideoX-Mac-Setup) - Local AI video
 
-### Community Discussion
-- [Reddit Post: OpenArm Integration Plans](https://www.reddit.com/r/robotics/comments/1ov3k5v/)
+### Reference Material
+- [OpenArm 0.1](https://youtu.be/IlcA7l_imOk) - Open source robot arm
+- [Bluepad32](https://github.com/ricardoquesada/bluepad32) - ESP32 gamepad library
 
 ---
 
-## 🙏 Acknowledgments
+## 🔮 Roadmap
 
-Built with help from:
-- **Claude (Anthropic)** - For debugging Modbus issues and motor control algorithms
-- **Bluepad32 Community** - Xbox controller integration
-- **r/robotics** - Hardware advice and OpenArm recommendations
+### Short Term (Next 3 Months)
+- [ ] Clean wire management with gaming PC aesthetic
+- [ ] Fine-tune acceleration curves and control feel
+- [ ] Integrate RealTime AI Cam for object detection
+- [ ] Basic autonomous navigation (GPS waypoints)
+- [ ] Mount and test single OpenArm first
+
+### Medium Term (3-6 Months)
+- [ ] Add second OpenArm for bilateral manipulation
+- [ ] Implement task scheduler for automated feeding
+- [ ] Computer vision-based predator detection
+- [ ] Path planning with obstacle avoidance
+- [ ] Build train engine body for kids
+
+### Long Term (6-12 Months)
+- [ ] Full autonomous homestead task execution
+- [ ] Package packing automation
+- [ ] Laundry retrieval system
+- [ ] Multi-modal swappable bodies
+- [ ] Fish-controlled mode (because why not)
+
+---
+
+## 💡 For Other Builders
+
+**This project is useful for:**
+- ZLAC8015D motor driver integration examples
+- Teensy + ESP32 communication patterns
+- Modbus RTU over RS-485 implementation
+- Tank drive control algorithms
+- Xbox controller input via Bluepad32
+- Power system design for mobile robots
+
+**Lessons learned:**
+- Start with platform stability before adding complexity
+- Test hardware thoroughly before writing complex software
+- Weight distribution matters more than total weight
+- Real-world testing reveals issues no simulation can predict
+- Cable management isn't optional - plan it from the start
+
+---
+
+## 🤝 Contributing
+
+This is a personal homestead automation project, but:
+
+- ⭐ **Star** if this helped your build
+- 🐛 **Issues** for questions about implementation
+- 💬 **Discussions** for sharing your own robot stories
+- 🔧 **PRs welcome** for code improvements
 
 ---
 
 ## 📜 License
 
-MIT License - Use this for your own homestead automation projects!
+MIT License - Use this for your own robot projects!
+
+**Attribution appreciated but not required.**
 
 ---
 
@@ -313,6 +405,10 @@ MIT License - Use this for your own homestead automation projects!
 
 **Built with ❤️ on a homestead in Humboldt County, California**
 
-*"If it takes more than 10 minutes, automate it. If it needs AI, build it from scratch."*
+*Started with a chicken problem, ended up building an autonomous homestead assistant.*
+
+### 🚂 "If it takes more than 10 minutes, automate it. If kids want robot rides, build a train." 🐔
+
+[Website](https://nicedreamzwholesale.com) • [GitHub](https://github.com/nicedreamzapp) • [Reddit Discussion](https://www.reddit.com/r/robotics/comments/1ov3k5v/)
 
 </div>
