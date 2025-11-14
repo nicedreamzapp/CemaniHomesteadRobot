@@ -10,7 +10,7 @@
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
 
-[📹 Demo Video](#demo) • [🔧 Hardware](#hardware) • [🤖 The Vision](#the-vision) • [💻 Code](#code)
+[📹 Demo Videos](#demo) • [🔧 Hardware](#hardware) • [🤖 The Vision](#the-vision) • [💻 Code](#code)
 
 </div>
 
@@ -23,6 +23,71 @@
 https://github.com/user-attachments/assets/6a05e239-ce66-46ee-b951-474730370bfe
 
 *Successfully pulling a loaded metal cart - first real-world test after 6 months of building and learning.*
+
+---
+
+### Build Process & Testing
+
+<table>
+<tr>
+<td width="50%">
+
+**Chassis Assembly**
+
+![Chassis](https://github.com/user-attachments/assets/32430365-4cf8-4abc-9d9f-82167b31484c)
+
+*2020 aluminum extrusion frame with motor mounts*
+
+</td>
+<td width="50%">
+
+**Electronics Bay**
+
+![Electronics](https://github.com/user-attachments/assets/c5690957-92af-4711-9627-1c7eadb0bac4)
+
+*Teensy 4.1, ESP32, ZLAC drivers, and power distribution*
+
+</td>
+</tr>
+</table>
+
+### More Testing Footage
+
+<table>
+<tr>
+<td width="33%">
+
+https://github.com/user-attachments/assets/9921ebb9-426a-4740-9e35-a875a7818416
+
+*Initial mobility test*
+
+</td>
+<td width="33%">
+
+https://github.com/user-attachments/assets/a52f8c41-8795-4027-825c-4a8bdb81a10c
+
+*Maneuverability demo*
+
+</td>
+<td width="33%">
+
+https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
+
+*Speed testing*
+
+</td>
+</tr>
+</table>
+
+### Component Details
+
+![Component Layout](https://github.com/user-attachments/assets/62f8c85c-d889-40bc-884e-81aa16f5a4e2)
+
+*Hub motors, shocks, and wheel assembly*
+
+https://github.com/user-attachments/assets/320d0de8-24c2-415b-bd44-c744f2a7602f
+
+*Final assembly and wiring*
 
 ---
 
