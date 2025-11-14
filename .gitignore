@@ -1,0 +1,16 @@
+# Large files
+*.bin
+*.hex
+*.elf
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Mac
+.DS_Store
+
+# Build artifacts
+build/
+*.o
