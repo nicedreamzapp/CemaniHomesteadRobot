@@ -156,13 +156,25 @@ Using two robotic arms for human-like bilateral manipulation:
 
 ### Phase 7: Autonomous Predator Patrol (In Progress)
 
+**All-Weather Sensor Redundancy:**
+| Sensor | Good Weather | Rain/Fog | Purpose |
+|--------|--------------|----------|---------|
+| RPLidar A1 | ✅ Mapping | ❌ Docked | Precise SLAM navigation |
+| GPS | ✅ Position | ✅ Position | Absolute location on property |
+| Ultrasonics x4 | ✅ Obstacles | ✅ Obstacles | Backup obstacle avoidance |
+| IR Camera | ✅ Detection | ✅ Detection | Predator identification |
+
+**Hardware:**
 | Component | Specs | Purpose |
 |-----------|-------|---------|
-| **Jetson Orin Nano** | 8GB, 40 TOPS | AI brain - runs YOLO + navigation offline |
-| **RPLidar A1** | 360°, 12m range | Obstacle avoidance & mapping |
-| **IR Night Camera** | 1080p, night vision | Predator detection in darkness |
+| **Jetson Orin Nano Super** | 8GB, 67 TOPS | AI brain - runs YOLO + navigation offline |
+| **NVMe SSD** | 256GB KingSpec | Fast storage for Jetson |
+| **5V 5A Buck Converter** | Waterproof automotive | Jetson power from 24V battery |
+| **RPLidar A1** | 360°, 12m range | Mapping & obstacle avoidance (fair weather) |
+| **GPS Module** | u-blox NEO-M8N | Waypoint navigation (all weather) |
+| **Ultrasonics x4** | JSN-SR04T, IP67 | Obstacle avoidance (all weather backup) |
+| **IR Night Camera** | Arducam 1080p | Predator detection day/night |
 | **Industrial PIR Sensor** | 100-200ft range, 12V | Wake system during patrol breaks |
-| **GPS Module** | u-blox NEO-M8N | Waypoint navigation for patrol routes |
 | **Siren/Speaker** | 120dB marine horn | Scare deterrent |
 | **Strobe Lights** | 12V LED bar | Visual deterrent |
 | **Bear Spray Mount** | Servo-triggered | Last resort deterrent |
@@ -239,16 +251,21 @@ ZLAC8015D (ID=1)   ZLAC8015D (ID=2)
 ```
 Industrial PIR Sensor (100-200ft)
          ↓ motion detected
-Jetson Orin Nano (all offline, no cloud)
+Jetson Orin Nano Super (all offline, no cloud)
     ├─ YOLOv8 (601-class detection)
     │      → Bear, Raccoon, Fox = ATTACK
     │      → Dog, Cat, Skunk, Human = IGNORE
-    ├─ RPLidar SLAM (mapping/obstacle avoidance)
-    ├─ GPS Waypoints (patrol route)
+    │
+    ├─ ALL-WEATHER SENSOR FUSION:
+    │   ├─ Good Weather: RPLidar SLAM (precise mapping)
+    │   └─ Rain/Fog: GPS + Ultrasonics (backup navigation)
+    │
+    ├─ GPS Waypoints (patrol route, always available)
     └─ Patrol Logic (15 min posts, weighted areas)
          ↓ Serial
 Teensy 4.1 (Motor Control)
     ├─ Drive motors (Modbus)
+    ├─ Ultrasonic sensors x4 (GPIO)
     ├─ Siren trigger (GPIO)
     ├─ Strobe trigger (GPIO)
     └─ Bear spray servo (last resort)
@@ -417,11 +434,25 @@ From r/robotics discussion:
 ## 🔮 Roadmap
 
 ### Immediate Priority: Autonomous Predator Patrol
+
+**Shopping List (Amazon):**
+- [x] Jetson Orin Nano Super Developer Kit ($249)
+- [x] KingSpec 256GB NVMe SSD ($29.99)
+- [x] 5V 5A Waterproof Buck Converter ($11.99)
+- [x] Slamtec RPLidar A1M8 ($99)
+- [x] Arducam 1080P IR Night Camera ($34.99)
+- [ ] u-blox NEO-M8N GPS Module (~$15-20)
+- [ ] JSN-SR04T Waterproof Ultrasonics x4 (~$32)
+- [ ] Industrial PIR Sensor (~$25-40)
+- [ ] Siren + Strobe deterrents (~$30)
+
+**Installation Tasks:**
 - [ ] Install Jetson Orin Nano + power regulation
-- [ ] Mount RPLidar A1 for obstacle avoidance
+- [ ] Mount RPLidar A1 with rain cover for obstacle avoidance
 - [ ] Add IR night camera for detection
+- [ ] Wire GPS module for all-weather positioning
+- [ ] Mount ultrasonic sensors x4 for backup obstacle avoidance
 - [ ] Wire industrial PIR sensor for wake triggers
-- [ ] GPS module for patrol waypoints
 - [ ] Install siren + strobe deterrents
 - [ ] YOLOv8 predator detection (bear, raccoon, fox)
 - [ ] Patrol logic: 15 min posts, weighted zones
