@@ -123,14 +123,14 @@ Using two robotic arms for human-like bilateral manipulation:
 
 ### Phase Completion
 - ✅ **Phase 1:** Tank chassis with 4WD hub motors
-- ✅ **Phase 2:** Xbox controller → ESP32 → Teensy → Motors  
+- ✅ **Phase 2:** Xbox controller → ESP32 → Teensy → Motors
 - ✅ **Phase 3:** RS-485 Modbus communication working
 - ✅ **Phase 4:** Successfully pulled loaded cart
-- 🚧 **Phase 5:** Wire management (goal: gaming PC aesthetic)
-- 🚧 **Phase 6:** Fine-tune acceleration curves
-- 🔜 **Phase 7:** Add computer vision (RealTime AI Cam integration)
-- 🔜 **Phase 8:** Mount dual OpenArm 0.1 manipulators
-- 🔜 **Phase 9:** Autonomous navigation and task planning
+- ✅ **Phase 5:** Synchronized motor control (atomic Modbus writes)
+- ✅ **Phase 6:** Turn mode with reduced speed/acceleration
+- 🚧 **Phase 7:** Autonomous predator patrol (Jetson + Lidar + YOLO)
+- 🔜 **Phase 8:** Deterrent system (siren, strobes, bear spray)
+- 🔜 **Phase 9:** OpenArm integration (future)
 
 ---
 
@@ -154,15 +154,24 @@ Using two robotic arms for human-like bilateral manipulation:
 | **Fuses & Breakers** | 10A input, 2A output | Protection |
 | **Capacitors** | 100µF input/output | Power filtering |
 
-### Planned Additions
+### Phase 7: Autonomous Predator Patrol (In Progress)
 
 | Component | Specs | Purpose |
 |-----------|-------|---------|
-| **2x OpenArm 0.1** | 3-5kg lift each | Bilateral manipulation |
-| **Camera Array** | 360° coverage | Computer vision & navigation |
-| **iPhone/iPad** | Running RealTime AI Cam | 601-class object detection |
-| **GPS Module** | Outdoor navigation | Property coverage |
-| **LiDAR** | Optional 3D mapping | Obstacle avoidance |
+| **Jetson Orin Nano** | 8GB, 40 TOPS | AI brain - runs YOLO + navigation offline |
+| **RPLidar A1** | 360°, 12m range | Obstacle avoidance & mapping |
+| **IR Night Camera** | 1080p, night vision | Predator detection in darkness |
+| **Industrial PIR Sensor** | 100-200ft range, 12V | Wake system during patrol breaks |
+| **GPS Module** | u-blox NEO-M8N | Waypoint navigation for patrol routes |
+| **Siren/Speaker** | 120dB marine horn | Scare deterrent |
+| **Strobe Lights** | 12V LED bar | Visual deterrent |
+| **Bear Spray Mount** | Servo-triggered | Last resort deterrent |
+
+### Future Additions
+
+| Component | Specs | Purpose |
+|-----------|-------|---------|
+| **2x OpenArm 0.1** | 3-5kg lift each | Bilateral manipulation (later phase) |
 | **Train Body** | Cardboard/3D printed | Kid transport mode |
 
 ---
@@ -226,17 +235,23 @@ ZLAC8015D (ID=1)   ZLAC8015D (ID=2)
 └─ Motor 2 (RL)    └─ Motor 2 (RR)
 ```
 
-### Planned Stack (Full Autonomy)
+### Autonomous Patrol Stack (Phase 7)
 ```
-High-Level Planning (Python/ROS)
-    ├─ Task Scheduler
-    ├─ Path Planning
-    └─ Object Detection (RealTime AI Cam)
-         ↓
-    Teensy 4.1 (Motion Control)
-         ├─ Motor Control (Modbus)
-         ├─ Arm Control (OpenArm)
-         └─ Sensor Fusion
+Industrial PIR Sensor (100-200ft)
+         ↓ motion detected
+Jetson Orin Nano (all offline, no cloud)
+    ├─ YOLOv8 (601-class detection)
+    │      → Bear, Raccoon, Fox = ATTACK
+    │      → Dog, Cat, Skunk, Human = IGNORE
+    ├─ RPLidar SLAM (mapping/obstacle avoidance)
+    ├─ GPS Waypoints (patrol route)
+    └─ Patrol Logic (15 min posts, weighted areas)
+         ↓ Serial
+Teensy 4.1 (Motor Control)
+    ├─ Drive motors (Modbus)
+    ├─ Siren trigger (GPIO)
+    ├─ Strobe trigger (GPIO)
+    └─ Bear spray servo (last resort)
 ```
 
 ---
@@ -319,7 +334,7 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 
 ### Challenge 2: Power Stability ✅
 **Problem:** Brown-outs during motor acceleration  
-**Solution:** 100µF capacitors on buck converter input/output + proper fusing
+**Solution:** went from hobby grade to automotive on buck converter + input/output + proper fusing
 
 ### Challenge 3: Tip-Over Risk 🚧
 **Problem:** Adding arms on top raises center of gravity  
@@ -401,24 +416,25 @@ From r/robotics discussion:
 
 ## 🔮 Roadmap
 
-### Short Term (Next 3 Months)
-- [ ] Clean wire management with gaming PC aesthetic
-- [ ] Fine-tune acceleration curves and control feel
-- [ ] Integrate RealTime AI Cam for object detection
-- [ ] Basic autonomous navigation (GPS waypoints)
-- [ ] Mount and test single OpenArm first
+### Immediate Priority: Autonomous Predator Patrol
+- [ ] Install Jetson Orin Nano + power regulation
+- [ ] Mount RPLidar A1 for obstacle avoidance
+- [ ] Add IR night camera for detection
+- [ ] Wire industrial PIR sensor for wake triggers
+- [ ] GPS module for patrol waypoints
+- [ ] Install siren + strobe deterrents
+- [ ] YOLOv8 predator detection (bear, raccoon, fox)
+- [ ] Patrol logic: 15 min posts, weighted zones
+- [ ] Sealed plexiglass enclosure with bottom venting
 
-### Medium Term (3-6 Months)
-- [ ] Add second OpenArm for bilateral manipulation
-- [ ] Implement task scheduler for automated feeding
-- [ ] Computer vision-based predator detection
-- [ ] Path planning with obstacle avoidance
+### After Patrol Works
+- [ ] Clean wire management with gaming PC aesthetic
+- [ ] Fine-tune patrol routes based on testing
+- [ ] Add bear spray servo mount (last resort)
 - [ ] Build train engine body for kids
 
-### Long Term (6-12 Months)
-- [ ] Full autonomous homestead task execution
-- [ ] Package packing automation
-- [ ] Laundry retrieval system
+### Long Term
+- [ ] OpenArm integration for manipulation tasks
 - [ ] Multi-modal swappable bodies
 - [ ] Fish-controlled mode (because why not)
 
