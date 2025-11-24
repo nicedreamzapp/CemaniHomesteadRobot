@@ -1,7 +1,8 @@
-# Large files
+# Large files (over GitHub 100MB limit)
 *.bin
 *.hex
 *.elf
+ZLAC8015D*/*/ZLAC8015D*Wirings/*/*.mp4
 
 # IDE
 .vscode/
