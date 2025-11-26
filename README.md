@@ -7,10 +7,11 @@
 ![Made with](https://img.shields.io/badge/Made_with-Blood_Sweat_Tears-red?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Mobile_Platform_Complete-green?style=for-the-badge)
 ![Power](https://img.shields.io/badge/Power-24V_LiFePO4-orange?style=for-the-badge)
+![Remote](https://img.shields.io/badge/Remote-Web_Enabled-blue?style=for-the-badge)
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
 
-[📹 Demo Videos](#demo) • [🔧 Hardware](#hardware) • [🤖 The Vision](#the-vision) • [💻 Code](#code)
+[📹 Demo Videos](#demo) • [🌐 Web Interface](#-web-interface) • [🔧 Hardware](#hardware) • [🤖 The Vision](#the-vision) • [💻 Code](#code)
 
 </div>
 
@@ -87,6 +88,72 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 ---
 
+## 🌐 Web Interface
+
+**Control and monitor your robot from ANYWHERE in the world!**
+
+### 🔗 Live Demo
+**[robot.marijuanaunion.com](http://robot.marijuanaunion.com)**
+
+🔒 **Password Protected** - Username: (anything) | Password: Contact owner for access
+
+### What It Does
+- 📊 **Real-Time Status** - See robot ONLINE/OFFLINE from your phone
+- 🖥️ **Serial Monitor** - Watch Teensy debug output in browser  
+- 📡 **Send Commands** - Control robot remotely (status, ping, stop, etc)
+- 🔄 **OTA Updates** - Upload new ESP32 code wirelessly
+- 🎮 **Hybrid Control** - Xbox controller + web monitoring simultaneously
+- 🌍 **Multi-Network** - Auto-connects to home WiFi, phone hotspot, or work networks
+
+### Architecture
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     ANYWHERE IN THE WORLD                         │
+│   ┌─────────────────┐                                            │
+│   │ Your Phone/PC   │──────┐                                     │
+│   │   Any Browser   │      │                                     │
+│   └─────────────────┘      │ HTTPS/WebSocket                     │
+│                             ▼                                     │
+│              ┌──────────────────────────────┐                    │
+│              │  robot.marijuanaunion.com    │                    │
+│              │  (VPS - Node.js + Nginx)     │                    │
+│              └───────────────┬──────────────┘                    │
+│                              │ WebSocket                          │
+│                              ▼                                     │
+│   ┌────────────────────────────────────────────────────────┐    │
+│   │                    ROBOT HARDWARE                       │    │
+│   │  ┌─────────┐   Serial   ┌─────────┐   Modbus          │    │
+│   │  │  ESP32  │◄──────────►│ Teensy  │◄────────►Motors   │    │
+│   │  │ (WiFi+  │            │  4.1    │                    │    │
+│   │  │  OTA)   │            └─────────┘                    │    │
+│   │  └────┬────┘                                            │    │
+│   │       │ Bluetooth                                       │    │
+│   │       ▼                                                 │    │
+│   │  ┌─────────┐                                            │    │
+│   │  │  Xbox   │                                            │    │
+│   │  │Controller│                                           │    │
+│   │  └─────────┘                                            │    │
+│   └────────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### How It Works
+1. **ESP32 connects to WiFi** on robot startup (home, hotspot, or work)
+2. **Opens WebSocket** to VPS server (robot.marijuanaunion.com)
+3. **Sends Teensy serial data** to VPS in real-time
+4. **Your browser connects** to VPS and sees live serial output
+5. **Xbox controller still works** locally via Bluetooth - web doesn't interfere!
+
+### Tech Stack
+- **VPS:** Ubuntu 24.04 on Hostinger (72.60.124.34)
+- **Backend:** Node.js WebSocket server with PM2 process manager
+- **Frontend:** Vanilla HTML/CSS/JS (no frameworks needed)
+- **Reverse Proxy:** Nginx for subdomain routing
+- **Security:** HTTP Basic Auth (password protected)
+- **ESP32:** WiFiMulti + WebSocket client + Bluepad32
+
+---
+
 ## 🎯 The Vision
 
 **The Problem:** Backyard predators attacking my chickens. Manual homestead labor. Kids want robot rides.
@@ -128,6 +195,7 @@ Using two robotic arms for human-like bilateral manipulation:
 - ✅ **Phase 4:** Successfully pulled loaded cart
 - ✅ **Phase 5:** Synchronized motor control (atomic Modbus writes)
 - ✅ **Phase 6:** Turn mode with reduced speed/acceleration
+- ✅ **Phase 6.5:** Web interface for remote monitoring/control
 - 🚧 **Phase 7:** Autonomous predator patrol (Jetson + Lidar + YOLO)
 - 🔜 **Phase 8:** Deterrent system (siren, strobes, bear spray)
 - 🔜 **Phase 9:** OpenArm integration (future)
@@ -143,7 +211,7 @@ Using two robotic arms for human-like bilateral manipulation:
 | **4x Hub Motors** | ZLLG80ASM250, 9 lbs each | Tank drive (2 per side, encoded) |
 | **2x Motor Drivers** | ZLAC8015D Dual-Channel | Each controls one side via Modbus |
 | **Teensy 4.1** | 600MHz ARM Cortex-M7 | Main controller & Modbus master |
-| **ESP32** | Bluetooth 5.0 | Xbox controller receiver (Bluepad32) |
+| **ESP32** | Bluetooth 5.0 + WiFi | Xbox controller + web interface |
 | **RS-485 Module** | MAX3485 | Modbus RTU communication |
 | **2x 12V LiFePO4** | Series = 24V | Motor power (low CoG mounting) |
 | **Buck Converter** | DROK 24V→5V | Logic power with filtering |
@@ -153,6 +221,7 @@ Using two robotic arms for human-like bilateral manipulation:
 | **4x Shocks** | Electric scooter | Suspension for terrain |
 | **Fuses & Breakers** | 10A input, 2A output | Protection |
 | **Capacitors** | 100µF input/output | Power filtering |
+| **VPS Server** | Ubuntu 24.04 (Hostinger) | Remote monitoring backend |
 
 ### Phase 7: Autonomous Predator Patrol (In Progress)
 
@@ -231,44 +300,65 @@ OpenArm 0.1 provides **bilateral manipulation** - the ability to coordinate two 
 
 ## 💻 Software Architecture
 
-### Current Stack (Platform Control)
+### Current Stack (Platform Control + Web Interface)
 ```
-Xbox Controller (BT 5.0)
-    ↓
-ESP32 (Bluepad32)
-    ↓ Serial (115200 baud)
-Teensy 4.1
-    ↓ RS-485 (Modbus RTU)
-MAX3485 Module
-    ↓ Twisted Pair A/B
-┌──────────────────┬──────────────────┐
-ZLAC8015D (ID=1)   ZLAC8015D (ID=2)
-├─ Motor 1 (FL)    ├─ Motor 1 (FR)
-└─ Motor 2 (RL)    └─ Motor 2 (RR)
+┌─────────── LOCAL CONTROL ────────────┐  ┌──── REMOTE MONITORING ────┐
+│                                       │  │                            │
+│  Xbox Controller (BT 5.0)            │  │   Your Phone/Browser       │
+│       ↓                               │  │           │                │
+│  ESP32 (Bluepad32 + WiFi + OTA)      │  │           │                │
+│       ↓ Serial (115200 baud)         │  │           ▼                │
+│  Teensy 4.1                           │  │  robot.marijuanaunion.com  │
+│       ↓ RS-485 (Modbus RTU)          │  │      (VPS WebSocket)       │
+│  MAX3485 Module                       │  │           │                │
+│       ↓ Twisted Pair A/B             │  │           │                │
+│  ┌──────────────────┬──────────────┐ │  │           │                │
+│  ZLAC8015D (ID=1)   ZLAC8015D (ID=2) │  │           │                │
+│  ├─ Motor 1 (FL)    ├─ Motor 1 (FR) │  │           │                │
+│  └─ Motor 2 (RL)    └─ Motor 2 (RR) │  │           │                │
+│                                       │  │           │                │
+└───────────────────────────────────────┘  └───────────┴────────────────┘
+                                                       │
+                                           ┌───────────┴───────────┐
+                                           │                        │
+                                       WebSocket              WebSocket
+                                        (Serial Data)         (Commands)
+                                           │                        │
+                                           └────────────┬───────────┘
+                                                        │
+                                                   ESP32 WiFi
 ```
 
 ### Autonomous Patrol Stack (Phase 7)
 ```
 Industrial PIR Sensor (100-200ft)
-         ↓ motion detected
-Jetson Orin Nano Super (all offline, no cloud)
-    ├─ YOLOv8 (601-class detection)
-    │      → Bear, Raccoon, Fox = ATTACK
-    │      → Dog, Cat, Skunk, Human = IGNORE
-    │
-    ├─ ALL-WEATHER SENSOR FUSION:
-    │   ├─ Good Weather: RPLidar SLAM (precise mapping)
-    │   └─ Rain/Fog: GPS + Ultrasonics (backup navigation)
-    │
-    ├─ GPS Waypoints (patrol route, always available)
-    └─ Patrol Logic (15 min posts, weighted areas)
-         ↓ Serial
-Teensy 4.1 (Motor Control)
-    ├─ Drive motors (Modbus)
-    ├─ Ultrasonic sensors x4 (GPIO)
-    ├─ Siren trigger (GPIO)
-    ├─ Strobe trigger (GPIO)
-    └─ Bear spray servo (last resort)
+    ↓ Wake Signal
+Jetson Orin Nano (67 TOPS)
+    ├─ RPLidar A1 (fair weather SLAM)
+    ├─ GPS Module (all-weather position)
+    ├─ Ultrasonics x4 (all-weather obstacles)  
+    ├─ IR Camera (YOLOv8 predator detection)
+    ├─ Navigation Planning (ROS2)
+    ├─ Object Detection (YOLO)
+    └─ Behavior Trees (task execution)
+    ↓ Serial Commands
+Teensy 4.1 (motion control)
+    ↓ Modbus
+Motor Drivers + Deterrent Systems
+```
+
+### Planned High-Level Stack
+```
+Python/ROS2 (Jetson)
+    ├─ Task Scheduler
+    ├─ Path Planning  
+    ├─ Object Detection (RealTime AI Cam)
+    └─ OpenArm Control
+    ↓ Serial Commands
+Teensy 4.1 (Real-time Control)
+    ├─ Motor Control (Modbus)
+    ├─ Sensor Fusion
+    └─ Safety Override
 ```
 
 ---
@@ -340,6 +430,23 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 }
 ```
 
+### ESP32 WebSocket Connection
+```cpp
+// Connect to VPS WebSocket server
+WebSocketsClient webSocket;
+webSocket.begin("robot.marijuanaunion.com", 80, "/");
+
+// Forward Teensy serial data to web interface
+void loop() {
+  webSocket.loop();
+  
+  if (Serial.available()) {
+    String data = Serial.readStringUntil('\n');
+    webSocket.sendTXT(data);
+  }
+}
+```
+
 ---
 
 ## 🚧 Technical Challenges & Solutions
@@ -361,7 +468,15 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 - Total 65 lbs well-balanced
 - Can add 80+ lbs more if needed with reinforcement
 
-### Challenge 4: Encoder Integration 🔜
+### Challenge 4: Remote Monitoring ✅
+**Problem:** No way to debug robot when not physically present  
+**Solution:** 
+- Built VPS WebSocket server for real-time serial monitoring
+- ESP32 auto-connects to multiple WiFi networks
+- OTA updates eliminate need for USB cable access
+- Web interface accessible from anywhere with internet
+
+### Challenge 5: Encoder Integration 🔜
 **Status:** Each hub motor has encoders but not yet utilized  
 **Plan:** Implement closed-loop PID speed control using encoder feedback
 
@@ -386,11 +501,14 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 - Deadzone handling
 - PID concepts (still learning!)
 
-### Month 6: Real-World Testing
+### Month 6: Real-World Testing & Web Integration
 - Weight distribution matters
 - Cable management is critical
 - Testing reveals what theory misses
 - Iterative improvement beats perfection
+- **Remote debugging saves hours of frustration**
+- **WebSocket architecture for IoT robotics**
+- **PM2 process management for always-on servers**
 
 ---
 
@@ -416,7 +534,8 @@ From r/robotics discussion:
 
 ### This Project
 - [Teensy Code](hardware/teensy/) - Motor control firmware
-- [ESP32 Code](hardware/esp32/) - Bluepad32 controller interface
+- [ESP32 Code](hardware/esp32/) - Bluepad32 + WiFi + OTA
+- [Web Interface](vps/) - Node.js WebSocket server
 - [ZLAC Documentation](hardware/motor-controllers/) - Driver manuals
 - [Wiring Diagrams](docs/wiring/) - Coming soon
 
@@ -441,12 +560,16 @@ From r/robotics discussion:
 - [x] 5V 5A Waterproof Buck Converter ($11.99)
 - [x] Slamtec RPLidar A1M8 ($99)
 - [x] Arducam 1080P IR Night Camera ($34.99)
+- [x] VPS Server (Hostinger - $3.99/mo)
 - [ ] u-blox NEO-M8N GPS Module (~$15-20)
 - [ ] JSN-SR04T Waterproof Ultrasonics x4 (~$32)
 - [ ] Industrial PIR Sensor (~$25-40)
 - [ ] Siren + Strobe deterrents (~$30)
 
 **Installation Tasks:**
+- [x] Set up VPS with WebSocket server
+- [x] Configure Nginx reverse proxy
+- [x] Implement ESP32 WiFi connectivity
 - [ ] Install Jetson Orin Nano + power regulation
 - [ ] Mount RPLidar A1 with rain cover for obstacle avoidance
 - [ ] Add IR night camera for detection
@@ -463,11 +586,13 @@ From r/robotics discussion:
 - [ ] Fine-tune patrol routes based on testing
 - [ ] Add bear spray servo mount (last resort)
 - [ ] Build train engine body for kids
+- [ ] Add web interface controls (stop, speed adjust, emergency override)
 
 ### Long Term
 - [ ] OpenArm integration for manipulation tasks
 - [ ] Multi-modal swappable bodies
 - [ ] Fish-controlled mode (because why not)
+- [ ] Mobile app with push notifications for detections
 
 ---
 
@@ -480,6 +605,9 @@ From r/robotics discussion:
 - Tank drive control algorithms
 - Xbox controller input via Bluepad32
 - Power system design for mobile robots
+- **WebSocket-based remote robot monitoring**
+- **ESP32 WiFi + Bluetooth simultaneous operation**
+- **OTA update implementation for embedded systems**
 
 **Lessons learned:**
 - Start with platform stability before adding complexity
@@ -487,6 +615,8 @@ From r/robotics discussion:
 - Weight distribution matters more than total weight
 - Real-world testing reveals issues no simulation can predict
 - Cable management isn't optional - plan it from the start
+- **Remote debugging capability is worth the VPS cost**
+- **Build monitoring early - saves hours of physical debugging**
 
 ---
 
@@ -517,6 +647,6 @@ MIT License - Use this for your own robot projects!
 
 ### 🚂 "If it takes more than 10 minutes, automate it. If kids want robot rides, build a train." 🐔
 
-[Website](https://nicedreamzwholesale.com) • [GitHub](https://github.com/nicedreamzapp) • [Reddit Discussion](https://www.reddit.com/r/robotics/comments/1ov3k5v/)
+[Website](https://nicedreamzwholesale.com) • [GitHub](https://github.com/nicedreamzapp) • [Reddit Discussion](https://www.reddit.com/r/robotics/comments/1ov3k5v/) • [Live Robot Status](http://robot.marijuanaunion.com)
 
 </div>
