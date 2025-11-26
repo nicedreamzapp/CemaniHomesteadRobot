@@ -4,7 +4,7 @@
 <title>CEMANI COMMAND CENTER</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { 
+body {
   background: linear-gradient(135deg, #1a2332 0%, #2d3e5f 100%);
   font-family: 'Courier New', monospace;
   color: #00ff88;
@@ -14,13 +14,14 @@ body {
 .glass {
   background: rgba(40, 60, 90, 0.5);
   backdrop-filter: blur(10px);
-  border: 2px solid rgba(0, 255, 136, 0.3);
+  border: 3px solid rgba(0, 255, 136, 0.4);
   border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 2px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6), inset 0 3px 0 rgba(255, 255, 255, 0.3), 0 0 30px rgba(0, 255, 136, 0.2);
+  transform: translateZ(0);
 }
 .container {
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 350px 1fr 380px;
   grid-template-rows: 80px 1fr;
   gap: 20px;
   padding: 20px;
@@ -32,108 +33,115 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(135deg, rgba(40, 60, 90, 0.6), rgba(20, 40, 70, 0.6));
+  background: linear-gradient(135deg, rgba(40, 60, 90, 0.7), rgba(20, 40, 70, 0.7));
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 2px 5px rgba(255, 255, 255, 0.3);
 }
-.status { color: #ff6b6b; font-size: 28px; font-weight: bold; text-shadow: 0 0 10px #ff6b6b; }
-.status.online { color: #51cf66; text-shadow: 0 0 20px #51cf66; }
-.info { display: flex; gap: 20px; font-size: 14px; color: #74c0fc; }
-.cameras { display: flex; gap: 10px; flex-direction: column; overflow-y: auto; }
+.status { color: #ff6b6b; font-size: 32px; font-weight: bold; text-shadow: 0 0 15px #ff6b6b, 0 0 30px #ff6b6b; }
+.status.online { color: #51cf66; text-shadow: 0 0 20px #51cf66, 0 0 40px #51cf66; }
+.info { display: flex; gap: 20px; font-size: 16px; color: #e0f7ff; font-weight: bold; }
+.cameras { display: flex; gap: 15px; flex-direction: column; overflow-y: auto; }
 .cam {
-  height: 140px;
+  height: 200px;
   background: linear-gradient(135deg, #1a1a2e, #0f0f1e);
-  border-radius: 15px;
-  border: 2px solid #00ff88;
+  border-radius: 20px;
+  border: 3px solid #00ff88;
   position: relative;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #00ff88;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: bold;
-  box-shadow: inset 0 2px 10px rgba(0, 255, 136, 0.2);
+  box-shadow: inset 0 3px 15px rgba(0, 255, 136, 0.3), 0 10px 30px rgba(0, 0, 0, 0.5);
+  transform: translateZ(20px);
 }
 .joystick-container {
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.6), rgba(20, 20, 40, 0.6));
-  width: 220px;
-  height: 220px;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(20, 20, 40, 0.7));
+  width: 240px;
+  height: 240px;
   border-radius: 50%;
   position: relative;
-  margin: 15px auto;
-  border: 3px solid #51cf66;
-  box-shadow: 0 10px 40px rgba(81, 207, 102, 0.4), inset 0 -5px 20px rgba(0, 0, 0, 0.5);
+  margin: 20px auto;
+  border: 4px solid #51cf66;
+  box-shadow: 0 15px 50px rgba(81, 207, 102, 0.5), inset 0 -8px 25px rgba(0, 0, 0, 0.6), inset 0 3px 10px rgba(255, 255, 255, 0.1);
+  transform: translateZ(30px);
 }
 .joystick {
-  width: 90px;
-  height: 90px;
-  background: radial-gradient(circle at 30% 30%, #ff6b6b, #e94560, #a02040);
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle at 30% 30%, #ff8787, #ff6b6b, #e94560, #a02040);
   border-radius: 50%;
   position: absolute;
-  top: 65px;
-  left: 65px;
+  top: 70px;
+  left: 70px;
   cursor: move;
-  box-shadow: 0 8px 30px rgba(233, 69, 96, 0.8), inset 0 -3px 10px rgba(0, 0, 0, 0.5), inset 0 3px 10px rgba(255, 255, 255, 0.3);
-  border: 3px solid rgba(255, 107, 107, 0.5);
+  box-shadow: 0 12px 40px rgba(233, 69, 96, 0.9), inset 0 -5px 15px rgba(0, 0, 0, 0.6), inset 0 5px 15px rgba(255, 255, 255, 0.4);
+  border: 4px solid rgba(255, 107, 107, 0.6);
   transition: box-shadow 0.1s;
+  transform: translateZ(50px);
 }
 .joystick:active {
-  box-shadow: 0 0 50px rgba(233, 69, 96, 1), inset 0 -5px 15px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0 60px rgba(233, 69, 96, 1), inset 0 -8px 20px rgba(0, 0, 0, 0.8);
 }
 .center-mark {
-  width: 25px;
-  height: 25px;
+  width: 30px;
+  height: 30px;
   background: radial-gradient(circle, #51cf66, #00ff88);
   border-radius: 50%;
   position: absolute;
-  top: 97px;
-  left: 97px;
+  top: 105px;
+  left: 105px;
   pointer-events: none;
-  box-shadow: 0 0 20px #51cf66;
+  box-shadow: 0 0 25px #51cf66, 0 0 40px #51cf66;
 }
 .reset-btn {
   background: radial-gradient(circle, #51cf66, #00ff88);
-  width: 60px;
-  height: 60px;
+  width: 70px;
+  height: 70px;
   border-radius: 50%;
-  margin: 10px auto;
+  margin: 15px auto;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border: 3px solid #74c0fc;
-  box-shadow: 0 6px 20px rgba(81, 207, 102, 0.6), inset 0 2px 5px rgba(255, 255, 255, 0.3);
-  font-size: 24px;
+  border: 4px solid #74c0fc;
+  box-shadow: 0 10px 30px rgba(81, 207, 102, 0.7), inset 0 3px 8px rgba(255, 255, 255, 0.4), 0 0 40px rgba(81, 207, 102, 0.5);
+  font-size: 28px;
   font-weight: bold;
   color: #0a0a0a;
   transition: all 0.3s;
+  transform: translateZ(40px);
 }
 .reset-btn:hover {
-  box-shadow: 0 8px 30px rgba(81, 207, 102, 0.9), inset 0 2px 5px rgba(255, 255, 255, 0.4);
-  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(81, 207, 102, 1), inset 0 3px 8px rgba(255, 255, 255, 0.5), 0 0 60px rgba(81, 207, 102, 0.8);
+  transform: translateY(-3px) translateZ(40px);
 }
 .reset-btn:active {
-  transform: translateY(0) scale(0.95);
-  box-shadow: 0 4px 15px rgba(81, 207, 102, 0.7);
+  transform: translateY(0) scale(0.95) translateZ(40px);
+  box-shadow: 0 6px 20px rgba(81, 207, 102, 0.8);
 }
 .stats {
-  padding: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 15px;
 }
 .stat-line {
   display: flex;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: linear-gradient(90deg, rgba(0, 255, 136, 0.1), rgba(81, 207, 102, 0.1));
-  border-left: 3px solid #51cf66;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: 10px 15px;
+  background: linear-gradient(90deg, rgba(0, 255, 136, 0.15), rgba(81, 207, 102, 0.15));
+  border-left: 4px solid #51cf66;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 3px rgba(255, 255, 255, 0.2);
+  transform: translateZ(10px);
 }
 .stat-value {
-  color: #74c0fc;
+  color: #e0f7ff;
   font-weight: bold;
+  font-size: 16px;
 }
 .middle-section {
   display: flex;
@@ -141,15 +149,15 @@ body {
   gap: 20px;
 }
 .serial {
-  flex: 1;
+  flex: 0.6;
   background: #0a0a0a;
   padding: 15px;
   overflow-y: auto;
-  font-size: 12px;
+  font-size: 13px;
   border-radius: 15px;
-  max-height: 280px;
-  border: 2px solid #00ff88;
-  box-shadow: inset 0 2px 10px rgba(0, 255, 136, 0.2);
+  max-height: 200px;
+  border: 3px solid #00ff88;
+  box-shadow: inset 0 3px 12px rgba(0, 255, 136, 0.3), 0 8px 25px rgba(0, 0, 0, 0.5);
 }
 .code-editor-section {
   flex: 1;
@@ -162,32 +170,34 @@ body {
   margin-bottom: 10px;
 }
 .tab {
-  padding: 12px 24px;
-  background: linear-gradient(135deg, rgba(233, 69, 96, 0.4), rgba(160, 32, 64, 0.4));
-  border: 2px solid #ff6b6b;
-  border-radius: 12px 12px 0 0;
+  padding: 14px 28px;
+  background: linear-gradient(135deg, rgba(233, 69, 96, 0.5), rgba(160, 32, 64, 0.5));
+  border: 3px solid #ff6b6b;
+  border-radius: 15px 15px 0 0;
   cursor: pointer;
   transition: all 0.3s;
   font-weight: bold;
-  box-shadow: 0 4px 15px rgba(233, 69, 96, 0.3);
+  font-size: 15px;
+  box-shadow: 0 6px 20px rgba(233, 69, 96, 0.4), inset 0 2px 5px rgba(255, 255, 255, 0.2);
+  transform: translateZ(10px);
 }
 .tab.active {
   background: linear-gradient(135deg, #ff6b6b, #e94560);
-  box-shadow: 0 0 30px rgba(233, 69, 96, 0.8), inset 0 2px 5px rgba(255, 255, 255, 0.3);
-  transform: translateY(-3px);
+  box-shadow: 0 0 40px rgba(233, 69, 96, 1), inset 0 3px 8px rgba(255, 255, 255, 0.4);
+  transform: translateY(-5px) translateZ(20px);
 }
 .editor {
   flex: 1;
   background: #0a0a0a;
   padding: 15px;
   font-family: 'Courier New', monospace;
-  font-size: 14px;
+  font-size: 15px;
   color: #51cf66;
-  border: 2px solid #00ff88;
+  border: 3px solid #00ff88;
   border-radius: 0 15px 15px 15px;
   overflow-y: auto;
-  min-height: 350px;
-  box-shadow: inset 0 2px 10px rgba(0, 255, 136, 0.2);
+  min-height: 400px;
+  box-shadow: inset 0 3px 12px rgba(0, 255, 136, 0.3), 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 textarea {
   width: 100%;
@@ -196,64 +206,74 @@ textarea {
   border: none;
   color: #51cf66;
   font-family: 'Courier New', monospace;
-  font-size: 14px;
+  font-size: 15px;
   resize: none;
   outline: none;
 }
 .btn {
   background: linear-gradient(135deg, #ff6b6b, #e94560);
-  border: 2px solid #ff8787;
+  border: 3px solid #ff8787;
   color: #fff;
-  padding: 14px;
-  border-radius: 12px;
+  padding: 16px;
+  border-radius: 15px;
   cursor: pointer;
   transition: all 0.3s;
   text-align: center;
   font-weight: bold;
-  font-size: 16px;
-  box-shadow: 0 6px 20px rgba(233, 69, 96, 0.4), inset 0 2px 5px rgba(255, 255, 255, 0.2);
+  font-size: 18px;
+  box-shadow: 0 8px 30px rgba(233, 69, 96, 0.5), inset 0 3px 8px rgba(255, 255, 255, 0.3);
+  transform: translateZ(20px);
 }
 .btn:hover {
-  box-shadow: 0 8px 30px rgba(233, 69, 96, 0.8), inset 0 2px 5px rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(233, 69, 96, 0.9), inset 0 3px 8px rgba(255, 255, 255, 0.4);
+  transform: translateY(-3px) translateZ(20px);
 }
 .btn:active {
-  transform: translateY(0);
-  box-shadow: 0 4px 15px rgba(233, 69, 96, 0.6);
+  transform: translateY(0) translateZ(20px);
+  box-shadow: 0 6px 20px rgba(233, 69, 96, 0.7);
 }
 input[type="text"] {
-  padding: 12px;
+  padding: 14px;
   background: #0a0a0a;
-  border: 2px solid #00ff88;
+  border: 3px solid #00ff88;
   color: #51cf66;
-  border-radius: 10px;
+  border-radius: 12px;
   width: 100%;
-  font-size: 14px;
-  box-shadow: inset 0 2px 8px rgba(0, 255, 136, 0.1);
+  font-size: 15px;
+  box-shadow: inset 0 3px 10px rgba(0, 255, 136, 0.2), 0 5px 15px rgba(0, 0, 0, 0.4);
+  font-weight: bold;
 }
 .sensor-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: 10px;
   margin-top: 15px;
 }
 .sensor-card {
-  background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(81, 207, 102, 0.05));
-  padding: 10px;
-  border-radius: 10px;
-  border-left: 3px solid #51cf66;
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(81, 207, 102, 0.1));
+  padding: 12px;
+  border-radius: 12px;
+  border-left: 4px solid #51cf66;
   display: flex;
   justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 3px rgba(255, 255, 255, 0.2);
+  transform: translateZ(10px);
 }
 .sensor-label {
-  color: #74c0fc;
-  font-size: 12px;
+  color: #e0f7ff;
+  font-size: 14px;
+  font-weight: bold;
 }
 .sensor-value {
   color: #51cf66;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 15px;
+  text-shadow: 0 0 10px #51cf66;
+}
+h3 {
+  font-size: 18px;
+  color: #e0f7ff;
+  text-shadow: 0 0 10px #74c0fc;
 }
 </style>
 </head>
@@ -268,7 +288,7 @@ input[type="text"] {
       <div>Started: <span id="startTime">--</span></div>
     </div>
   </div>
-  
+
   <div class="glass cameras">
     <div class="cam">CAM 1</div>
     <div class="cam">CAM 2</div>
@@ -283,12 +303,12 @@ input[type="text"] {
       <div class="stat-line"><span>Right:</span><span class="stat-value" id="rightRpm">0</span></div>
     </div>
   </div>
-  
+
   <div class="middle-section glass" style="padding: 20px;">
     <h3>SERIAL MONITOR</h3>
     <div class="serial" id="serial"></div>
     <input type="text" id="cmd" placeholder="Command...">
-    
+
     <div class="code-editor-section">
       <h3 style="margin: 20px 0 10px 0;">CODE EDITOR</h3>
       <div class="tabs">
@@ -302,7 +322,7 @@ input[type="text"] {
       <div class="btn" style="margin-top: 10px;" onclick="compile()">⚡ COMPILE & UPLOAD</div>
     </div>
   </div>
-  
+
   <div class="glass" style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
     <h3>SYSTEM STATUS</h3>
     <div class="sensor-card">
@@ -317,7 +337,7 @@ input[type="text"] {
       <span class="sensor-label">ZLAC Drivers</span>
       <span class="sensor-value" id="driverStatus">--</span>
     </div>
-    
+
     <h3 style="margin-top: 20px;">FUTURE SENSORS</h3>
     <div class="sensor-grid">
       <div class="sensor-card">
@@ -401,13 +421,13 @@ setInterval(() => {
 
 const joystick = document.getElementById('joystick');
 let isDragging = false;
-let centerX = 110, centerY = 110;
+let centerX = 120, centerY = 120;
 
 joystick.addEventListener('mousedown', () => isDragging = true);
 document.addEventListener('mouseup', () => {
   isDragging = false;
-  joystick.style.left = '65px';
-  joystick.style.top = '65px';
+  joystick.style.left = '70px';
+  joystick.style.top = '70px';
   sendJoystick(0, 0);
 });
 
@@ -417,15 +437,15 @@ document.addEventListener('mousemove', e => {
   let x = e.clientX - rect.left - centerX;
   let y = e.clientY - rect.top - centerY;
   let dist = Math.sqrt(x*x + y*y);
-  if(dist > 65) {
-    x = x / dist * 65;
-    y = y / dist * 65;
+  if(dist > 70) {
+    x = x / dist * 70;
+    y = y / dist * 70;
   }
-  joystick.style.left = (centerX + x - 45) + 'px';
-  joystick.style.top = (centerY + y - 45) + 'px';
-  
-  let lx = Math.round(x / 65 * 511);
-  let ly = Math.round(-y / 65 * 511);
+  joystick.style.left = (centerX + x - 50) + 'px';
+  joystick.style.top = (centerY + y - 50) + 'px';
+
+  let lx = Math.round(x / 70 * 511);
+  let ly = Math.round(-y / 70 * 511);
   sendJoystick(lx, ly);
 });
 
