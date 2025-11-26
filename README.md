@@ -92,13 +92,22 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 **Control and monitor your robot from ANYWHERE in the world!**
 
-### What It Does
-- 📊 **Real-Time Status** - See robot ONLINE/OFFLINE from your phone
-- 🖥️ **Serial Monitor** - Watch Teensy debug output in browser  
-- 📡 **Send Commands** - Control robot remotely (status, ping, stop, etc)
-- 🔄 **OTA Updates** - Upload new ESP32 code wirelessly
-- 🎮 **Hybrid Control** - Xbox controller + web monitoring simultaneously
-- 🌍 **Multi-Network** - Auto-connects to home WiFi, phone hotspot, or work networks
+### Futuristic Command Center Dashboard
+**Design:** Glassmorphism UI with cyberpunk aesthetic - liquid glass effects, 3D embossing, spaceship cockpit vibes
+
+**Features:**
+- 🎮 **Virtual Joystick** - Tank steering control (simulates Xbox controller)
+- 📊 **Real-Time Telemetry** - Live motor RPM, WiFi signal, session stats
+- 🖥️ **Serial Monitor** - Watch Teensy debug output in browser
+- 💻 **Code Editor** - Edit Teensy/ESP32/Driver code with syntax highlighting
+- ⚡ **Compile & Upload** - Wireless firmware updates via browser
+- 📡 **Command Input** - Send custom commands to robot
+- 🔄 **Reset Button** - Soft reset (simulates Xbox A button)
+- 📷 **Camera Feeds** - Dual IP camera streams (future)
+- 🔋 **System Status** - ESP32, Teensy, ZLAC drivers health
+- 🛰️ **Future Sensors** - Jetson Orin, LiDAR, GPS, PIR, OpenArm placeholders
+
+**Tech:** Glassmorphism CSS (backdrop-filter, blur, transparency), WebSocket real-time updates, Monaco editor integration
 
 ### Architecture
 ```
@@ -530,7 +539,7 @@ From r/robotics discussion:
 ### This Project
 - [Teensy Code](hardware/teensy/) - Motor control firmware
 - [ESP32 Code](hardware/esp32/) - Bluepad32 + WiFi + OTA
-- [Web Interface](vps/) - Node.js WebSocket server
+- [Web Dashboard](web-dashboard/) - Futuristic glassmorphism UI + WebSocket server
 - [ZLAC Documentation](hardware/motor-controllers/) - Driver manuals
 - [Wiring Diagrams](docs/wiring/) - Coming soon
 
@@ -601,6 +610,8 @@ From r/robotics discussion:
 - Xbox controller input via Bluepad32
 - Power system design for mobile robots
 - **WebSocket-based remote robot monitoring**
+- **Futuristic glassmorphism web UI design**
+- **Virtual joystick for tank drive control**
 - **ESP32 WiFi + Bluetooth simultaneous operation**
 - **OTA update implementation for embedded systems**
 

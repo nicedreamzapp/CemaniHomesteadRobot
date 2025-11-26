@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>CEMANI COMMAND CENTER</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+  background: linear-gradient(135deg, #1a2332 0%, #2d3e5f 100%);
+  font-family: 'Courier New', monospace;
+  color: #00ff88;
+  overflow-x: hidden;
+  height: 100vh;
+}
+.glass {
+  background: rgba(40, 60, 90, 0.5);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(0, 255, 136, 0.3);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 2px 0 rgba(255, 255, 255, 0.2);
+}
+.container {
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  grid-template-rows: 80px 1fr;
+  gap: 20px;
+  padding: 20px;
+  height: 100vh;
+}
+.header {
+  grid-column: 1 / -1;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(40, 60, 90, 0.6), rgba(20, 40, 70, 0.6));
+}
+.status { color: #ff6b6b; font-size: 28px; font-weight: bold; text-shadow: 0 0 10px #ff6b6b; }
+.status.online { color: #51cf66; text-shadow: 0 0 20px #51cf66; }
+.info { display: flex; gap: 20px; font-size: 14px; color: #74c0fc; }
+.cameras { display: flex; gap: 10px; flex-direction: column; overflow-y: auto; }
+.cam {
+  height: 140px;
+  background: linear-gradient(135deg, #1a1a2e, #0f0f1e);
+  border-radius: 15px;
+  border: 2px solid #00ff88;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00ff88;
+  font-size: 18px;
+  font-weight: bold;
+  box-shadow: inset 0 2px 10px rgba(0, 255, 136, 0.2);
+}
+.joystick-container {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.6), rgba(20, 20, 40, 0.6));
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  position: relative;
+  margin: 15px auto;
+  border: 3px solid #51cf66;
+  box-shadow: 0 10px 40px rgba(81, 207, 102, 0.4), inset 0 -5px 20px rgba(0, 0, 0, 0.5);
+}
+.joystick {
+  width: 90px;
+  height: 90px;
+  background: radial-gradient(circle at 30% 30%, #ff6b6b, #e94560, #a02040);
+  border-radius: 50%;
+  position: absolute;
+  top: 65px;
+  left: 65px;
+  cursor: move;
+  box-shadow: 0 8px 30px rgba(233, 69, 96, 0.8), inset 0 -3px 10px rgba(0, 0, 0, 0.5), inset 0 3px 10px rgba(255, 255, 255, 0.3);
+  border: 3px solid rgba(255, 107, 107, 0.5);
+  transition: box-shadow 0.1s;
+}
+.joystick:active {
+  box-shadow: 0 0 50px rgba(233, 69, 96, 1), inset 0 -5px 15px rgba(0, 0, 0, 0.7);
+}
+.center-mark {
+  width: 25px;
+  height: 25px;
+  background: radial-gradient(circle, #51cf66, #00ff88);
+  border-radius: 50%;
+  position: absolute;
+  top: 97px;
+  left: 97px;
+  pointer-events: none;
+  box-shadow: 0 0 20px #51cf66;
+}
+.reset-btn {
+  background: radial-gradient(circle, #51cf66, #00ff88);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  margin: 10px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 3px solid #74c0fc;
+  box-shadow: 0 6px 20px rgba(81, 207, 102, 0.6), inset 0 2px 5px rgba(255, 255, 255, 0.3);
+  font-size: 24px;
+  font-weight: bold;
+  color: #0a0a0a;
+  transition: all 0.3s;
+}
+.reset-btn:hover {
+  box-shadow: 0 8px 30px rgba(81, 207, 102, 0.9), inset 0 2px 5px rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+}
+.reset-btn:active {
+  transform: translateY(0) scale(0.95);
+  box-shadow: 0 4px 15px rgba(81, 207, 102, 0.7);
+}
+.stats {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.stat-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(0, 255, 136, 0.1), rgba(81, 207, 102, 0.1));
+  border-left: 3px solid #51cf66;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.stat-value {
+  color: #74c0fc;
+  font-weight: bold;
+}
+.middle-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.serial {
+  flex: 1;
+  background: #0a0a0a;
+  padding: 15px;
+  overflow-y: auto;
+  font-size: 12px;
+  border-radius: 15px;
+  max-height: 280px;
+  border: 2px solid #00ff88;
+  box-shadow: inset 0 2px 10px rgba(0, 255, 136, 0.2);
+}
+.code-editor-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tab {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, rgba(233, 69, 96, 0.4), rgba(160, 32, 64, 0.4));
+  border: 2px solid #ff6b6b;
+  border-radius: 12px 12px 0 0;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: bold;
+  box-shadow: 0 4px 15px rgba(233, 69, 96, 0.3);
+}
+.tab.active {
+  background: linear-gradient(135deg, #ff6b6b, #e94560);
+  box-shadow: 0 0 30px rgba(233, 69, 96, 0.8), inset 0 2px 5px rgba(255, 255, 255, 0.3);
+  transform: translateY(-3px);
+}
+.editor {
+  flex: 1;
+  background: #0a0a0a;
+  padding: 15px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #51cf66;
+  border: 2px solid #00ff88;
+  border-radius: 0 15px 15px 15px;
+  overflow-y: auto;
+  min-height: 350px;
+  box-shadow: inset 0 2px 10px rgba(0, 255, 136, 0.2);
+}
+textarea {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: #51cf66;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  resize: none;
+  outline: none;
+}
+.btn {
+  background: linear-gradient(135deg, #ff6b6b, #e94560);
+  border: 2px solid #ff8787;
+  color: #fff;
+  padding: 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-align: center;
+  font-weight: bold;
+  font-size: 16px;
+  box-shadow: 0 6px 20px rgba(233, 69, 96, 0.4), inset 0 2px 5px rgba(255, 255, 255, 0.2);
+}
+.btn:hover {
+  box-shadow: 0 8px 30px rgba(233, 69, 96, 0.8), inset 0 2px 5px rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+.btn:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 15px rgba(233, 69, 96, 0.6);
+}
+input[type="text"] {
+  padding: 12px;
+  background: #0a0a0a;
+  border: 2px solid #00ff88;
+  color: #51cf66;
+  border-radius: 10px;
+  width: 100%;
+  font-size: 14px;
+  box-shadow: inset 0 2px 8px rgba(0, 255, 136, 0.1);
+}
+.sensor-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 15px;
+}
+.sensor-card {
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(81, 207, 102, 0.05));
+  padding: 10px;
+  border-radius: 10px;
+  border-left: 3px solid #51cf66;
+  display: flex;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.sensor-label {
+  color: #74c0fc;
+  font-size: 12px;
+}
+.sensor-value {
+  color: #51cf66;
+  font-weight: bold;
+  font-size: 14px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header glass">
+    <h1>🤖 CEMANI COMMAND CENTER</h1>
+    <div class="status" id="status">OFFLINE</div>
+    <div class="info">
+      <div>WiFi: <span id="wifi">--</span></div>
+      <div>Uptime: <span id="uptime">--</span></div>
+      <div>Started: <span id="startTime">--</span></div>
+    </div>
+  </div>
+  
+  <div class="glass cameras">
+    <div class="cam">CAM 1</div>
+    <div class="cam">CAM 2</div>
+    <div class="joystick-container">
+      <div class="center-mark"></div>
+      <div class="joystick" id="joystick"></div>
+    </div>
+    <div class="reset-btn" onclick="reset()" title="Reset Robot (A Button)">⟲</div>
+    <div class="stats">
+      <div class="stat-line"><span>Max RPM:</span><span class="stat-value" id="maxRpm">0</span></div>
+      <div class="stat-line"><span>Left:</span><span class="stat-value" id="leftRpm">0</span></div>
+      <div class="stat-line"><span>Right:</span><span class="stat-value" id="rightRpm">0</span></div>
+    </div>
+  </div>
+  
+  <div class="middle-section glass" style="padding: 20px;">
+    <h3>SERIAL MONITOR</h3>
+    <div class="serial" id="serial"></div>
+    <input type="text" id="cmd" placeholder="Command...">
+    
+    <div class="code-editor-section">
+      <h3 style="margin: 20px 0 10px 0;">CODE EDITOR</h3>
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('teensy')">Teensy</div>
+        <div class="tab" onclick="switchTab('esp32')">ESP32</div>
+        <div class="tab" onclick="switchTab('drivers')">Drivers</div>
+      </div>
+      <div class="editor">
+        <textarea id="editor" placeholder="// Your code here..."></textarea>
+      </div>
+      <div class="btn" style="margin-top: 10px;" onclick="compile()">⚡ COMPILE & UPLOAD</div>
+    </div>
+  </div>
+  
+  <div class="glass" style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+    <h3>SYSTEM STATUS</h3>
+    <div class="sensor-card">
+      <span class="sensor-label">ESP32</span>
+      <span class="sensor-value" id="esp32Status">--</span>
+    </div>
+    <div class="sensor-card">
+      <span class="sensor-label">Teensy 4.1</span>
+      <span class="sensor-value" id="teensyStatus">--</span>
+    </div>
+    <div class="sensor-card">
+      <span class="sensor-label">ZLAC Drivers</span>
+      <span class="sensor-value" id="driverStatus">--</span>
+    </div>
+    
+    <h3 style="margin-top: 20px;">FUTURE SENSORS</h3>
+    <div class="sensor-grid">
+      <div class="sensor-card">
+        <span class="sensor-label">🔋 Battery</span>
+        <span class="sensor-value">-- V</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">🌡️ Motor Temp</span>
+        <span class="sensor-value">-- °C</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">📡 RPLidar A1</span>
+        <span class="sensor-value">Ready</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">🛰️ GPS</span>
+        <span class="sensor-value">Ready</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">📷 IR Camera</span>
+        <span class="sensor-value">Ready</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">🔊 Ultrasonics</span>
+        <span class="sensor-value">4x Ready</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">👁️ PIR Sensor</span>
+        <span class="sensor-value">Ready</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">🧠 Jetson Orin</span>
+        <span class="sensor-value">Ready</span>
+      </div>
+      <div class="sensor-card">
+        <span class="sensor-label">🦾 OpenArm x2</span>
+        <span class="sensor-value">Ready</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ws = new WebSocket('ws://'+location.host);
+let maxRpm = 0;
+let startTime = null;
+let currentTab = 'teensy';
+
+ws.onmessage = e => {
+  const d = JSON.parse(e.data);
+  if(d.type==='serial') {
+    document.getElementById('serial').innerHTML += d.data + '<br>';
+    document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
+  }
+  if(d.type==='status') {
+    document.getElementById('status').textContent = d.connected ? 'ONLINE' : 'OFFLINE';
+    document.getElementById('status').className = 'status ' + (d.connected ? 'online' : '');
+    if(d.connected && !startTime) startTime = new Date();
+  }
+  if(d.type==='telemetry') {
+    document.getElementById('leftRpm').textContent = d.left || 0;
+    document.getElementById('rightRpm').textContent = d.right || 0;
+    document.getElementById('wifi').textContent = d.wifi || '--';
+    let max = Math.max(Math.abs(d.left || 0), Math.abs(d.right || 0));
+    if(max > maxRpm) {
+      maxRpm = max;
+      document.getElementById('maxRpm').textContent = maxRpm;
+    }
+  }
+};
+
+setInterval(() => {
+  if(startTime) {
+    let diff = new Date() - startTime;
+    let mins = Math.floor(diff / 60000);
+    let secs = Math.floor((diff % 60000) / 1000);
+    document.getElementById('uptime').textContent = mins + 'm ' + secs + 's';
+    document.getElementById('startTime').textContent = startTime.toLocaleTimeString();
+  }
+}, 1000);
+
+const joystick = document.getElementById('joystick');
+let isDragging = false;
+let centerX = 110, centerY = 110;
+
+joystick.addEventListener('mousedown', () => isDragging = true);
+document.addEventListener('mouseup', () => {
+  isDragging = false;
+  joystick.style.left = '65px';
+  joystick.style.top = '65px';
+  sendJoystick(0, 0);
+});
+
+document.addEventListener('mousemove', e => {
+  if(!isDragging) return;
+  let rect = joystick.parentElement.getBoundingClientRect();
+  let x = e.clientX - rect.left - centerX;
+  let y = e.clientY - rect.top - centerY;
+  let dist = Math.sqrt(x*x + y*y);
+  if(dist > 65) {
+    x = x / dist * 65;
+    y = y / dist * 65;
+  }
+  joystick.style.left = (centerX + x - 45) + 'px';
+  joystick.style.top = (centerY + y - 45) + 'px';
+  
+  let lx = Math.round(x / 65 * 511);
+  let ly = Math.round(-y / 65 * 511);
+  sendJoystick(lx, ly);
+});
+
+function sendJoystick(lx, ly) {
+  ws.send(JSON.stringify({type:'joystick', lx:lx, ly:ly}));
+}
+
+function reset() {
+  ws.send(JSON.stringify({type:'command', data:'reset'}));
+  maxRpm = 0;
+  document.getElementById('maxRpm').textContent = '0';
+  document.getElementById('serial').innerHTML = '[RESET] Robot reset...<br>';
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function compile() {
+  ws.send(JSON.stringify({type:'compile', target:currentTab, code:document.getElementById('editor').value}));
+}
+
+document.getElementById('cmd').addEventListener('keypress', e => {
+  if(e.key === 'Enter') {
+    ws.send(JSON.stringify({type:'command', data:e.target.value}));
+    e.target.value = '';
+  }
+});
+</script>
+</body>
+</html>
