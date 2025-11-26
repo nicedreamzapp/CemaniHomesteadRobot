@@ -145,7 +145,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 5. **Xbox controller still works** locally via Bluetooth - web doesn't interfere!
 
 ### Tech Stack
-- **VPS:** Ubuntu 24.04 on Hostinger (72.60.124.34)
+- **VPS:** Ubuntu 24.04 (any hosting provider works)
 - **Backend:** Node.js WebSocket server with PM2 process manager
 - **Frontend:** Vanilla HTML/CSS/JS (no frameworks needed)
 - **Reverse Proxy:** Nginx for subdomain routing
