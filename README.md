@@ -363,14 +363,13 @@ Using two robotic arms for human-like bilateral manipulation:
 | **Teensy 4.1** | 600MHz ARM Cortex-M7 | Main controller & Modbus master |
 | **ESP32** | Bluetooth 5.0 + WiFi | Xbox controller + web interface |
 | **RS-485 Module** | MAX3485 | Modbus RTU communication |
-| **2x 12V LiFePO4** | Series = 24V | Motor power (low CoG mounting) |
-| **Buck Converter** | DROK 24V→5V | Logic power with filtering |
+| **2x 30Ah 12V LiFePO4** | Series = 24V, 60Ah total | Motor power (low CoG mounting) |
+| **Buck Converter** | 25W Waterproof Vehicle 24V→5V 5A | Logic power (automotive grade) |
 | **Xbox Controller** | Bluetooth 5.0 | Wireless control |
 | **2020 Extrusion** | Aluminum | Chassis frame |
 | **Aluminum Plates** | Various | Mounting & structure |
 | **4x Shocks** | Electric scooter | Suspension for terrain |
-| **Fuses & Breakers** | 10A input, 2A output | Protection |
-| **Capacitors** | 100µF input/output | Power filtering |
+| **Breakers** | 2x 40A (drivers), 1x 50A (battery bar) | Overcurrent protection |
 | **VPS Server** | Ubuntu 24.04 | Remote monitoring backend |
 
 ### Phase 7: Autonomous Predator Patrol (In Progress)
@@ -607,8 +606,13 @@ void loop() {
 **Solution:** Driver-specific inversion in code, works reliably now
 
 ### Challenge 2: Power Stability ✅
-**Problem:** Brown-outs during motor acceleration  
-**Solution:** went from hobby grade to automotive on buck converter + input/output + proper fusing
+**Problem:** Hobby-grade DROK converters blew 4 Teensys before I learned my lesson
+**Root Cause:** Insufficient filtering and inadequate current handling
+**Solution:**
+- Switched to 25W waterproof automotive-grade vehicle buck converter (24V→5V 5A)
+- Removed capacitors (not needed with quality automotive converter)
+- Proper breaker protection: 2x 40A to drivers, 1x 50A to battery bar
+- Zero failures since upgrading to automotive components
 
 ### Challenge 3: Tip-Over Risk 🚧
 **Problem:** Adding arms on top raises center of gravity  
@@ -636,8 +640,8 @@ void loop() {
 
 ### Month 1-2: Basic Electronics
 - Power distribution and voltage regulation
-- Fuse/breaker selection for protection
-- Why capacitors matter for motor loads
+- Breaker selection for overcurrent protection
+- Why automotive-grade components matter (learned after blowing 4 Teensys with hobby parts)
 
 ### Month 3-4: Communication Protocols
 - Serial UART between microcontrollers
