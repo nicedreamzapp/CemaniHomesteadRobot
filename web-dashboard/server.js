@@ -112,6 +112,8 @@ function handleCompile(target, code, clientWs) {
         type: 'compile_error',
         error: stderr || error.message
       }));
+      // Cleanup
+      cleanupTempFiles();
       return;
     }
 
@@ -126,6 +128,7 @@ function handleCompile(target, code, clientWs) {
         type: 'compile_error',
         error: '.hex file not generated. Check build output.'
       }));
+      cleanupTempFiles();
       return;
     }
 
@@ -139,40 +142,94 @@ function handleCompile(target, code, clientWs) {
         type: 'compile_error',
         error: 'Failed to read compiled .hex file: ' + err.message
       }));
+      cleanupTempFiles();
       return;
     }
 
-    // Step 4: Send .hex to ESP32
+    // Step 4: Check if ESP32 is connected
     if (!robotSocket || robotSocket.readyState !== WebSocket.OPEN) {
       console.error('[COMPILE] Robot not connected');
       clientWs.send(JSON.stringify({
         type: 'compile_error',
         error: 'Robot (ESP32) is not connected. Cannot flash Teensy wirelessly.'
       }));
+      cleanupTempFiles();
       return;
     }
 
+    // Step 5: Send .hex in chunks (1KB per chunk for reliability)
+    const CHUNK_SIZE = 1024;
+    const chunks = [];
+    for (let i = 0; i < hexData.length; i += CHUNK_SIZE) {
+      chunks.push(hexData.slice(i, i + CHUNK_SIZE));
+    }
+
+    console.log(`[COMPILE] Sending ${chunks.length} chunks to ESP32...`);
+
     robotSocket.send(JSON.stringify({
-      type: 'flash_teensy',
-      hex: hexData
+      type: 'flash_start',
+      totalChunks: chunks.length,
+      totalSize: hexData.length
     }));
 
-    console.log('[COMPILE] Sent .hex to ESP32 for wireless flashing');
+    // Send chunks with small delay to avoid overwhelming ESP32
+    let chunkIndex = 0;
+    const sendNextChunk = () => {
+      if (chunkIndex >= chunks.length) {
+        robotSocket.send(JSON.stringify({ type: 'flash_complete' }));
+        console.log('[COMPILE] All chunks sent. Flashing complete.');
 
-    clientWs.send(JSON.stringify({
-      type: 'compile_success',
-      message: 'Compilation successful! Flashing Teensy wirelessly...',
-      hexSize: hexData.length
-    }));
+        clientWs.send(JSON.stringify({
+          type: 'compile_success',
+          message: `Compilation successful! Sent ${hexData.length} bytes to Teensy.`,
+          hexSize: hexData.length
+        }));
 
-    broadcast({
-      type: 'serial',
-      data: `[COMPILE] ✅ Success! Flashing ${hexData.length} bytes to Teensy...`
-    });
+        broadcast({
+          type: 'serial',
+          data: `[COMPILE] ✅ Success! Flashed ${hexData.length} bytes to Teensy`
+        });
+
+        // Cleanup after successful upload
+        cleanupTempFiles();
+        return;
+      }
+
+      robotSocket.send(JSON.stringify({
+        type: 'flash_chunk',
+        index: chunkIndex,
+        total: chunks.length,
+        data: chunks[chunkIndex]
+      }));
+
+      chunkIndex++;
+      setTimeout(sendNextChunk, 50); // 50ms delay between chunks
+    };
+
+    sendNextChunk();
   });
+}
+
+function cleanupTempFiles() {
+  try {
+    const sketchPath = path.join(TEMP_DIR, 'sketch.ino');
+    if (fs.existsSync(sketchPath)) fs.unlinkSync(sketchPath);
+
+    // Clean build directory
+    if (fs.existsSync(BUILD_DIR)) {
+      const files = fs.readdirSync(BUILD_DIR);
+      files.forEach(file => {
+        fs.unlinkSync(path.join(BUILD_DIR, file));
+      });
+    }
+    console.log('[CLEANUP] Temp files cleaned');
+  } catch (err) {
+    console.error('[CLEANUP] Error cleaning temp files:', err);
+  }
 }
 
 server.listen(3001, '0.0.0.0', () => {
   console.log('[SERVER] Robot server running on port 3001');
   console.log('[SERVER] Temp directory:', TEMP_DIR);
+  console.log('[SERVER] Build directory:', BUILD_DIR);
 });
