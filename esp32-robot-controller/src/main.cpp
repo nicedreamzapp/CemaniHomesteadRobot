@@ -40,9 +40,9 @@ void setup() {
 
   // Setup WiFi with multiple networks
   Serial.println("[WiFi] Configuring WiFiMulti...");
-  wifiMulti.addAP("MyAltice 7a4283", "elephant8988");
-  wifiMulti.addAP("MyOptimum 6b7c4d", "9621-granite-62");
-  wifiMulti.addAP("divine tribe", "hemp1234");
+  wifiMulti.addAP("MyAltice 7a4283", "granite-833-564");      // Home
+  wifiMulti.addAP("MyOptimum 6b7c4d", "9621-granite-62");     // Work
+  wifiMulti.addAP("divine tribe", "hemp1234");                 // Phone hotspot
 
   Serial.print("[WiFi] Connecting");
   while (wifiMulti.run() != WL_CONNECTED) {
