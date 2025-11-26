@@ -92,11 +92,6 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 **Control and monitor your robot from ANYWHERE in the world!**
 
-### 🔗 Live Demo
-**[robot.marijuanaunion.com](http://robot.marijuanaunion.com)**
-
-🔒 **Password Protected** - Username: (anything) | Password: Contact owner for access
-
 ### What It Does
 - 📊 **Real-Time Status** - See robot ONLINE/OFFLINE from your phone
 - 🖥️ **Serial Monitor** - Watch Teensy debug output in browser  
@@ -115,7 +110,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 │   └─────────────────┘      │ HTTPS/WebSocket                     │
 │                             ▼                                     │
 │              ┌──────────────────────────────┐                    │
-│              │  robot.marijuanaunion.com    │                    │
+│              │  your-robot-domain.com       │                    │
 │              │  (VPS - Node.js + Nginx)     │                    │
 │              └───────────────┬──────────────┘                    │
 │                              │ WebSocket                          │
@@ -139,7 +134,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 ### How It Works
 1. **ESP32 connects to WiFi** on robot startup (home, hotspot, or work)
-2. **Opens WebSocket** to VPS server (robot.marijuanaunion.com)
+2. **Opens WebSocket** to your VPS server
 3. **Sends Teensy serial data** to VPS in real-time
 4. **Your browser connects** to VPS and sees live serial output
 5. **Xbox controller still works** locally via Bluetooth - web doesn't interfere!
@@ -221,7 +216,7 @@ Using two robotic arms for human-like bilateral manipulation:
 | **4x Shocks** | Electric scooter | Suspension for terrain |
 | **Fuses & Breakers** | 10A input, 2A output | Protection |
 | **Capacitors** | 100µF input/output | Power filtering |
-| **VPS Server** | Ubuntu 24.04 (Hostinger) | Remote monitoring backend |
+| **VPS Server** | Ubuntu 24.04 | Remote monitoring backend |
 
 ### Phase 7: Autonomous Predator Patrol (In Progress)
 
@@ -308,8 +303,8 @@ OpenArm 0.1 provides **bilateral manipulation** - the ability to coordinate two 
 │       ↓                               │  │           │                │
 │  ESP32 (Bluepad32 + WiFi + OTA)      │  │           │                │
 │       ↓ Serial (115200 baud)         │  │           ▼                │
-│  Teensy 4.1                           │  │  robot.marijuanaunion.com  │
-│       ↓ RS-485 (Modbus RTU)          │  │      (VPS WebSocket)       │
+│  Teensy 4.1                           │  │  VPS WebSocket Server      │
+│       ↓ RS-485 (Modbus RTU)          │  │   (Node.js + Nginx)        │
 │  MAX3485 Module                       │  │           │                │
 │       ↓ Twisted Pair A/B             │  │           │                │
 │  ┌──────────────────┬──────────────┐ │  │           │                │
@@ -434,12 +429,12 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 ```cpp
 // Connect to VPS WebSocket server
 WebSocketsClient webSocket;
-webSocket.begin("robot.marijuanaunion.com", 80, "/");
+webSocket.begin("your-robot-domain.com", 80, "/");
 
 // Forward Teensy serial data to web interface
 void loop() {
   webSocket.loop();
-  
+
   if (Serial.available()) {
     String data = Serial.readStringUntil('\n');
     webSocket.sendTXT(data);
@@ -560,7 +555,7 @@ From r/robotics discussion:
 - [x] 5V 5A Waterproof Buck Converter ($11.99)
 - [x] Slamtec RPLidar A1M8 ($99)
 - [x] Arducam 1080P IR Night Camera ($34.99)
-- [x] VPS Server (Hostinger - $3.99/mo)
+- [x] VPS Server (~$4/mo any provider)
 - [ ] u-blox NEO-M8N GPS Module (~$15-20)
 - [ ] JSN-SR04T Waterproof Ultrasonics x4 (~$32)
 - [ ] Industrial PIR Sensor (~$25-40)
@@ -647,6 +642,6 @@ MIT License - Use this for your own robot projects!
 
 ### 🚂 "If it takes more than 10 minutes, automate it. If kids want robot rides, build a train." 🐔
 
-[Website](https://nicedreamzwholesale.com) • [GitHub](https://github.com/nicedreamzapp) • [Reddit Discussion](https://www.reddit.com/r/robotics/comments/1ov3k5v/) • [Live Robot Status](http://robot.marijuanaunion.com)
+[Website](https://nicedreamzwholesale.com) • [GitHub](https://github.com/nicedreamzapp) • [Reddit Discussion](https://www.reddit.com/r/robotics/comments/1ov3k5v/)
 
 </div>
