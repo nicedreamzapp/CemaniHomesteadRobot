@@ -407,6 +407,18 @@ ws.onmessage = e => {
       document.getElementById('maxRpm').textContent = maxRpm;
     }
   }
+  if(d.type==='compile_status') {
+    document.getElementById('serial').innerHTML += '<span style="color:#74c0fc">[COMPILE] ' + d.message + '</span><br>';
+    document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
+  }
+  if(d.type==='compile_success') {
+    document.getElementById('serial').innerHTML += '<span style="color:#51cf66">[SUCCESS] ' + d.message + '</span><br>';
+    document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
+  }
+  if(d.type==='compile_error') {
+    document.getElementById('serial').innerHTML += '<span style="color:#ff6b6b">[ERROR] ' + d.error + '</span><br>';
+    document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
+  }
 };
 
 setInterval(() => {
