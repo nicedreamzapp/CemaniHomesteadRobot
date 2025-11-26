@@ -92,6 +92,10 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 **Control and monitor your robot from ANYWHERE in the world!**
 
+![Web Dashboard](docs/screenshots/web-dashboard.webp)
+
+*Futuristic glassmorphism command center with virtual joystick, real-time telemetry, code editor, and system monitoring*
+
 ### Futuristic Command Center Dashboard
 **Design:** Glassmorphism UI with cyberpunk aesthetic - liquid glass effects, 3D embossing, spaceship cockpit vibes
 
