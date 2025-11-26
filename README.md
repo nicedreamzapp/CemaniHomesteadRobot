@@ -162,6 +162,148 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 ---
 
+## ⚡ Wireless Programming System
+
+**Write code in your browser, compile on the VPS, flash Teensy wirelessly - NO USB REQUIRED!**
+
+### Complete Over-The-Air Development Pipeline
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                   WIRELESS COMPILATION FLOW                     │
+├────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. 💻 Browser Code Editor                                     │
+│      └─► Write/Edit Teensy code with syntax highlighting       │
+│           │                                                     │
+│           │ HTTP POST (code as JSON)                           │
+│           ▼                                                     │
+│  2. 🖥️  VPS Server (Node.js)                                   │
+│      ├─► Receives code via WebSocket                           │
+│      ├─► Writes to temp file: /opt/robot-server/temp-sketch/   │
+│      ├─► Compiles with Arduino CLI:                            │
+│      │    arduino-cli compile --fqbn teensy:avr:teensy41       │
+│      ├─► Reads output: build/sketch.ino.hex                    │
+│      └─► Chunks hex into 1KB pieces (50ms delay)               │
+│           │                                                     │
+│           │ WebSocket (flash_start, flash_chunk x N, complete) │
+│           ▼                                                     │
+│  3. 📡 ESP32 Robot Controller                                  │
+│      ├─► Buffers all hex chunks in RAM                         │
+│      ├─► Verifies complete reception                           │
+│      └─► Forwards to Teensy in 128-byte chunks                 │
+│           │                                                     │
+│           │ Serial (GPIO16/17, 115200 baud)                    │
+│           ▼                                                     │
+│  4. 🎛️  Teensy 4.1 (FlasherX Bootloader)                       │
+│      ├─► Receives hex via serial protocol                      │
+│      ├─► Flashes own firmware in-place                         │
+│      └─► Reboots with new code                                 │
+│           │                                                     │
+│           ▼                                                     │
+│  5. ✅ New code running!                                        │
+│                                                                 │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Why This Is Awesome
+
+- **No Physical Access Needed** - Update robot code from anywhere in the world
+- **Fast Iteration** - Write, compile, test in under 30 seconds
+- **Multi-Network** - ESP32 auto-connects to home/work/phone hotspot
+- **Chunked Transmission** - Reliable delivery even on weak WiFi
+- **Error Handling** - Compilation errors shown in browser immediately
+- **Real-Time Feedback** - Watch serial output while code compiles
+
+### Technical Implementation
+
+**VPS Backend (`web-dashboard/server.js`):**
+```javascript
+function handleCompile(target, code, clientWs) {
+  // Write code to temp file
+  fs.writeFileSync('/opt/robot-server/temp-sketch/sketch.ino', code);
+
+  // Compile with Arduino CLI
+  exec('arduino-cli compile --fqbn teensy:avr:teensy41 ...', (err, stdout) => {
+    // Read compiled .hex file
+    const hexData = fs.readFileSync('build/sketch.ino.hex', 'utf8');
+
+    // Send in 1KB chunks to ESP32
+    const CHUNK_SIZE = 1024;
+    robotSocket.send({ type: 'flash_start', totalChunks: N });
+    // ... send flash_chunk messages with 50ms delay
+    robotSocket.send({ type: 'flash_complete' });
+  });
+}
+```
+
+**ESP32 Controller (`esp32-robot-controller/src/main.cpp`):**
+```cpp
+void handleFlashMessage(uint8_t * payload, size_t length) {
+  if (flash_start) {
+    hexBuffer = "";
+    teensySerial.println("FLASH_MODE");
+  }
+
+  if (flash_chunk) {
+    hexBuffer += chunk;
+  }
+
+  if (flash_complete) {
+    // Forward buffered hex to Teensy via FlasherX
+    for (int i = 0; i < hexBuffer.length(); i += 128) {
+      teensySerial.print(chunk);
+      delay(10);
+    }
+    teensySerial.println("END_FLASH");
+  }
+}
+```
+
+### One-Time Setup Required
+
+1. **Upload FlasherX bootloader to Teensy** (via USB, once)
+   - Use Teensyduino IDE
+   - Flash FlasherX example
+   - Teensy can now receive firmware via serial
+
+2. **Upload ESP32 controller code** (via USB, once)
+   ```bash
+   cd esp32-robot-controller
+   platformio run --target upload
+   ```
+
+3. **Configure Arduino CLI on VPS** (already done)
+   ```bash
+   arduino-cli core install teensy:avr
+   arduino-cli lib install FlasherX
+   ```
+
+### After Setup: 100% Wireless Forever
+
+- Edit code in browser
+- Click "Compile & Upload"
+- Watch progress in serial monitor
+- New code running in ~30 seconds
+- **Never touch USB cable again!**
+
+### Features
+
+- ✅ **Chunked Transmission** - Reliable 1KB chunks with 50ms delay
+- ✅ **WiFiMulti** - Auto-connects to 3 different networks
+- ✅ **Error Reporting** - Compilation errors shown in browser
+- ✅ **Serial Monitoring** - Watch Teensy boot with new code
+- ✅ **Cleanup** - Temp files deleted after flash
+- ✅ **Status Updates** - Real-time progress (compiling... sending... done!)
+
+### Supported Targets
+
+- ✅ **Teensy 4.1** - Full wireless flashing via FlasherX
+- 🔜 **ESP32** - OTA updates (standard ESP32 OTA)
+- 🔜 **Motor Drivers** - Parameter updates via Modbus
+
+---
+
 ## 🎯 The Vision
 
 **The Problem:** Backyard predators attacking my chickens. Manual homestead labor. Kids want robot rides.
