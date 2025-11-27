@@ -2,6 +2,8 @@
 *.bin
 *.hex
 *.elf
+*.dmg
+*.pt
 ZLAC8015D*/*/ZLAC8015D*Wirings/*/*.mp4
 
 # IDE
@@ -15,3 +17,22 @@ ZLAC8015D*/*/ZLAC8015D*Wirings/*/*.mp4
 # Build artifacts
 build/
 *.o
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Backup files
+*.bak
+*.backup
+
+# Temp/misc files
+tank Code.rtf
+teensyup
+yolov8*.py
+bluepad32-template/
+
+# Credentials (keep credentials.h.example, ignore actual credentials)
+**/credentials.h
+!**/credentials.h.example

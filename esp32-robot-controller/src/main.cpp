@@ -2,7 +2,7 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <WebSocketsClient.h>
-#include <Bluepad32.h>
+#include "credentials.h"
 
 // WiFi credentials
 WiFiMulti wifiMulti;
@@ -19,20 +19,26 @@ int expectedChunks = 0;
 int receivedChunks = 0;
 bool flashingInProgress = false;
 
-// Controller state
-ControllerPtr myController = nullptr;
+// Connection status
+bool wsConnected = false;
+unsigned long lastWiFiCheck = 0;
+const unsigned long WIFI_CHECK_INTERVAL = 10000;
+
+// Heartbeat
+unsigned long lastHeartbeat = 0;
+const unsigned long HEARTBEAT_INTERVAL = 30000;
 
 // Forward declarations
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
-void onConnectedController(ControllerPtr ctl);
-void onDisconnectedController(ControllerPtr ctl);
 void forwardTeensySerial();
 void handleFlashMessage(uint8_t * payload, size_t length);
+void sendTelemetry();
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n[ESP32] Cemani Robot Controller Starting...");
+  Serial.println("[ESP32] Version 2.0.1 (WiFi Only)");
 
   // Setup Teensy Serial
   teensySerial.begin(115200, SERIAL_8N1, TEENSY_TX, TEENSY_RX);
@@ -40,71 +46,80 @@ void setup() {
 
   // Setup WiFi with multiple networks
   Serial.println("[WiFi] Configuring WiFiMulti...");
-  wifiMulti.addAP("MyAltice 7a4283", "granite-833-564");      // Home
-  wifiMulti.addAP("MyOptimum 6b7c4d", "9621-granite-62");     // Work
-  wifiMulti.addAP("divine tribe", "hemp1234");                 // Phone hotspot
+  wifiMulti.addAP(WIFI_SSID_1, WIFI_PASS_1);  // Home
+  wifiMulti.addAP(WIFI_SSID_2, WIFI_PASS_2);  // Work
+  wifiMulti.addAP(WIFI_SSID_3, WIFI_PASS_3);  // Phone hotspot
 
   Serial.print("[WiFi] Connecting");
-  while (wifiMulti.run() != WL_CONNECTED) {
+  int attempts = 0;
+  while (wifiMulti.run() != WL_CONNECTED && attempts < 40) {
     delay(500);
     Serial.print(".");
+    attempts++;
   }
-  Serial.println("\n[WiFi] Connected!");
-  Serial.print("[WiFi] IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("[WiFi] Network: ");
-  Serial.println(WiFi.SSID());
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[WiFi] Connected!");
+    Serial.print("[WiFi] IP: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("[WiFi] Network: ");
+    Serial.println(WiFi.SSID());
+    Serial.print("[WiFi] Signal: ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+  } else {
+    Serial.println("\n[WiFi] FAILED to connect!");
+  }
 
   // Setup WebSocket
   Serial.println("[WS] Connecting to robot.marijuanaunion.com...");
   webSocket.begin("robot.marijuanaunion.com", 80, "/");
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(5000);
+  webSocket.enableHeartbeat(15000, 3000, 2);
 
-  // Setup Bluepad32
-  Serial.println("[BP32] Initializing Bluepad32...");
-  BP32.setup(&onConnectedController, &onDisconnectedController);
-  BP32.forgetBluetoothKeys();
-  BP32.enableVirtualDevice(false);
-
-  Serial.println("[SYSTEM] ✅ All systems ready!");
+  Serial.println("[SYSTEM] All systems ready!");
 }
 
 void loop() {
-  // Update connections
   webSocket.loop();
-  BP32.update();
+
+  unsigned long now = millis();
 
   // Keep WiFi alive
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[WiFi] Connection lost, reconnecting...");
-    wifiMulti.run();
+  if (now - lastWiFiCheck > WIFI_CHECK_INTERVAL) {
+    lastWiFiCheck = now;
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[WiFi] Connection lost, reconnecting...");
+      wifiMulti.run();
+    }
+  }
+
+  // Send periodic telemetry
+  if (now - lastHeartbeat > HEARTBEAT_INTERVAL) {
+    sendTelemetry();
+    lastHeartbeat = now;
   }
 
   // Forward Teensy serial data to VPS
   forwardTeensySerial();
 
-  // Handle Xbox controller input
-  if (myController && myController->isConnected()) {
-    int lx = myController->axisX();
-    int ly = myController->axisY();
-
-    // Send joystick data to VPS (which forwards to dashboard)
-    if (abs(lx) > 10 || abs(ly) > 10) { // Deadzone
-      String msg = "{\"type\":\"joystick\",\"lx\":" + String(lx) + ",\"ly\":" + String(ly) + "}";
-      webSocket.sendTXT(msg);
-    }
-
-    // Also send directly to Teensy for immediate control
-    teensySerial.print("L" + String(lx) + "\n");
-    teensySerial.print("R" + String(ly) + "\n");
-  }
-
   delay(10);
 }
 
+void sendTelemetry() {
+  if (!wsConnected) return;
+
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"2.0.1\",\"wifi\":\"" +
+                     WiFi.SSID() + "\",\"rssi\":" + String(WiFi.RSSI()) +
+                     ",\"ip\":\"" + WiFi.localIP().toString() +
+                     "\",\"connected\":true,\"uptime\":" + String(millis() / 1000) + "}";
+
+  webSocket.sendTXT(telemetry);
+  Serial.println("[TELEMETRY] Sent to VPS");
+}
+
 void forwardTeensySerial() {
-  // Read from Teensy and send to VPS
   while (teensySerial.available()) {
     String line = teensySerial.readStringUntil('\n');
     if (line.length() > 0) {
@@ -118,13 +133,15 @@ void forwardTeensySerial() {
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   switch(type) {
     case WStype_DISCONNECTED:
+      wsConnected = false;
       Serial.println("[WS] Disconnected from VPS");
       break;
 
     case WStype_CONNECTED:
+      wsConnected = true;
       Serial.println("[WS] Connected to VPS!");
-      // Announce ourselves as the robot
-      webSocket.sendTXT("{\"type\":\"robot_hello\"}");
+      sendTelemetry();
+      lastHeartbeat = millis();
       break;
 
     case WStype_TEXT:
@@ -132,39 +149,42 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       handleFlashMessage(payload, length);
       break;
 
+    case WStype_PING:
+      Serial.println("[WS] Ping");
+      break;
+
+    case WStype_PONG:
+      Serial.println("[WS] Pong");
+      break;
+
     case WStype_ERROR:
+      wsConnected = false;
       Serial.println("[WS] Error!");
       break;
   }
 }
 
 void handleFlashMessage(uint8_t * payload, size_t length) {
-  // Parse JSON message
   String msg = String((char*)payload);
 
-  // Check for flash_start
   if (msg.indexOf("\"type\":\"flash_start\"") != -1) {
     Serial.println("[FLASH] Starting hex reception...");
     hexBuffer = "";
     receivedChunks = 0;
     flashingInProgress = true;
 
-    // Parse totalChunks
     int idx = msg.indexOf("\"totalChunks\":");
     if (idx != -1) {
       expectedChunks = msg.substring(idx + 14).toInt();
       Serial.printf("[FLASH] Expecting %d chunks\n", expectedChunks);
     }
 
-    // Tell Teensy to enter bootloader mode
     teensySerial.println("FLASH_MODE");
     delay(100);
     return;
   }
 
-  // Check for flash_chunk
   if (msg.indexOf("\"type\":\"flash_chunk\"") != -1) {
-    // Extract data field
     int dataStart = msg.indexOf("\"data\":\"") + 8;
     int dataEnd = msg.indexOf("\"", dataStart);
 
@@ -181,36 +201,29 @@ void handleFlashMessage(uint8_t * payload, size_t length) {
     return;
   }
 
-  // Check for flash_complete
   if (msg.indexOf("\"type\":\"flash_complete\"") != -1) {
     Serial.printf("[FLASH] All chunks received! Total: %d bytes\n", hexBuffer.length());
-    Serial.println("[FLASH] Forwarding hex to Teensy via FlasherX...");
+    Serial.println("[FLASH] Forwarding hex to Teensy...");
 
-    // Send hex data to Teensy in smaller chunks for FlasherX
     const int TEENSY_CHUNK = 128;
     for (int i = 0; i < hexBuffer.length(); i += TEENSY_CHUNK) {
       String chunk = hexBuffer.substring(i, min(i + TEENSY_CHUNK, (int)hexBuffer.length()));
       teensySerial.print(chunk);
-      delay(10); // Small delay for Teensy to process
+      delay(10);
     }
 
-    // Signal end of transmission
     teensySerial.println("\nEND_FLASH");
+    Serial.println("[FLASH] Hex forwarded to Teensy!");
 
-    Serial.println("[FLASH] ✅ Hex forwarded to Teensy!");
-
-    // Cleanup
     hexBuffer = "";
     receivedChunks = 0;
     expectedChunks = 0;
     flashingInProgress = false;
 
-    // Send confirmation to VPS
     webSocket.sendTXT("{\"type\":\"flash_ack\",\"status\":\"success\"}");
     return;
   }
 
-  // Check for command (from dashboard)
   if (msg.indexOf("\"type\":\"command\"") != -1) {
     int dataStart = msg.indexOf("\"data\":\"") + 8;
     int dataEnd = msg.indexOf("\"", dataStart);
@@ -220,19 +233,5 @@ void handleFlashMessage(uint8_t * payload, size_t length) {
       Serial.println("[CMD] Forwarding to Teensy: " + cmd);
       teensySerial.println(cmd);
     }
-  }
-}
-
-void onConnectedController(ControllerPtr ctl) {
-  myController = ctl;
-  Serial.println("[BP32] ✅ Xbox Controller Connected!");
-  webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"Xbox Controller Connected\"}");
-}
-
-void onDisconnectedController(ControllerPtr ctl) {
-  if (myController == ctl) {
-    myController = nullptr;
-    Serial.println("[BP32] Xbox Controller Disconnected");
-    webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"Xbox Controller Disconnected\"}");
   }
 }
