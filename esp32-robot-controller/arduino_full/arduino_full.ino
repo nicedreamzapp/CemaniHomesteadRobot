@@ -264,43 +264,62 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   }
 }
 
-String hexBuffer = "";
-int expectedChunks = 0;
-int receivedChunks = 0;
+bool flashMode = false;
+int hexLinesReceived = 0;
 
 void handleFlashMessage(uint8_t* payload, size_t length) {
   String msg = String((char*)payload);
 
-  if (msg.indexOf("\"type\":\"flash_start\"") != -1) {
-    Serial.println("[FLASH] Starting...");
-    hexBuffer = "";
-    receivedChunks = 0;
-    int idx = msg.indexOf("\"totalChunks\":");
-    if (idx != -1) {
-      expectedChunks = msg.substring(idx + 14).toInt();
+  // New flash_mode command - puts Teensy in OTA mode
+  if (msg.indexOf("\"type\":\"flash_mode\"") != -1) {
+    Serial.println("[FLASH] Entering flash mode...");
+    flashMode = true;
+    hexLinesReceived = 0;
+    teensySerial.println("FLASH_MODE");  // Tell Teensy to enter OTA mode
+    delay(500);  // Give Teensy time to initialize flash buffer
+    webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"Teensy entering flash mode\"}");
+    return;
+  }
+
+  // New hex_line command - sends one Intel HEX line at a time
+  if (msg.indexOf("\"type\":\"hex_line\"") != -1) {
+    int dataStart = msg.indexOf("\"data\":\"") + 8;
+    int dataEnd = msg.indexOf("\"", dataStart);
+    if (dataStart > 8 && dataEnd > dataStart) {
+      String hexLine = msg.substring(dataStart, dataEnd);
+      teensySerial.println(hexLine);  // Send hex line to Teensy
+      hexLinesReceived++;
+      // Progress every 500 lines
+      if (hexLinesReceived % 500 == 0) {
+        Serial.printf("[FLASH] Sent %d hex lines\n", hexLinesReceived);
+      }
     }
+    return;
+  }
+
+  // Legacy flash_start (keep for compatibility)
+  if (msg.indexOf("\"type\":\"flash_start\"") != -1) {
+    Serial.println("[FLASH] Legacy flash_start received");
+    flashMode = true;
+    hexLinesReceived = 0;
     teensySerial.println("FLASH_MODE");
     return;
   }
 
+  // Legacy flash_chunk (keep for compatibility)
   if (msg.indexOf("\"type\":\"flash_chunk\"") != -1) {
     int dataStart = msg.indexOf("\"data\":\"") + 8;
     int dataEnd = msg.indexOf("\"", dataStart);
     if (dataStart > 8 && dataEnd > dataStart) {
-      hexBuffer += msg.substring(dataStart, dataEnd);
-      receivedChunks++;
+      String chunk = msg.substring(dataStart, dataEnd);
+      teensySerial.print(chunk);  // Send raw data (FlasherX expects lines)
     }
     return;
   }
 
   if (msg.indexOf("\"type\":\"flash_complete\"") != -1) {
-    Serial.printf("[FLASH] Sending %d bytes to Teensy\n", hexBuffer.length());
-    for (int i = 0; i < hexBuffer.length(); i += 128) {
-      teensySerial.print(hexBuffer.substring(i, min(i + 128, (int)hexBuffer.length())));
-      delay(10);
-    }
-    teensySerial.println("\nEND_FLASH");
-    hexBuffer = "";
+    Serial.printf("[FLASH] Complete! Sent %d hex lines\n", hexLinesReceived);
+    flashMode = false;
     webSocket.sendTXT("{\"type\":\"flash_ack\",\"status\":\"success\"}");
     return;
   }

@@ -128,52 +128,68 @@ function handleCompile(target, code, clientWs) {
     return;
   }
 
-  const sketchPath = path.join(TEMP_DIR, "sketch.ino");
+  // Arduino-cli requires .ino filename to match directory name
+  const sketchPath = path.join(TEMP_DIR, "temp-sketch.ino");
   fs.writeFileSync(sketchPath, code);
 
   const compileCmd = ARDUINO_CLI + " compile --fqbn teensy:avr:teensy41 --output-dir " + BUILD_DIR + " " + TEMP_DIR;
 
   clientWs.send(JSON.stringify({ type: "compile_status", message: "Compiling..." }));
 
-  exec(compileCmd, (error, stdout, stderr) => {
+  exec(compileCmd, { timeout: 120000 }, (error, stdout, stderr) => {
     if (error) {
       clientWs.send(JSON.stringify({ type: "compile_error", error: stderr || error.message }));
       return;
     }
 
-    const hexPath = path.join(BUILD_DIR, "sketch.ino.hex");
+    // Hex filename matches the .ino filename
+    const hexPath = path.join(BUILD_DIR, "temp-sketch.ino.hex");
     if (!fs.existsSync(hexPath)) {
-      clientWs.send(JSON.stringify({ type: "compile_error", error: "Hex file not found" }));
+      clientWs.send(JSON.stringify({ type: "compile_error", error: "Hex file not found at " + hexPath }));
       return;
     }
 
     const hexData = fs.readFileSync(hexPath, "utf8");
+    console.log("[COMPILE] Success! Hex size:", hexData.length, "bytes");
 
     if (!robotSocket || robotSocket.readyState !== WebSocket.OPEN) {
       clientWs.send(JSON.stringify({ type: "compile_error", error: "Robot not connected" }));
       return;
     }
 
-    const CHUNK_SIZE = 1024;
-    const chunks = [];
-    for (let i = 0; i < hexData.length; i += CHUNK_SIZE) {
-      chunks.push(hexData.slice(i, i + CHUNK_SIZE));
-    }
+    clientWs.send(JSON.stringify({ type: "compile_status", message: "Sending to robot..." }));
 
-    robotSocket.send(JSON.stringify({ type: "flash_start", totalChunks: chunks.length, totalSize: hexData.length }));
+    // Send FLASH_MODE command first to trigger Teensy OTA mode
+    robotSocket.send(JSON.stringify({ type: "flash_mode" }));
 
-    let chunkIndex = 0;
-    const sendNextChunk = () => {
-      if (chunkIndex >= chunks.length) {
-        robotSocket.send(JSON.stringify({ type: "flash_complete" }));
-        clientWs.send(JSON.stringify({ type: "compile_success", message: "Flashed " + hexData.length + " bytes!" }));
-        return;
-      }
-      robotSocket.send(JSON.stringify({ type: "flash_chunk", index: chunkIndex, total: chunks.length, data: chunks[chunkIndex] }));
-      chunkIndex++;
-      setTimeout(sendNextChunk, 50);
-    };
-    sendNextChunk();
+    // Wait for ESP32 to put Teensy in flash mode, then send hex
+    setTimeout(() => {
+      // Split hex into lines and send
+      const hexLines = hexData.split("\n").filter(line => line.trim().length > 0);
+      console.log("[FLASH] Sending", hexLines.length, "hex lines");
+
+      let lineIndex = 0;
+      const sendNextLine = () => {
+        if (lineIndex >= hexLines.length) {
+          clientWs.send(JSON.stringify({ type: "compile_success", message: "Flashed " + hexLines.length + " lines!" }));
+          console.log("[FLASH] Complete!");
+          return;
+        }
+
+        // Send hex line to ESP32 which forwards to Teensy Serial1
+        robotSocket.send(JSON.stringify({ type: "hex_line", data: hexLines[lineIndex] }));
+
+        lineIndex++;
+        // Progress update every 100 lines
+        if (lineIndex % 100 === 0) {
+          clientWs.send(JSON.stringify({ type: "compile_status", message: "Flashing... " + Math.round(lineIndex/hexLines.length*100) + "%" }));
+        }
+
+        // Small delay between lines for reliable transfer
+        setTimeout(sendNextLine, 5);
+      };
+      sendNextLine();
+    }, 1000);  // Give ESP32 time to enter flash mode
   });
 }
 
