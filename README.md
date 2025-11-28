@@ -5,9 +5,9 @@
 ### Autonomous Dual-Armed Tank Platform for Homestead Automation
 
 ![Made with](https://img.shields.io/badge/Made_with-Blood_Sweat_Tears-red?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Mobile_Platform_Complete-green?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Remote_Control_Live-green?style=for-the-badge)
 ![Power](https://img.shields.io/badge/Power-24V_LiFePO4-orange?style=for-the-badge)
-![Remote](https://img.shields.io/badge/Remote-Web_Enabled-blue?style=for-the-badge)
+![Remote](https://img.shields.io/badge/Remote-Control_From_Anywhere-blue?style=for-the-badge)
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
 
@@ -334,9 +334,9 @@ Using two robotic arms for human-like bilateral manipulation:
 
 ## 📊 Current Status
 
-**Weight:** 65 lbs (can handle 80+ lbs more with reinforcement)  
-**Build Time:** 6 months from zero robotics knowledge  
-**Status:** Mobile platform complete ✅ | Adding autonomy next 🚧
+**Weight:** 65 lbs (can handle 80+ lbs more with reinforcement)
+**Build Time:** 6 months from zero robotics knowledge
+**Status:** Remote control from anywhere ✅ | Wireless programming ready ✅ | Adding autonomy next 🚧
 
 ### Phase Completion
 - ✅ **Phase 1:** Tank chassis with 4WD hub motors
@@ -344,8 +344,9 @@ Using two robotic arms for human-like bilateral manipulation:
 - ✅ **Phase 3:** RS-485 Modbus communication working
 - ✅ **Phase 4:** Successfully pulled loaded cart
 - ✅ **Phase 5:** Synchronized motor control (atomic Modbus writes)
-- ✅ **Phase 6:** Turn mode with reduced speed/acceleration
-- ✅ **Phase 6.5:** Web interface for remote monitoring/control
+- ✅ **Phase 6:** Turn mode with reduced speed/acceleration for smooth steering
+- ✅ **Phase 6.5:** Web Command Center - monitor and control from ANYWHERE
+- ✅ **Phase 6.6:** Wireless programming infrastructure (VPS compilation ready)
 - 🚧 **Phase 7:** Autonomous predator patrol (Jetson + Lidar + YOLO)
 - 🔜 **Phase 8:** Deterrent system (siren, strobes, bear spray)
 - 🔜 **Phase 9:** OpenArm integration (future)
@@ -687,10 +688,10 @@ From r/robotics discussion:
 ## 📚 Resources
 
 ### This Project
-- [Teensy Code](hardware/teensy/) - Motor control firmware
-- [ESP32 Code](hardware/esp32/) - Bluepad32 + WiFi + OTA
-- [Web Dashboard](web-dashboard/) - Futuristic glassmorphism UI + WebSocket server
-- [ZLAC Documentation](hardware/motor-controllers/) - Driver manuals
+- [Teensy Code](teensy-robot/) - Motor control firmware (PlatformIO)
+- [ESP32 Code](esp32-robot-controller/arduino_full/) - Bluepad32 + WiFi + WebSocket (Arduino IDE)
+- [VPS Server](vps-server/) - Node.js WebSocket server + Command Center UI
+- [ZLAC Documentation](ZLAC8015D-V2.0/) - Driver manuals and wiring guides
 - [Wiring Diagrams](docs/wiring/) - Coming soon
 
 ### Related Projects
