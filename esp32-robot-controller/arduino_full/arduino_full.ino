@@ -1,7 +1,9 @@
 /*
- * Cemani Robot Controller v3.0.2
+ * Cemani Robot Controller v3.0.3
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket
  * Upload via Arduino IDE with Bluepad32 board package
+ *
+ * SETUP: Copy credentials.h.example to credentials.h and add your WiFi passwords
  */
 
 #include <WiFi.h>
@@ -9,13 +11,7 @@
 #include <WebSocketsClient.h>
 #include <Bluepad32.h>
 #include <nvs_flash.h>
-
-const char* WIFI_SSID_1 = "MyAltice 7a4283";
-const char* WIFI_PASS_1 = "granite-833-564";
-const char* WIFI_SSID_2 = "MyOptimum 6b7c4d";
-const char* WIFI_PASS_2 = "9621-granite-62";
-const char* WIFI_SSID_3 = "divine tribe";
-const char* WIFI_PASS_3 = "hemp1234";
+#include "credentials.h"  // WiFi credentials (gitignored)
 
 #define TEENSY_TX 17
 #define TEENSY_RX 16
@@ -55,7 +51,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.2");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.3");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -237,7 +233,7 @@ void handleGamepad() {
 void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.2\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.3\",\"wifi\":\"" +
                      WiFi.SSID() + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +

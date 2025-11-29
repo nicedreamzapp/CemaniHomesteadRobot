@@ -8,10 +8,11 @@
 ![Status](https://img.shields.io/badge/Status-Remote_Control_Live-green?style=for-the-badge)
 ![Power](https://img.shields.io/badge/Power-24V_LiFePO4-orange?style=for-the-badge)
 ![Remote](https://img.shields.io/badge/Remote-Control_From_Anywhere-blue?style=for-the-badge)
+![Camera](https://img.shields.io/badge/Camera-PTZ_+_Audio-purple?style=for-the-badge)
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
 
-[📹 Demo Videos](#demo) • [🌐 Web Interface](#-web-interface) • [🔧 Hardware](#hardware) • [🤖 The Vision](#the-vision) • [💻 Code](#code)
+[📹 Demo Videos](#demo) • [🌐 Web Interface](#-web-interface) • [📷 Camera System](#-remote-camera-system) • [🔧 Hardware](#hardware) • [🤖 The Vision](#the-vision) • [💻 Code](#code)
 
 </div>
 
@@ -159,6 +160,118 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 - **Reverse Proxy:** Nginx for subdomain routing
 - **Security:** HTTP Basic Auth (password protected)
 - **ESP32:** WiFiMulti + WebSocket client + Bluepad32
+
+---
+
+## 📷 Remote Camera System
+
+**Live PTZ camera with audio streaming - control from anywhere!**
+
+### Camera Architecture
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         REMOTE CAMERA CONTROL                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   Xbox Controller                                                        │
+│        │ Bluetooth                                                       │
+│        ▼                                                                 │
+│   ESP32 (Robot)                                                          │
+│        │                                                                 │
+│        │ WiFi/WebSocket ──────────────────────────┐                     │
+│        ▼                                           │                     │
+│   ┌─────────────────────────────────────┐         │                     │
+│   │   VPS Server (Node.js)              │         │                     │
+│   │   robot.yourdomain.com              │         │                     │
+│   │   - Routes PTZ commands             │         │                     │
+│   │   - Broadcasts video/audio frames   │         │                     │
+│   │   - WebSocket hub for all clients   │         │                     │
+│   └──────────────┬──────────────────────┘         │                     │
+│                  │                                 │                     │
+│   ┌──────────────┴─────────────┬───────────────────┴───────────┐        │
+│   │                            │                                │        │
+│   ▼                            ▼                                ▼        │
+│  Browser                 Mac Mini Relay               Xbox D-pad        │
+│  (Web UI)               (Home Network)             (Camera PTZ)         │
+│   - View video              │                                           │
+│   - PTZ buttons             │ WebSocket                                 │
+│   - Audio playback          ▼                                           │
+│   - Mute toggle       ┌─────────────────┐                              │
+│                       │  Sricam Camera   │                              │
+│                       │  192.168.1.xxx   │                              │
+│                       │  - RTSP video    │                              │
+│                       │  - ONVIF PTZ     │                              │
+│                       │  - Audio (PCM)   │                              │
+│                       └─────────────────┘                              │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### How It Works
+
+1. **Video Streaming (MJPEG via WebSocket)**
+   - Mac Mini runs FFmpeg to capture RTSP from camera
+   - Transcodes to MJPEG frames (640x360 @ 10fps)
+   - Sends frames via WebSocket to VPS
+   - VPS broadcasts to all connected browsers
+
+2. **Audio Streaming (MP3 via WebSocket)**
+   - Separate FFmpeg process captures audio track
+   - Converts PCM A-law to MP3 (32kbps, 16kHz mono)
+   - Streams via WebSocket with type marker
+   - Browser plays via Web Audio API
+
+3. **PTZ Control (ONVIF via HTTP)**
+   - Browser PTZ buttons OR Xbox D-pad
+   - Commands flow: Browser/ESP32 → VPS → Mac Relay → Camera
+   - Mac Relay sends ONVIF SOAP requests to camera
+   - Supports: pan, tilt, zoom, presets
+
+### Control Methods
+
+| Input | Control |
+|-------|---------|
+| **Web UI PTZ buttons** | Click/tap arrow buttons on camera feed |
+| **Xbox D-pad** | Press D-pad while playing - Up/Down/Left/Right |
+| **Speaker button** | Toggle camera audio on/off (green=on, red=muted) |
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `mac-camera-relay/relay.js` | Main relay - video + audio + PTZ |
+| `mac-camera-relay/config.json` | Camera credentials (gitignored) |
+| `mac-camera-relay/config.example.json` | Template for config |
+| `vps-server/server.js` | Routes video/audio/PTZ between clients |
+| `vps-server/public/index.html` | Web UI with camera feed |
+
+### Mac Mini Setup
+
+The relay runs as a launchd service for auto-start:
+
+```bash
+# Install dependencies
+cd mac-camera-relay
+npm install
+
+# Create config from template
+cp config.example.json config.json
+# Edit config.json with your camera IP and credentials
+
+# Load as service (auto-starts on boot)
+launchctl load ~/Library/LaunchAgents/com.robot.camera-relay.plist
+
+# Check logs
+tail -f /tmp/camera-relay.log
+```
+
+### Future Camera Features
+
+- [ ] Multiple camera support (CAM 2 slot ready)
+- [ ] Recording/snapshots
+- [ ] Motion detection alerts
+- [ ] Two-way audio (speak through camera)
+- [ ] Night vision toggle
 
 ---
 
@@ -347,6 +460,8 @@ Using two robotic arms for human-like bilateral manipulation:
 - ✅ **Phase 6:** Turn mode with reduced speed/acceleration for smooth steering
 - ✅ **Phase 6.5:** Web Command Center - monitor and control from ANYWHERE
 - ✅ **Phase 6.6:** Wireless programming infrastructure (VPS compilation ready)
+- ✅ **Phase 6.7:** Remote PTZ camera with live video + audio streaming
+- ✅ **Phase 6.8:** Xbox D-pad controls camera pan/tilt
 - 🚧 **Phase 7:** Autonomous predator patrol (Jetson + Lidar + YOLO)
 - 🔜 **Phase 8:** Deterrent system (siren, strobes, bear spray)
 - 🔜 **Phase 9:** OpenArm integration (future)
