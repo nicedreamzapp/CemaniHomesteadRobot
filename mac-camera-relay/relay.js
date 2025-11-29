@@ -54,8 +54,9 @@ function connectToVPS() {
       ip: CONFIG.camera.ip
     }));
 
-    // Start streaming
+    // Start streaming (video and audio)
     startStreaming();
+    startAudioStream();
   });
 
   vpsSocket.on('message', async (data) => {
@@ -86,6 +87,7 @@ function connectToVPS() {
     console.log('[VPS] Disconnected');
     vpsSocket = null;
     stopStreaming();
+    stopAudioStream();
     scheduleReconnect();
   });
 
@@ -105,6 +107,10 @@ function scheduleReconnect() {
 
 // ============ VIDEO STREAMING VIA FFMPEG ============
 let frameStats = { sent: 0, dropped: 0, avgSize: 0, lastFps: 0 };
+
+// ============ AUDIO STREAMING VIA FFMPEG ============
+let audioProcess = null;
+let audioStats = { sent: 0, avgSize: 0 };
 
 function startStreaming() {
   if (ffmpegProcess) {
@@ -148,12 +154,13 @@ function startStreaming() {
       const frame = frameBuffer.slice(startIdx, endIdx + 2);
       frameBuffer = frameBuffer.slice(endIdx + 2);
 
-      // Send frame
+      // Send frame with type marker (0x00 = video, 0x01 = audio)
       frameStats.sent++;
       frameStats.avgSize = Math.round((frameStats.avgSize * 0.9) + (frame.length * 0.1));
 
       if (CONFIG.stream.useWebSocket && vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        vpsSocket.send(frame);
+        const packet = Buffer.concat([Buffer.from([0x00]), frame]);
+        vpsSocket.send(packet);
       }
     }
 
@@ -205,6 +212,86 @@ function stopStreaming() {
     console.log('[STREAM] Stopping FFmpeg...');
     ffmpegProcess.kill('SIGTERM');
     ffmpegProcess = null;
+  }
+}
+
+// ============ AUDIO STREAMING VIA FFMPEG ============
+function startAudioStream() {
+  if (audioProcess) {
+    console.log('[AUDIO] Already running');
+    return;
+  }
+
+  const rtspUrl = `rtsp://${CONFIG.camera.ip}:${CONFIG.camera.rtspPort}${CONFIG.camera.rtspPath}`;
+  console.log('[AUDIO] Starting audio capture from', rtspUrl);
+
+  // FFmpeg: capture audio from RTSP, convert PCM A-law to MP3 for browser playback
+  // Output small MP3 chunks that can be played in browser
+  audioProcess = spawn(FFMPEG, [
+    '-i', rtspUrl,                    // Input RTSP stream
+    '-vn',                            // No video
+    '-acodec', 'libmp3lame',          // Encode to MP3
+    '-ar', '16000',                   // Sample rate 16kHz (upsampled from 8kHz for better quality)
+    '-ac', '1',                       // Mono
+    '-b:a', '32k',                    // Bitrate 32kbps (low but sufficient for voice)
+    '-f', 'mp3',                      // Output format
+    '-flush_packets', '1',            // Flush packets immediately
+    '-'                               // Output to stdout
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  // Buffer for MP3 frames - MP3 has sync word 0xFF 0xFB (or 0xFF 0xFA, 0xFF 0xF3, etc)
+  let audioBuffer = Buffer.alloc(0);
+  const MP3_SYNC = 0xFF;
+  const CHUNK_SIZE = 2048; // Send ~2KB chunks for smooth playback
+
+  audioProcess.stdout.on('data', (chunk) => {
+    audioBuffer = Buffer.concat([audioBuffer, chunk]);
+
+    // Send chunks when we have enough data
+    while (audioBuffer.length >= CHUNK_SIZE) {
+      const audioChunk = audioBuffer.slice(0, CHUNK_SIZE);
+      audioBuffer = audioBuffer.slice(CHUNK_SIZE);
+
+      audioStats.sent++;
+      audioStats.avgSize = Math.round((audioStats.avgSize * 0.9) + (audioChunk.length * 0.1));
+
+      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+        // Send with a type marker (first byte = 0x01 for audio, 0x00 for video)
+        const packet = Buffer.concat([Buffer.from([0x01]), audioChunk]);
+        vpsSocket.send(packet);
+      }
+    }
+  });
+
+  audioProcess.stderr.on('data', (data) => {
+    const msg = data.toString();
+    if (msg.includes('Error') || msg.includes('error')) {
+      console.log('[AUDIO-FFMPEG]', msg.trim());
+    }
+  });
+
+  audioProcess.on('close', (code) => {
+    console.log(`[AUDIO-FFMPEG] Exited with code ${code}`);
+    audioProcess = null;
+    // Restart audio if VPS is still connected
+    setTimeout(() => {
+      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+        startAudioStream();
+      }
+    }, 3000);
+  });
+
+  audioProcess.on('error', (err) => {
+    console.error('[AUDIO-FFMPEG] Process error:', err.message);
+    audioProcess = null;
+  });
+}
+
+function stopAudioStream() {
+  if (audioProcess) {
+    console.log('[AUDIO] Stopping...');
+    audioProcess.kill('SIGTERM');
+    audioProcess = null;
   }
 }
 
@@ -357,9 +444,15 @@ connectToVPS();
 
 // Watchdog - check every 30 seconds if streaming should be running
 setInterval(() => {
-  if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN && !ffmpegProcess) {
-    console.log('[WATCHDOG] FFmpeg not running but VPS connected - restarting stream...');
-    startStreaming();
+  if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+    if (!ffmpegProcess) {
+      console.log('[WATCHDOG] Video FFmpeg not running but VPS connected - restarting...');
+      startStreaming();
+    }
+    if (!audioProcess) {
+      console.log('[WATCHDOG] Audio FFmpeg not running but VPS connected - restarting...');
+      startAudioStream();
+    }
   }
 }, 30000);
 
@@ -367,6 +460,7 @@ setInterval(() => {
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
   stopStreaming();
+  stopAudioStream();
   if (vpsSocket) vpsSocket.close();
   process.exit(0);
 });

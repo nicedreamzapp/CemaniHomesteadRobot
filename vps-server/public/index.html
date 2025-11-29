@@ -454,9 +454,41 @@ textarea {
 
 <script>
 const ws = new WebSocket('ws://' + location.host);
-ws.binaryType = 'blob';  // Ensure binary messages come as Blobs
+ws.binaryType = 'arraybuffer';  // Handle binary as ArrayBuffer for type detection
 let currentTab = 'teensy';
 let cam1Active = false;
+
+// ============ AUDIO PLAYER (MP3 via MediaSource) ============
+let audioContext = null;
+let audioQueue = [];
+let isPlayingAudio = false;
+let isMuted = false;
+
+// Initialize audio context on first user interaction (required by browsers)
+function initAudio() {
+  if (audioContext) return;
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  console.log('[AUDIO] Context initialized, sample rate:', audioContext.sampleRate);
+}
+
+// Decode and play MP3 chunk
+async function playAudioChunk(data) {
+  if (!audioContext || isMuted) return;
+
+  try {
+    // Decode MP3 data
+    const audioBuffer = await audioContext.decodeAudioData(data.buffer.slice(0));
+
+    // Play immediately
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.start(0);
+  } catch (err) {
+    // MP3 chunks may not always decode cleanly, this is expected
+    // console.log('[AUDIO] Decode skip');
+  }
+}
 
 // ============ CAMERA PLAYER (MJPEG via WebSocket) ============
 let cam1Image = null;
@@ -560,15 +592,38 @@ ws.onopen = () => {
 };
 
 ws.onmessage = function(e) {
-  // Handle binary frames (MJPEG from camera)
-  if (e.data instanceof Blob) {
-    console.log('[CAM1] Got frame:', e.data.size, 'bytes');
-    displayFrame(e.data);
+  // Handle binary frames (first byte = type: 0x00=video, 0x01=audio)
+  if (e.data instanceof ArrayBuffer) {
+    const data = new Uint8Array(e.data);
+    if (data.length < 2) return;
+
+    const packetType = data[0];
+    const payload = data.slice(1);
+
+    if (packetType === 0x00) {
+      // Video frame (JPEG)
+      displayFrame(new Blob([payload], {type: 'image/jpeg'}));
+    } else if (packetType === 0x01) {
+      // Audio chunk (MP3)
+      if (!isMuted) {
+        playAudioChunk(payload);
+      }
+    }
     return;
   }
-  if (e.data instanceof ArrayBuffer) {
-    console.log('[CAM1] Got ArrayBuffer frame:', e.data.byteLength, 'bytes');
-    displayFrame(new Blob([e.data], {type: 'image/jpeg'}));
+  if (e.data instanceof Blob) {
+    // Legacy blob handling - convert to ArrayBuffer
+    e.data.arrayBuffer().then(buffer => {
+      const data = new Uint8Array(buffer);
+      if (data.length < 2) return;
+      const packetType = data[0];
+      const payload = data.slice(1);
+      if (packetType === 0x00) {
+        displayFrame(new Blob([payload], {type: 'image/jpeg'}));
+      } else if (packetType === 0x01 && !isMuted) {
+        playAudioChunk(payload);
+      }
+    });
     return;
   }
 
@@ -663,5 +718,32 @@ document.getElementById('cmd').onkeypress = function(e) {
 };
 
 </script>
-<script>let isMuted=false;function toggleMute(){isMuted=!isMuted;const btn=document.getElementById("speakerBtn");if(isMuted){btn.textContent="🔇";btn.style.color="#ff4444";btn.style.opacity="0.5";}else{btn.textContent="🔊";btn.style.color="#44ff44";btn.style.opacity="0.7";}if(ws&&ws.readyState===WebSocket.OPEN){ws.send(JSON.stringify({type:"audio_mute",muted:isMuted}));}}</script></body>
+<script>
+// Toggle mute - also initializes audio context on first click (browser requirement)
+function toggleMute() {
+  // Initialize audio on first interaction
+  initAudio();
+
+  isMuted = !isMuted;
+  const btn = document.getElementById("speakerBtn");
+  if (isMuted) {
+    btn.textContent = "🔇";
+    btn.style.color = "#ff4444";
+    btn.style.opacity = "0.5";
+  } else {
+    btn.textContent = "🔊";
+    btn.style.color = "#44ff44";
+    btn.style.opacity = "0.7";
+  }
+  // Tell server about mute state
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: "audio_mute", muted: isMuted}));
+  }
+}
+
+// Initialize audio on any user click (required by browsers to enable audio)
+document.addEventListener('click', function() {
+  initAudio();
+}, { once: true });
+</script></body>
 </html>

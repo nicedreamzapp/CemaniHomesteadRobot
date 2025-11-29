@@ -110,17 +110,36 @@ wss.on("connection", (ws, req) => {
   ws.on("pong", () => { ws.isAlive = true; });
 
   ws.on("message", (msg, isBinary) => {
-    // Handle binary frames from camera relay
+    // Handle binary frames from camera relay (first byte = type: 0x00=video, 0x01=audio)
     if (isBinary && ws.isCamera) {
-      cameraStatus.streaming = true;
-      let count = 0;
-      // Broadcast to all browser clients
-      wss.clients.forEach(c => {
-        if (c !== ws && c.readyState === WebSocket.OPEN && c.isBrowser) {
-          try { c.send(msg); count++; } catch(e) {}
-        }
-      });
-      if (Math.random() < 0.02) console.log("[FRAME] Sent", msg.length, "bytes to", count, "browsers");
+      const data = Buffer.from(msg);
+      if (data.length < 2) return;
+
+      const packetType = data[0];
+      const payload = data.slice(1);
+
+      if (packetType === 0x00) {
+        // Video frame
+        cameraStatus.streaming = true;
+        let count = 0;
+        wss.clients.forEach(c => {
+          if (c !== ws && c.readyState === WebSocket.OPEN && c.isBrowser) {
+            // Send with type marker so browser knows it's video
+            try { c.send(msg); count++; } catch(e) {}
+          }
+        });
+        if (Math.random() < 0.02) console.log("[VIDEO] Sent", payload.length, "bytes to", count, "browsers");
+      } else if (packetType === 0x01) {
+        // Audio chunk
+        let count = 0;
+        wss.clients.forEach(c => {
+          if (c !== ws && c.readyState === WebSocket.OPEN && c.isBrowser && !c.audioMuted) {
+            // Send with type marker so browser knows it's audio
+            try { c.send(msg); count++; } catch(e) {}
+          }
+        });
+        if (Math.random() < 0.01) console.log("[AUDIO] Sent", payload.length, "bytes to", count, "browsers");
+      }
       return;
     }
 
@@ -176,6 +195,12 @@ wss.on("connection", (ws, req) => {
       if(data.type === "get_status") {
         ws.isBrowser = true;  // Mark as browser client
         ws.send(JSON.stringify({type:"status", ...robotStatus, camera: cameraStatus}));
+      }
+
+      // Handle audio mute toggle from browser
+      if(data.type === "audio_mute") {
+        ws.audioMuted = data.muted;
+        console.log("[AUDIO] Browser mute:", data.muted);
       }
 
       // ============ CAMERA RELAY MESSAGES ============
