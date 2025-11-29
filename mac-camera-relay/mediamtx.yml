@@ -1,0 +1,30 @@
+# MediaMTX Configuration for Sricam Camera
+# Converts RTSP to WebRTC for low-latency browser streaming
+
+# Logging
+logLevel: info
+logDestinations: [stdout]
+
+# API for health checks
+api: yes
+apiAddress: 127.0.0.1:9997
+
+# WebRTC settings - this is the magic for low latency
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigins: ['*']
+webrtcICEServers2: []
+
+# Disable protocols we don't need
+rtsp: no
+rtmp: no
+hls: no
+srt: no
+
+# Path configuration - pull from camera RTSP
+paths:
+  cam1:
+    source: rtsp://192.168.1.192:554/onvif1
+    sourceOnDemand: yes
+    sourceOnDemandStartTimeout: 10s
+    sourceOnDemandCloseAfter: 10s

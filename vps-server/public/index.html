@@ -20,137 +20,292 @@ body {
 }
 .container {
   display: grid;
-  grid-template-columns: 350px 1fr 380px;
-  grid-template-rows: 80px 1fr;
-  gap: 20px;
-  padding: 20px;
+  grid-template-columns: 1fr 280px 300px;
+  grid-template-rows: 70px 1fr;
+  gap: 15px;
+  padding: 15px;
   height: 100vh;
 }
 .header {
   grid-column: 1 / -1;
-  padding: 20px;
+  padding: 15px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: linear-gradient(135deg, rgba(40, 60, 90, 0.7), rgba(20, 40, 70, 0.7));
 }
-.status { color: #ff6b6b; font-size: 32px; font-weight: bold; text-shadow: 0 0 15px #ff6b6b; }
+.status { color: #ff6b6b; font-size: 28px; font-weight: bold; text-shadow: 0 0 15px #ff6b6b; }
 .status.online { color: #51cf66; text-shadow: 0 0 20px #51cf66; }
-.info { display: flex; gap: 25px; font-size: 14px; color: #e0f7ff; }
+.info { display: flex; gap: 20px; font-size: 12px; color: #e0f7ff; }
 .info-item { display: flex; flex-direction: column; align-items: flex-end; }
-.info-label { font-size: 10px; color: #74c0fc; text-transform: uppercase; }
-.info-value { font-size: 14px; color: #51cf66; font-weight: bold; }
-.cameras { display: flex; gap: 15px; flex-direction: column; overflow-y: auto; }
-.cam {
-  height: 200px;
-  background: linear-gradient(135deg, #1a1a2e, #0f0f1e);
-  border-radius: 20px;
-  border: 3px solid #00ff88;
+.info-label { font-size: 9px; color: #74c0fc; text-transform: uppercase; }
+.info-value { font-size: 12px; color: #51cf66; font-weight: bold; }
+
+/* Left column - Cameras stacked */
+.cameras-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+/* Camera containers - equal size */
+.cam-container {
+  background: #000;
+  border-radius: 15px;
+  border: 2px solid #00ff88;
+  overflow: hidden;
+  position: relative;
+  flex: 1;
+  min-height: 180px;
+}
+.cam-video {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #444;
+  font-size: 14px;
+}
+.cam-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.cam-placeholder {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #00ff88;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: bold;
+  background: linear-gradient(135deg, #1a1a2e, #0f0f1e);
+}
+
+/* Overlay controls */
+.cam-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.cam-status-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(255,107,107,0.9);
+  color: #fff;
+  font-weight: bold;
+  pointer-events: auto;
+}
+.cam-status-badge.live { background: rgba(81,207,102,0.9); }
+.cam-mic-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  border: 2px solid rgba(255,255,255,0.3);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cam-mic-btn.active { background: rgba(81,207,102,0.8); border-color: #51cf66; }
+
+/* PTZ D-pad overlay */
+.ptz-overlay {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 36px);
+  grid-template-rows: repeat(3, 36px);
+  gap: 2px;
+  pointer-events: auto;
+}
+.ptz-btn {
+  background: rgba(0,0,0,0.6);
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ptz-btn:hover { background: rgba(255,255,255,0.2); }
+.ptz-btn:active { background: rgba(81,207,102,0.6); }
+.ptz-btn.center { background: rgba(81,207,102,0.4); border-color: #51cf66; }
+.ptz-btn.empty { background: transparent; border: none; pointer-events: none; }
+
+/* Middle column - Robot controls + Serial */
+.middle-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.robot-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 .joystick-container {
   background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(20, 20, 40, 0.7));
-  width: 240px;
-  height: 240px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   position: relative;
-  margin: 20px auto;
-  border: 4px solid #51cf66;
+  border: 3px solid #51cf66;
 }
 .joystick {
-  width: 100px;
-  height: 100px;
+  width: 55px;
+  height: 55px;
   background: radial-gradient(circle at 30% 30%, #ff8787, #ff6b6b, #e94560);
   border-radius: 50%;
   position: absolute;
-  top: 70px;
-  left: 70px;
+  top: 47px;
+  left: 47px;
   cursor: move;
-  border: 4px solid rgba(255, 107, 107, 0.6);
+  border: 3px solid rgba(255, 107, 107, 0.6);
 }
 .center-mark {
-  width: 30px;
-  height: 30px;
+  width: 14px;
+  height: 14px;
   background: radial-gradient(circle, #51cf66, #00ff88);
   border-radius: 50%;
   position: absolute;
-  top: 105px;
-  left: 105px;
+  top: 68px;
+  left: 68px;
   pointer-events: none;
 }
 .reset-btn {
   background: radial-gradient(circle, #51cf66, #00ff88);
-  width: 70px;
-  height: 70px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  margin: 15px auto;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border: 4px solid #74c0fc;
-  font-size: 28px;
+  border: 3px solid #74c0fc;
+  font-size: 16px;
   font-weight: bold;
   color: #0a0a0a;
 }
 .stats {
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
+  width: 100%;
 }
 .stat-line {
   display: flex;
   justify-content: space-between;
-  padding: 10px 15px;
+  padding: 4px 8px;
   background: linear-gradient(90deg, rgba(0, 255, 136, 0.15), rgba(81, 207, 102, 0.15));
-  border-left: 4px solid #51cf66;
-  border-radius: 10px;
+  border-left: 3px solid #51cf66;
+  border-radius: 6px;
+  font-size: 10px;
 }
 .stat-value { color: #e0f7ff; font-weight: bold; }
-.middle-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.serial {
-  background: #0a0a0a;
-  padding: 15px;
-  overflow-y: auto;
-  font-size: 13px;
-  border-radius: 15px;
-  max-height: 200px;
-  border: 3px solid #00ff88;
-}
-.code-editor-section {
+
+/* Serial monitor - bigger */
+.serial-section {
   flex: 1;
   display: flex;
   flex-direction: column;
+  background: rgba(0,0,0,0.3);
+  border-radius: 10px;
+  padding: 10px;
 }
-.tabs { display: flex; gap: 10px; margin-bottom: 10px; }
+.serial {
+  flex: 1;
+  background: #0a0a0a;
+  padding: 8px;
+  overflow-y: auto;
+  font-size: 10px;
+  border-radius: 8px;
+  border: 2px solid #00ff88;
+  min-height: 150px;
+}
+input[type="text"] {
+  padding: 8px;
+  background: #0a0a0a;
+  border: 2px solid #00ff88;
+  color: #51cf66;
+  border-radius: 6px;
+  width: 100%;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+/* Right sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px;
+  overflow-y: auto;
+}
+.sensor-card {
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(81, 207, 102, 0.1));
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 3px solid #51cf66;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.sensor-label { color: #e0f7ff; }
+.sensor-value { color: #51cf66; font-weight: bold; }
+h3 { font-size: 13px; color: #e0f7ff; margin-bottom: 6px; }
+
+/* Code editor section */
+.code-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 8px;
+}
+.tabs { display: flex; gap: 6px; margin-bottom: 6px; }
 .tab {
-  padding: 14px 28px;
+  padding: 6px 12px;
   background: linear-gradient(135deg, rgba(233, 69, 96, 0.5), rgba(160, 32, 64, 0.5));
-  border: 3px solid #ff6b6b;
-  border-radius: 15px 15px 0 0;
+  border: 2px solid #ff6b6b;
+  border-radius: 8px 8px 0 0;
   cursor: pointer;
   font-weight: bold;
+  font-size: 10px;
 }
-.tab.active {
-  background: linear-gradient(135deg, #ff6b6b, #e94560);
-}
+.tab.active { background: linear-gradient(135deg, #ff6b6b, #e94560); }
 .editor {
   flex: 1;
   background: #0a0a0a;
-  padding: 15px;
-  border: 3px solid #00ff88;
-  border-radius: 0 15px 15px 15px;
-  min-height: 400px;
+  padding: 8px;
+  border: 2px solid #00ff88;
+  border-radius: 0 8px 8px 8px;
+  min-height: 80px;
 }
 textarea {
   width: 100%;
@@ -159,47 +314,22 @@ textarea {
   border: none;
   color: #51cf66;
   font-family: 'Courier New', monospace;
-  font-size: 15px;
+  font-size: 10px;
   resize: none;
   outline: none;
 }
 .btn {
   background: linear-gradient(135deg, #ff6b6b, #e94560);
-  border: 3px solid #ff8787;
+  border: 2px solid #ff8787;
   color: #fff;
-  padding: 16px;
-  border-radius: 15px;
+  padding: 8px;
+  border-radius: 8px;
   cursor: pointer;
   text-align: center;
   font-weight: bold;
-  font-size: 18px;
+  font-size: 11px;
+  margin-top: 6px;
 }
-input[type="text"] {
-  padding: 14px;
-  background: #0a0a0a;
-  border: 3px solid #00ff88;
-  color: #51cf66;
-  border-radius: 12px;
-  width: 100%;
-  font-size: 15px;
-}
-.sensor-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  margin-top: 15px;
-}
-.sensor-card {
-  background: linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(81, 207, 102, 0.1));
-  padding: 12px;
-  border-radius: 12px;
-  border-left: 4px solid #51cf66;
-  display: flex;
-  justify-content: space-between;
-}
-.sensor-label { color: #e0f7ff; font-size: 14px; }
-.sensor-value { color: #51cf66; font-weight: bold; }
-h3 { font-size: 18px; color: #e0f7ff; }
 </style>
 </head>
 <body>
@@ -217,92 +347,232 @@ h3 { font-size: 18px; color: #e0f7ff; }
         <span class="info-value" id="rssi">--</span>
       </div>
       <div class="info-item">
-        <span class="info-label">IP Address</span>
+        <span class="info-label">IP</span>
         <span class="info-value" id="ip">--</span>
       </div>
       <div class="info-item">
-        <span class="info-label">Version</span>
+        <span class="info-label">Ver</span>
         <span class="info-value" id="version">--</span>
       </div>
       <div class="info-item">
-        <span class="info-label">Uptime</span>
+        <span class="info-label">Up</span>
         <span class="info-value" id="uptime">--</span>
       </div>
     </div>
   </div>
 
-  <div class="glass cameras">
-    <div class="cam">CAM 1</div>
-    <div class="cam">CAM 2</div>
-    <div class="joystick-container">
-      <div class="center-mark"></div>
-      <div class="joystick" id="joystick"></div>
+  <!-- Left: Cameras stacked -->
+  <div class="cameras-column glass">
+    <!-- CAM 1 - WebRTC HD Stream -->
+    <div class="cam-container" id="cam1-container">
+      <div class="cam-video">
+        <div id="cam1-video" style="width:100%;height:100%;background:#000;"></div>
+      </div>
+      <div class="cam-overlay">
+        <div class="cam-status-badge" id="cam1-status">OFFLINE</div>
+        <div class="ptz-overlay">
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz="up">▲</div>
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz="left">◀</div>
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz="right">▶</div>
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz="down">▼</div>
+          <div class="ptz-btn empty"></div>
+        </div>
+      </div>
     </div>
-    <div class="reset-btn" onclick="reset()">R</div>
-    <div class="stats">
-      <div class="stat-line"><span>Max RPM:</span><span class="stat-value" id="maxRpm">0</span></div>
-      <div class="stat-line"><span>Left:</span><span class="stat-value" id="leftRpm">0</span></div>
-      <div class="stat-line"><span>Right:</span><span class="stat-value" id="rightRpm">0</span></div>
+
+    <!-- CAM 2 -->
+    <div class="cam-container">
+      <div class="cam-placeholder">CAM 2</div>
     </div>
   </div>
 
-  <div class="middle-section glass" style="padding: 20px;">
-    <h3>SERIAL MONITOR</h3>
-    <div class="serial" id="serial"></div>
-    <input type="text" id="cmd" placeholder="Command...">
+  <!-- Middle: Robot controls + Serial -->
+  <div class="middle-column glass">
+    <h3>ROBOT CONTROL</h3>
+    <div class="robot-controls">
+      <div class="joystick-container">
+        <div class="center-mark"></div>
+        <div class="joystick" id="joystick"></div>
+      </div>
+      <div class="reset-btn" onclick="reset()">R</div>
+      <div class="stats">
+        <div class="stat-line"><span>Max RPM:</span><span class="stat-value" id="maxRpm">0</span></div>
+        <div class="stat-line"><span>Left:</span><span class="stat-value" id="leftRpm">0</span></div>
+        <div class="stat-line"><span>Right:</span><span class="stat-value" id="rightRpm">0</span></div>
+      </div>
+    </div>
 
-    <div class="code-editor-section">
-      <h3 style="margin: 20px 0 10px 0;">CODE EDITOR</h3>
-      <div class="tabs">
-        <div class="tab active" data-tab="teensy">Teensy</div>
-        <div class="tab" data-tab="esp32">ESP32</div>
-        <div class="tab" data-tab="drivers">Drivers</div>
-      </div>
-      <div class="editor">
-        <textarea id="editor" placeholder="// Your code here..."></textarea>
-      </div>
-      <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
+    <div class="serial-section">
+      <h3>SERIAL MONITOR</h3>
+      <div class="serial" id="serial"></div>
+      <input type="text" id="cmd" placeholder="Command...">
     </div>
   </div>
 
-  <div class="glass" style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
-    <h3>SYSTEM STATUS</h3>
+  <!-- Right: Status + Sensors + Code -->
+  <div class="sidebar glass">
+    <h3>STATUS</h3>
     <div class="sensor-card">
       <span class="sensor-label">ESP32</span>
       <span class="sensor-value" id="esp32Status">--</span>
     </div>
     <div class="sensor-card">
-      <span class="sensor-label">Teensy 4.1</span>
+      <span class="sensor-label">Teensy</span>
       <span class="sensor-value" id="teensyStatus">--</span>
     </div>
     <div class="sensor-card">
-      <span class="sensor-label">ZLAC Drivers</span>
-      <span class="sensor-value" id="driverStatus">--</span>
+      <span class="sensor-label">Camera 1</span>
+      <span class="sensor-value" id="cam1StatusText">--</span>
     </div>
 
-    <h3 style="margin-top: 20px;">SENSORS</h3>
-    <div class="sensor-grid">
-      <div class="sensor-card"><span class="sensor-label">Battery</span><span class="sensor-value">-- V</span></div>
-      <div class="sensor-card"><span class="sensor-label">Motor Temp</span><span class="sensor-value">-- C</span></div>
-      <div class="sensor-card"><span class="sensor-label">RPLidar A1</span><span class="sensor-value">Ready</span></div>
-      <div class="sensor-card"><span class="sensor-label">GPS</span><span class="sensor-value">Ready</span></div>
+    <h3>FUTURE SENSORS</h3>
+    <div class="sensor-card"><span class="sensor-label">OpenArm 01</span><span class="sensor-value">Ready</span></div>
+    <div class="sensor-card"><span class="sensor-label">Battery</span><span class="sensor-value">-- V</span></div>
+    <div class="sensor-card"><span class="sensor-label">Motor Temp</span><span class="sensor-value">-- C</span></div>
+    <div class="sensor-card"><span class="sensor-label">RPLidar</span><span class="sensor-value">Ready</span></div>
+    <div class="sensor-card"><span class="sensor-label">GPS</span><span class="sensor-value">Ready</span></div>
+    <div class="sensor-card"><span class="sensor-label">IMU</span><span class="sensor-value">Ready</span></div>
+    <div class="sensor-card"><span class="sensor-label">Ultrasonic</span><span class="sensor-value">Ready</span></div>
+
+    <div class="code-section">
+      <h3>CODE EDITOR</h3>
+      <div class="tabs">
+        <div class="tab active" data-tab="teensy">Teensy</div>
+        <div class="tab" data-tab="esp32">ESP32</div>
+      </div>
+      <div class="editor">
+        <textarea id="editor" placeholder="// Code..."></textarea>
+      </div>
+      <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
     </div>
   </div>
 </div>
 
 <script>
 const ws = new WebSocket('ws://' + location.host);
-let maxRpm = 0;
+ws.binaryType = 'blob';  // Ensure binary messages come as Blobs
 let currentTab = 'teensy';
+let cam1Active = false;
 
-ws.onopen = function() {
-  console.log('WebSocket connected');
+// ============ CAMERA PLAYER (MJPEG via WebSocket) ============
+let cam1Image = null;
+
+function initCam1() {
+  console.log('[CAM1] Ready to receive MJPEG frames via WebSocket');
+  // Create an img element to display frames
+  const container = document.getElementById('cam1-video');
+  if (!cam1Image) {
+    cam1Image = document.createElement('img');
+    cam1Image.style.width = '100%';
+    cam1Image.style.height = '100%';
+    cam1Image.style.objectFit = 'contain';
+    cam1Image.style.background = '#000';
+    container.innerHTML = '';
+    container.appendChild(cam1Image);
+  }
+  // Frames will be received via the main WebSocket
+}
+
+function displayFrame(blob) {
+  if (!cam1Image) initCam1();
+  const url = URL.createObjectURL(blob);
+  cam1Image.onload = () => URL.revokeObjectURL(url);
+  cam1Image.src = url;
+  if (!cam1Active) {
+    cam1Active = true;
+    updateCam1Status(true, true);
+  }
+}
+
+function stopCam1() {
+  cam1Active = false;
+  updateCam1Status(false, false);
+}
+
+function updateCam1Status(connected, streaming) {
+  const el = document.getElementById('cam1-status');
+  const txt = document.getElementById('cam1StatusText');
+  if (streaming) {
+    el.textContent = 'LIVE';
+    el.className = 'cam-status-badge live';
+    txt.textContent = 'Streaming';
+  } else if (connected) {
+    el.textContent = 'READY';
+    el.className = 'cam-status-badge';
+    el.style.background = 'rgba(245,159,0,0.9)';
+    txt.textContent = 'Connected';
+  } else {
+    el.textContent = 'OFFLINE';
+    el.className = 'cam-status-badge';
+    txt.textContent = 'Offline';
+  }
+}
+
+// ============ PTZ ============
+const PTZ_SPEED = 1.0;  // Full speed
+let ptzMoving = false;
+let stopTimeout = null;
+
+function ptzMove(pan, tilt) {
+  if (stopTimeout) { clearTimeout(stopTimeout); stopTimeout = null; }
+  ptzMoving = true;
+  ws.send(JSON.stringify({ type: 'cam_ptz', action: 'move', pan, tilt, zoom: 0 }));
+}
+
+function ptzStop() {
+  if (!ptzMoving) return;
+  // Debounce stop to avoid duplicate commands
+  if (stopTimeout) return;
+  stopTimeout = setTimeout(() => {
+    ws.send(JSON.stringify({ type: 'cam_ptz', action: 'stop' }));
+    ptzMoving = false;
+    stopTimeout = null;
+  }, 50);
+}
+
+document.querySelectorAll('.ptz-btn').forEach(btn => {
+  const action = btn.dataset.ptz;
+  if (!action) return;
+
+  btn.onmousedown = btn.ontouchstart = function(e) {
+    e.preventDefault();
+    switch(action) {
+      case 'up': ptzMove(0, PTZ_SPEED); break;
+      case 'down': ptzMove(0, -PTZ_SPEED); break;
+      case 'left': ptzMove(-PTZ_SPEED, 0); break;
+      case 'right': ptzMove(PTZ_SPEED, 0); break;
+    }
+  };
+  btn.onmouseup = btn.ontouchend = btn.onmouseleave = function() {
+    if (['up','down','left','right'].includes(action)) ptzStop();
+  };
+});
+
+// ============ WEBSOCKET ============
+ws.onopen = () => {
   ws.send(JSON.stringify({type: 'get_status'}));
+  // Auto-start MJPEG stream on page load
+  setTimeout(() => { if (!cam1Active) initCam1(); }, 1000);
 };
 
 ws.onmessage = function(e) {
+  // Handle binary frames (MJPEG from camera)
+  if (e.data instanceof Blob) {
+    console.log('[CAM1] Got frame:', e.data.size, 'bytes');
+    displayFrame(e.data);
+    return;
+  }
+  if (e.data instanceof ArrayBuffer) {
+    console.log('[CAM1] Got ArrayBuffer frame:', e.data.byteLength, 'bytes');
+    displayFrame(new Blob([e.data], {type: 'image/jpeg'}));
+    return;
+  }
+
   var d = JSON.parse(e.data);
-  console.log('Received:', d);
 
   if(d.type === 'serial') {
     document.getElementById('serial').innerHTML += d.data + '<br>';
@@ -314,59 +584,57 @@ ws.onmessage = function(e) {
     document.getElementById('status').className = 'status ' + (d.connected ? 'online' : '');
     document.getElementById('esp32Status').textContent = d.connected ? 'Connected' : 'Disconnected';
 
-    if(d.wifi && d.wifi !== 'unknown') {
-      document.getElementById('wifi').textContent = d.wifi;
-    }
-    if(d.rssi) {
-      document.getElementById('rssi').textContent = d.rssi + ' dBm';
-    }
-    if(d.ip && d.ip !== 'unknown') {
-      document.getElementById('ip').textContent = d.ip;
-    }
-    if(d.version && d.version !== 'unknown') {
-      document.getElementById('version').textContent = 'v' + d.version;
-    }
+    if(d.wifi && d.wifi !== 'unknown') document.getElementById('wifi').textContent = d.wifi;
+    if(d.rssi) document.getElementById('rssi').textContent = d.rssi + ' dBm';
+    if(d.ip && d.ip !== 'unknown') document.getElementById('ip').textContent = d.ip;
+    if(d.version && d.version !== 'unknown') document.getElementById('version').textContent = 'v' + d.version;
     if(d.uptime) {
       var mins = Math.floor(d.uptime / 60);
-      var secs = d.uptime % 60;
-      document.getElementById('uptime').textContent = mins + 'm ' + secs + 's';
+      document.getElementById('uptime').textContent = mins + 'm';
     }
+
+    if(d.camera) {
+      updateCam1Status(d.camera.connected, d.camera.streaming);
+      if(d.camera.streaming && !cam1Active) initCam1();
+    }
+  }
+
+  if(d.type === 'camera_status') {
+    updateCam1Status(d.connected, d.streaming);
+    if(d.streaming && !cam1Active) initCam1();
   }
 };
 
-ws.onerror = function(err) {
-  console.error('WebSocket error:', err);
-};
-
-ws.onclose = function() {
+ws.onclose = () => {
   document.getElementById('status').textContent = 'DISCONNECTED';
   document.getElementById('status').className = 'status';
+  updateCam1Status(false, false);
 };
 
+// ============ JOYSTICK ============
 var joystick = document.getElementById('joystick');
 var isDragging = false;
-var centerX = 120, centerY = 120;
+var centerX = 75, centerY = 75;
 
-joystick.onmousedown = function() { isDragging = true; };
+joystick.onmousedown = () => isDragging = true;
 document.onmouseup = function() {
-  isDragging = false;
-  joystick.style.left = '70px';
-  joystick.style.top = '70px';
-  ws.send(JSON.stringify({type:'joystick', lx:0, ly:0}));
+  if(isDragging) {
+    isDragging = false;
+    joystick.style.left = '47px';
+    joystick.style.top = '47px';
+    ws.send(JSON.stringify({type:'joystick', lx:0, ly:0}));
+  }
 };
-
 document.onmousemove = function(e) {
   if(!isDragging) return;
   var rect = joystick.parentElement.getBoundingClientRect();
   var x = e.clientX - rect.left - centerX;
   var y = e.clientY - rect.top - centerY;
   var dist = Math.sqrt(x*x + y*y);
-  if(dist > 70) { x = x/dist*70; y = y/dist*70; }
-  joystick.style.left = (centerX + x - 50) + 'px';
-  joystick.style.top = (centerY + y - 50) + 'px';
-  var lx = Math.round(x / 70 * 511);
-  var ly = Math.round(-y / 70 * 511);
-  ws.send(JSON.stringify({type:'joystick', lx:lx, ly:ly}));
+  if(dist > 47) { x = x/dist*47; y = y/dist*47; }
+  joystick.style.left = (centerX + x - 27) + 'px';
+  joystick.style.top = (centerY + y - 27) + 'px';
+  ws.send(JSON.stringify({type:'joystick', lx:Math.round(x/47*511), ly:Math.round(-y/47*511)}));
 };
 
 function reset() {
@@ -374,15 +642,16 @@ function reset() {
   document.getElementById('serial').innerHTML = '[RESET]<br>';
 }
 
-document.querySelectorAll('.tab').forEach(function(tab) {
+// ============ CODE EDITOR ============
+document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = function() {
-    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     currentTab = tab.dataset.tab;
   };
 });
 
-document.getElementById('compileBtn').onclick = function() {
+document.getElementById('compileBtn').onclick = () => {
   ws.send(JSON.stringify({type:'compile', target:currentTab, code:document.getElementById('editor').value}));
 };
 
@@ -392,6 +661,7 @@ document.getElementById('cmd').onkeypress = function(e) {
     e.target.value = '';
   }
 };
+
 </script>
 </body>
 </html>

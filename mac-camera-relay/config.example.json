@@ -1,0 +1,20 @@
+{
+  "camera": {
+    "ip": "192.168.1.XXX",
+    "rtspPort": 554,
+    "rtspPath": "/onvif1",
+    "onvifPort": 5000,
+    "username": "admin",
+    "password": "YOUR_PASSWORD"
+  },
+  "vps": {
+    "wsUrl": "ws://your-server.com",
+    "streamPort": 9999
+  },
+  "stream": {
+    "fps": 10,
+    "quality": 50,
+    "scale": "640:360",
+    "useWebSocket": true
+  }
+}

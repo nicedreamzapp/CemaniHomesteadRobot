@@ -1,0 +1,16 @@
+{
+  "name": "mac-camera-relay",
+  "version": "1.0.0",
+  "description": "Mac Mini relay for Sricam IP camera - converts RTSP to HLS and proxies ONVIF controls",
+  "main": "relay.js",
+  "scripts": {
+    "start": "node relay.js",
+    "install-deps": "brew install ffmpeg"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "ws": "^8.18.3",
+    "xml2js": "^0.6.2",
+    "node-fetch": "^3.3.2"
+  }
+}
