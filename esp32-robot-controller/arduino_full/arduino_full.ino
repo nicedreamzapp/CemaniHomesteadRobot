@@ -207,6 +207,25 @@ void handleGamepad() {
   if (dpad != pdpad) {
     pdpad = dpad;
     teensySerial.printf("DPAD,%d,%lu\n", (int)dpad, (unsigned long)ms);
+
+    // Send D-pad as camera PTZ commands via WebSocket
+    // D-pad values: 0=none, 1=up, 2=down, 4=right, 8=left (can be combined)
+    if (wsConnected) {
+      float pan = 0, tilt = 0;
+      if (dpad & 0x01) tilt = 1.0;   // Up
+      if (dpad & 0x02) tilt = -1.0;  // Down
+      if (dpad & 0x04) pan = 1.0;    // Right
+      if (dpad & 0x08) pan = -1.0;   // Left
+
+      if (pan != 0 || tilt != 0) {
+        // Send move command
+        String msg = "{\"type\":\"cam_ptz\",\"action\":\"move\",\"pan\":" + String(pan, 1) + ",\"tilt\":" + String(tilt, 1) + ",\"zoom\":0}";
+        webSocket.sendTXT(msg);
+      } else {
+        // D-pad released - send stop
+        webSocket.sendTXT("{\"type\":\"cam_ptz\",\"action\":\"stop\"}");
+      }
+    }
   }
 
   if (wsConnected && (abs(lx) > 10 || abs(ly) > 10)) {
