@@ -172,12 +172,22 @@ function startStreaming() {
   });
 
   ffmpegProcess.on('close', (code) => {
-    console.log(`[FFMPEG] Exited with code ${code}`);
+    console.log(`[FFMPEG] Exited with code ${code}, will restart in 3 seconds...`);
     ffmpegProcess = null;
-    // Restart after 3 seconds if VPS still connected
-    if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-      setTimeout(startStreaming, 3000);
-    }
+    // Always restart FFmpeg - it will wait for VPS connection inside startStreaming
+    setTimeout(() => {
+      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+        startStreaming();
+      } else {
+        console.log('[FFMPEG] VPS not connected, waiting...');
+      }
+    }, 3000);
+  });
+
+  ffmpegProcess.on('error', (err) => {
+    console.error('[FFMPEG] Process error:', err.message);
+    ffmpegProcess = null;
+    setTimeout(startStreaming, 3000);
   });
 
   // Log stats every 5 seconds
@@ -344,6 +354,14 @@ console.log('VPS:', CONFIG.vps.wsUrl);
 console.log('========================================');
 
 connectToVPS();
+
+// Watchdog - check every 30 seconds if streaming should be running
+setInterval(() => {
+  if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN && !ffmpegProcess) {
+    console.log('[WATCHDOG] FFmpeg not running but VPS connected - restarting stream...');
+    startStreaming();
+  }
+}, 30000);
 
 // Cleanup
 process.on('SIGINT', () => {
