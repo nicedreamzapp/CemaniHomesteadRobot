@@ -1,10 +1,10 @@
 /**
- * Mac Camera Relay - Bridges local Sricam to VPS
+ * Mac Camera Relay - Bridges local Sricams to VPS
  *
  * This runs on your Mac Mini and:
  * 1. Connects to VPS via WebSocket (like your robot does)
- * 2. Streams video from camera to VPS via FFmpeg
- * 3. Receives PTZ commands from VPS and sends to camera
+ * 2. Streams video from multiple cameras to VPS via FFmpeg
+ * 3. Receives PTZ commands from VPS and sends to cameras
  */
 
 const WebSocket = require('ws');
@@ -28,8 +28,26 @@ const CONFIG = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 // ============ VPS CONNECTION ============
 let vpsSocket = null;
-let ffmpegProcess = null;
 let reconnectTimer = null;
+
+// Per-camera state
+const cameraState = {};
+
+// Initialize state for each camera
+CONFIG.cameras.forEach(cam => {
+  cameraState[cam.id] = {
+    videoProcess: null,
+    audioProcess: null,
+    videoStats: { sent: 0, avgSize: 0 },
+    audioStats: { sent: 0, avgSize: 0 }
+  };
+});
+
+// Packet type markers:
+// Camera 1: 0x00 = video, 0x01 = audio
+// Camera 2: 0x02 = video, 0x03 = audio
+function getVideoMarker(camId) { return (camId - 1) * 2; }
+function getAudioMarker(camId) { return (camId - 1) * 2 + 1; }
 
 function connectToVPS() {
   if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) return;
@@ -47,35 +65,48 @@ function connectToVPS() {
   vpsSocket.on('open', () => {
     console.log('[VPS] Connected!');
 
-    // Announce as camera relay (like robot sends robot_hello)
+    // Announce as camera relay with all cameras
     vpsSocket.send(JSON.stringify({
       type: 'camera_hello',
-      camera: 1,
-      ip: CONFIG.camera.ip
+      cameras: CONFIG.cameras.map(c => ({ id: c.id, name: c.name, ip: c.ip }))
     }));
 
-    // Start streaming (video and audio)
-    startStreaming();
-    startAudioStream();
+    // Start streaming all cameras (video only for now - audio causes lag with 2 cameras)
+    CONFIG.cameras.forEach(cam => {
+      startVideoStream(cam);
+      // startAudioStream(cam);  // Disabled - too many RTSP connections cause lag
+    });
   });
 
   vpsSocket.on('message', async (data) => {
     try {
       const msg = JSON.parse(data.toString());
 
-      // Handle PTZ commands from VPS
+      // Handle PTZ commands from VPS (with camera ID)
       if (msg.type === 'cam_ptz') {
-        await handlePTZ(msg);
+        const camId = msg.camera || 1;
+        const cam = CONFIG.cameras.find(c => c.id === camId);
+        if (cam) {
+          await handlePTZ(cam, msg);
+        }
       }
 
       // Handle camera settings
       if (msg.type === 'cam_setting') {
-        await handleSetting(msg);
+        const camId = msg.camera || 1;
+        const cam = CONFIG.cameras.find(c => c.id === camId);
+        if (cam) {
+          await handleSetting(cam, msg);
+        }
       }
 
       // Handle snapshot request
       if (msg.type === 'cam_snapshot') {
-        await sendSnapshot();
+        const camId = msg.camera || 1;
+        const cam = CONFIG.cameras.find(c => c.id === camId);
+        if (cam) {
+          await sendSnapshot(cam);
+        }
       }
 
     } catch (err) {
@@ -86,8 +117,11 @@ function connectToVPS() {
   vpsSocket.on('close', () => {
     console.log('[VPS] Disconnected');
     vpsSocket = null;
-    stopStreaming();
-    stopAudioStream();
+    // Stop all cameras
+    CONFIG.cameras.forEach(cam => {
+      stopVideoStream(cam);
+      stopAudioStream(cam);
+    });
     scheduleReconnect();
   });
 
@@ -106,43 +140,37 @@ function scheduleReconnect() {
 }
 
 // ============ VIDEO STREAMING VIA FFMPEG ============
-let frameStats = { sent: 0, dropped: 0, avgSize: 0, lastFps: 0 };
-
-// ============ AUDIO STREAMING VIA FFMPEG ============
-let audioProcess = null;
-let audioStats = { sent: 0, avgSize: 0 };
-
-function startStreaming() {
-  if (ffmpegProcess) {
-    console.log('[STREAM] Already running');
+function startVideoStream(cam) {
+  const state = cameraState[cam.id];
+  if (state.videoProcess) {
+    console.log(`[CAM${cam.id}] Video already running`);
     return;
   }
 
-  // Use same simple URL that works with ffplay
-  const rtspUrl = `rtsp://${CONFIG.camera.ip}:${CONFIG.camera.rtspPort}${CONFIG.camera.rtspPath}`;
-  console.log(`[STREAM] Starting FFmpeg RTSP capture at ${CONFIG.stream.fps}fps`);
-  console.log(`[STREAM] RTSP URL: ${rtspUrl}`);
+  const rtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
+  console.log(`[CAM${cam.id}] Starting video stream at ${CONFIG.stream.fps}fps`);
+  console.log(`[CAM${cam.id}] RTSP URL: ${rtspUrl}`);
 
-  // FFmpeg: capture RTSP, scale down, output smaller MJPEG frames
-  const quality = Math.round(31 - (CONFIG.stream.quality / 100 * 29)); // 50% = q:v 16
-  ffmpegProcess = spawn(FFMPEG, [
-    '-i', rtspUrl,                   // Input RTSP stream
-    '-vf', `scale=${CONFIG.stream.scale}`, // Scale down to 640x360
-    '-f', 'image2pipe',              // Output as image pipe
-    '-vcodec', 'mjpeg',              // Output codec
-    '-q:v', String(quality),         // Quality (2=best, 31=worst)
-    '-r', String(CONFIG.stream.fps), // Frame rate
-    '-'                              // Output to stdout
+  const quality = Math.round(31 - (CONFIG.stream.quality / 100 * 29));
+  state.videoProcess = spawn(FFMPEG, [
+    '-timeout', '5000000',
+    '-i', rtspUrl,
+    '-vf', `scale=${CONFIG.stream.scale}`,
+    '-f', 'image2pipe',
+    '-vcodec', 'mjpeg',
+    '-q:v', String(quality),
+    '-r', String(CONFIG.stream.fps),
+    '-'
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
   let frameBuffer = Buffer.alloc(0);
   const JPEG_START = Buffer.from([0xFF, 0xD8]);
   const JPEG_END = Buffer.from([0xFF, 0xD9]);
+  const videoMarker = getVideoMarker(cam.id);
 
-  ffmpegProcess.stdout.on('data', (chunk) => {
+  state.videoProcess.stdout.on('data', (chunk) => {
     frameBuffer = Buffer.concat([frameBuffer, chunk]);
 
-    // Find complete JPEG frames
     while (true) {
       const startIdx = frameBuffer.indexOf(JPEG_START);
       if (startIdx === -1) break;
@@ -150,156 +178,138 @@ function startStreaming() {
       const endIdx = frameBuffer.indexOf(JPEG_END, startIdx);
       if (endIdx === -1) break;
 
-      // Extract complete frame
       const frame = frameBuffer.slice(startIdx, endIdx + 2);
       frameBuffer = frameBuffer.slice(endIdx + 2);
 
-      // Send frame with type marker (0x00 = video, 0x01 = audio)
-      frameStats.sent++;
-      frameStats.avgSize = Math.round((frameStats.avgSize * 0.9) + (frame.length * 0.1));
+      state.videoStats.sent++;
+      state.videoStats.avgSize = Math.round((state.videoStats.avgSize * 0.9) + (frame.length * 0.1));
 
       if (CONFIG.stream.useWebSocket && vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        const packet = Buffer.concat([Buffer.from([0x00]), frame]);
+        const packet = Buffer.concat([Buffer.from([videoMarker]), frame]);
         vpsSocket.send(packet);
       }
     }
 
-    // Prevent buffer from growing too large
     if (frameBuffer.length > 500000) {
       frameBuffer = Buffer.alloc(0);
     }
   });
 
-  ffmpegProcess.stderr.on('data', (data) => {
+  state.videoProcess.stderr.on('data', (data) => {
     const msg = data.toString();
-    // Only log important messages
     if (msg.includes('Error') || msg.includes('error')) {
-      console.log('[FFMPEG]', msg.trim());
+      console.log(`[CAM${cam.id}-FFMPEG]`, msg.trim());
     }
   });
 
-  ffmpegProcess.on('close', (code) => {
-    console.log(`[FFMPEG] Exited with code ${code}, will restart in 3 seconds...`);
-    ffmpegProcess = null;
-    // Always restart FFmpeg - it will wait for VPS connection inside startStreaming
+  state.videoProcess.on('close', (code) => {
+    console.log(`[CAM${cam.id}] Video exited with code ${code}, will restart in 3 seconds...`);
+    state.videoProcess = null;
     setTimeout(() => {
       if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        startStreaming();
-      } else {
-        console.log('[FFMPEG] VPS not connected, waiting...');
+        startVideoStream(cam);
       }
     }, 3000);
   });
 
-  ffmpegProcess.on('error', (err) => {
-    console.error('[FFMPEG] Process error:', err.message);
-    ffmpegProcess = null;
-    setTimeout(startStreaming, 3000);
+  state.videoProcess.on('error', (err) => {
+    console.error(`[CAM${cam.id}] Video process error:`, err.message);
+    state.videoProcess = null;
+    setTimeout(() => startVideoStream(cam), 3000);
   });
-
-  // Log stats every 5 seconds
-  setInterval(() => {
-    if (frameStats.sent > 0) {
-      console.log(`[STREAM] FPS: ${Math.round(frameStats.sent/5)}, Avg size: ${Math.round(frameStats.avgSize/1024)}KB`);
-      frameStats.lastFps = Math.round(frameStats.sent/5);
-      frameStats.sent = 0;
-    }
-  }, 5000);
 }
 
-function stopStreaming() {
-  if (ffmpegProcess) {
-    console.log('[STREAM] Stopping FFmpeg...');
-    ffmpegProcess.kill('SIGTERM');
-    ffmpegProcess = null;
+function stopVideoStream(cam) {
+  const state = cameraState[cam.id];
+  if (state.videoProcess) {
+    console.log(`[CAM${cam.id}] Stopping video...`);
+    state.videoProcess.kill('SIGTERM');
+    state.videoProcess = null;
   }
 }
 
 // ============ AUDIO STREAMING VIA FFMPEG ============
-function startAudioStream() {
-  if (audioProcess) {
-    console.log('[AUDIO] Already running');
+function startAudioStream(cam) {
+  const state = cameraState[cam.id];
+  if (state.audioProcess) {
+    console.log(`[CAM${cam.id}] Audio already running`);
     return;
   }
 
-  const rtspUrl = `rtsp://${CONFIG.camera.ip}:${CONFIG.camera.rtspPort}${CONFIG.camera.rtspPath}`;
-  console.log('[AUDIO] Starting audio capture from', rtspUrl);
+  const rtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
+  console.log(`[CAM${cam.id}] Starting audio stream`);
 
-  // FFmpeg: capture audio from RTSP, convert PCM A-law to MP3 for browser playback
-  // Output small MP3 chunks that can be played in browser
-  audioProcess = spawn(FFMPEG, [
-    '-i', rtspUrl,                    // Input RTSP stream
-    '-vn',                            // No video
-    '-acodec', 'libmp3lame',          // Encode to MP3
-    '-ar', '16000',                   // Sample rate 16kHz (upsampled from 8kHz for better quality)
-    '-ac', '1',                       // Mono
-    '-b:a', '32k',                    // Bitrate 32kbps (low but sufficient for voice)
-    '-f', 'mp3',                      // Output format
-    '-flush_packets', '1',            // Flush packets immediately
-    '-'                               // Output to stdout
+  state.audioProcess = spawn(FFMPEG, [
+    '-timeout', '5000000',
+    '-i', rtspUrl,
+    '-vn',
+    '-acodec', 'libmp3lame',
+    '-ar', '16000',
+    '-ac', '1',
+    '-b:a', '32k',
+    '-f', 'mp3',
+    '-flush_packets', '1',
+    '-'
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-  // Buffer for MP3 frames - MP3 has sync word 0xFF 0xFB (or 0xFF 0xFA, 0xFF 0xF3, etc)
   let audioBuffer = Buffer.alloc(0);
-  const MP3_SYNC = 0xFF;
-  const CHUNK_SIZE = 2048; // Send ~2KB chunks for smooth playback
+  const CHUNK_SIZE = 2048;
+  const audioMarker = getAudioMarker(cam.id);
 
-  audioProcess.stdout.on('data', (chunk) => {
+  state.audioProcess.stdout.on('data', (chunk) => {
     audioBuffer = Buffer.concat([audioBuffer, chunk]);
 
-    // Send chunks when we have enough data
     while (audioBuffer.length >= CHUNK_SIZE) {
       const audioChunk = audioBuffer.slice(0, CHUNK_SIZE);
       audioBuffer = audioBuffer.slice(CHUNK_SIZE);
 
-      audioStats.sent++;
-      audioStats.avgSize = Math.round((audioStats.avgSize * 0.9) + (audioChunk.length * 0.1));
+      state.audioStats.sent++;
+      state.audioStats.avgSize = Math.round((state.audioStats.avgSize * 0.9) + (audioChunk.length * 0.1));
 
       if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        // Send with a type marker (first byte = 0x01 for audio, 0x00 for video)
-        const packet = Buffer.concat([Buffer.from([0x01]), audioChunk]);
+        const packet = Buffer.concat([Buffer.from([audioMarker]), audioChunk]);
         vpsSocket.send(packet);
       }
     }
   });
 
-  audioProcess.stderr.on('data', (data) => {
+  state.audioProcess.stderr.on('data', (data) => {
     const msg = data.toString();
     if (msg.includes('Error') || msg.includes('error')) {
-      console.log('[AUDIO-FFMPEG]', msg.trim());
+      console.log(`[CAM${cam.id}-AUDIO]`, msg.trim());
     }
   });
 
-  audioProcess.on('close', (code) => {
-    console.log(`[AUDIO-FFMPEG] Exited with code ${code}`);
-    audioProcess = null;
-    // Restart audio if VPS is still connected
+  state.audioProcess.on('close', (code) => {
+    console.log(`[CAM${cam.id}] Audio exited with code ${code}`);
+    state.audioProcess = null;
     setTimeout(() => {
       if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        startAudioStream();
+        startAudioStream(cam);
       }
     }, 3000);
   });
 
-  audioProcess.on('error', (err) => {
-    console.error('[AUDIO-FFMPEG] Process error:', err.message);
-    audioProcess = null;
+  state.audioProcess.on('error', (err) => {
+    console.error(`[CAM${cam.id}] Audio process error:`, err.message);
+    state.audioProcess = null;
   });
 }
 
-function stopAudioStream() {
-  if (audioProcess) {
-    console.log('[AUDIO] Stopping...');
-    audioProcess.kill('SIGTERM');
-    audioProcess = null;
+function stopAudioStream(cam) {
+  const state = cameraState[cam.id];
+  if (state.audioProcess) {
+    console.log(`[CAM${cam.id}] Stopping audio...`);
+    state.audioProcess.kill('SIGTERM');
+    state.audioProcess = null;
   }
 }
 
 // ============ ONVIF PTZ CONTROL ============
-function sendOnvif(body, isStop = false) {
+function sendOnvif(cam, body, isStop = false) {
   return new Promise((resolve) => {
     const cleanBody = body.replace(/\s+/g, ' ').trim();
-    const xml = `<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Header><Security xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><UsernameToken><Username>${CONFIG.camera.username}</Username><Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${CONFIG.camera.password}</Password></UsernameToken></Security></s:Header><s:Body>${cleanBody}</s:Body></s:Envelope>`;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Header><Security xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><UsernameToken><Username>${cam.username}</Username><Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${cam.password}</Password></UsernameToken></Security></s:Header><s:Body>${cleanBody}</s:Body></s:Envelope>`;
 
     const curl = spawn(CURL, [
       '-s',
@@ -307,7 +317,7 @@ function sendOnvif(body, isStop = false) {
       '-X', 'POST',
       '-H', 'Content-Type: application/soap+xml; charset=utf-8',
       '-d', xml,
-      `http://${CONFIG.camera.ip}:${CONFIG.camera.onvifPort}/onvif/ptz_service`
+      `http://${cam.ip}:${cam.onvifPort}/onvif/ptz_service`
     ]);
 
     let stdout = '';
@@ -315,19 +325,19 @@ function sendOnvif(body, isStop = false) {
 
     curl.on('close', (code) => {
       const success = stdout.includes('Response') || code === 52;
-      console.log('[ONVIF]', isStop ? 'STOP' : 'MOVE', success ? 'OK' : 'FAILED');
+      console.log(`[CAM${cam.id}-ONVIF]`, isStop ? 'STOP' : 'MOVE', success ? 'OK' : 'FAILED');
       resolve({ success });
     });
 
     curl.on('error', (err) => {
-      console.error('[ONVIF] Error:', err.message);
+      console.error(`[CAM${cam.id}-ONVIF] Error:`, err.message);
       resolve({ success: false, error: err.message });
     });
   });
 }
 
-async function handlePTZ(msg) {
-  console.log('[PTZ]', msg.action);
+async function handlePTZ(cam, msg) {
+  console.log(`[CAM${cam.id}-PTZ]`, msg.action);
 
   let body = '';
   let isStop = false;
@@ -368,17 +378,17 @@ async function handlePTZ(msg) {
   }
 
   if (body) {
-    const result = await sendOnvif(body, isStop);
+    const result = await sendOnvif(cam, body, isStop);
     if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-      vpsSocket.send(JSON.stringify({ type: 'cam_ptz_result', ...result }));
+      vpsSocket.send(JSON.stringify({ type: 'cam_ptz_result', camera: cam.id, ...result }));
     }
   }
 }
 
 // ============ CAMERA SETTINGS (CGI) ============
-async function sendCgi(path) {
+async function sendCgi(cam, path) {
   try {
-    const url = `http://${CONFIG.camera.username}:${CONFIG.camera.password}@${CONFIG.camera.ip}${path}`;
+    const url = `http://${cam.username}:${cam.password}@${cam.ip}${path}`;
     const response = await fetch(url);
     return { success: response.ok };
   } catch (err) {
@@ -386,35 +396,35 @@ async function sendCgi(path) {
   }
 }
 
-async function handleSetting(msg) {
-  console.log('[SETTING]', msg.setting, msg);
+async function handleSetting(cam, msg) {
+  console.log(`[CAM${cam.id}-SETTING]`, msg.setting, msg);
 
   let result;
 
   switch (msg.setting) {
     case 'flip':
-      result = await sendCgi(`/cgi-bin/hi3510/param.cgi?cmd=setimageattr&-flip=${msg.flip ? 1 : 0}&-mirror=${msg.mirror ? 1 : 0}`);
+      result = await sendCgi(cam, `/cgi-bin/hi3510/param.cgi?cmd=setimageattr&-flip=${msg.flip ? 1 : 0}&-mirror=${msg.mirror ? 1 : 0}`);
       break;
 
     case 'nightvision':
-      result = await sendCgi(`/cgi-bin/hi3510/param.cgi?cmd=setinfrared&-infraredstat=${msg.mode}`);
+      result = await sendCgi(cam, `/cgi-bin/hi3510/param.cgi?cmd=setinfrared&-infraredstat=${msg.mode}`);
       break;
 
     case 'motion':
-      result = await sendCgi(`/cgi-bin/hi3510/param.cgi?cmd=setmdattr&-enable=${msg.enabled ? 1 : 0}&-s=${msg.sensitivity || 5}`);
+      result = await sendCgi(cam, `/cgi-bin/hi3510/param.cgi?cmd=setmdattr&-enable=${msg.enabled ? 1 : 0}&-s=${msg.sensitivity || 5}`);
       break;
   }
 
   if (result && vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-    vpsSocket.send(JSON.stringify({ type: 'cam_setting_result', setting: msg.setting, ...result }));
+    vpsSocket.send(JSON.stringify({ type: 'cam_setting_result', camera: cam.id, setting: msg.setting, ...result }));
   }
 }
 
-async function sendSnapshot() {
-  console.log('[SNAPSHOT] Capturing...');
+async function sendSnapshot(cam) {
+  console.log(`[CAM${cam.id}] Capturing snapshot...`);
 
   try {
-    const url = `http://${CONFIG.camera.username}:${CONFIG.camera.password}@${CONFIG.camera.ip}/tmpfs/auto.jpg`;
+    const url = `http://${cam.username}:${cam.password}@${cam.ip}/tmpfs/auto.jpg`;
     const response = await fetch(url);
     const buffer = await response.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
@@ -422,45 +432,64 @@ async function sendSnapshot() {
     if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
       vpsSocket.send(JSON.stringify({
         type: 'cam_snapshot_data',
-        camera: 1,
+        camera: cam.id,
         data: base64
       }));
     }
-    console.log('[SNAPSHOT] Sent', Math.round(base64.length / 1024), 'KB');
+    console.log(`[CAM${cam.id}] Snapshot sent`, Math.round(base64.length / 1024), 'KB');
   } catch (err) {
-    console.error('[SNAPSHOT] Error:', err.message);
+    console.error(`[CAM${cam.id}] Snapshot error:`, err.message);
   }
 }
 
 // ============ STARTUP ============
 console.log('========================================');
-console.log('  Sricam Camera Relay');
+console.log('  Multi-Camera Relay');
 console.log('========================================');
-console.log('Camera:', CONFIG.camera.ip);
+CONFIG.cameras.forEach(cam => {
+  console.log(`Camera ${cam.id} (${cam.name}): ${cam.ip}`);
+});
 console.log('VPS:', CONFIG.vps.wsUrl);
 console.log('========================================');
 
 connectToVPS();
 
-// Watchdog - check every 30 seconds if streaming should be running
+// Watchdog - check every 10 seconds if streaming should be running
 setInterval(() => {
   if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-    if (!ffmpegProcess) {
-      console.log('[WATCHDOG] Video FFmpeg not running but VPS connected - restarting...');
-      startStreaming();
-    }
-    if (!audioProcess) {
-      console.log('[WATCHDOG] Audio FFmpeg not running but VPS connected - restarting...');
-      startAudioStream();
-    }
+    CONFIG.cameras.forEach(cam => {
+      const state = cameraState[cam.id];
+      if (!state.videoProcess) {
+        console.log(`[WATCHDOG] CAM${cam.id} video not running - restarting...`);
+        startVideoStream(cam);
+      }
+      // Audio disabled for dual camera - causes lag
+      // if (!state.audioProcess) {
+      //   console.log(`[WATCHDOG] CAM${cam.id} audio not running - restarting...`);
+      //   startAudioStream(cam);
+      // }
+    });
   }
-}, 30000);
+}, 10000);
+
+// Log stats every 10 seconds
+setInterval(() => {
+  CONFIG.cameras.forEach(cam => {
+    const state = cameraState[cam.id];
+    if (state.videoStats.sent > 0) {
+      console.log(`[CAM${cam.id}] FPS: ${Math.round(state.videoStats.sent/10)}, Avg: ${Math.round(state.videoStats.avgSize/1024)}KB`);
+      state.videoStats.sent = 0;
+    }
+  });
+}, 10000);
 
 // Cleanup
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
-  stopStreaming();
-  stopAudioStream();
+  CONFIG.cameras.forEach(cam => {
+    stopVideoStream(cam);
+    stopAudioStream(cam);
+  });
   if (vpsSocket) vpsSocket.close();
   process.exit(0);
 });

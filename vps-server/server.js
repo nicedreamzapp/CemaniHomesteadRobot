@@ -110,35 +110,38 @@ wss.on("connection", (ws, req) => {
   ws.on("pong", () => { ws.isAlive = true; });
 
   ws.on("message", (msg, isBinary) => {
-    // Handle binary frames from camera relay (first byte = type: 0x00=video, 0x01=audio)
+    // Handle binary frames from camera relay
+    // Packet types: Cam1: 0x00=video, 0x01=audio | Cam2: 0x02=video, 0x03=audio
     if (isBinary && ws.isCamera) {
       const data = Buffer.from(msg);
       if (data.length < 2) return;
 
       const packetType = data[0];
       const payload = data.slice(1);
+      const cameraId = Math.floor(packetType / 2) + 1;  // 0,1 -> cam1, 2,3 -> cam2
+      const isVideo = packetType % 2 === 0;
 
-      if (packetType === 0x00) {
+      if (isVideo) {
         // Video frame
         cameraStatus.streaming = true;
         let count = 0;
         wss.clients.forEach(c => {
           if (c !== ws && c.readyState === WebSocket.OPEN && c.isBrowser) {
-            // Send with type marker so browser knows it's video
+            // Send with type marker so browser knows which camera
             try { c.send(msg); count++; } catch(e) {}
           }
         });
-        if (Math.random() < 0.02) console.log("[VIDEO] Sent", payload.length, "bytes to", count, "browsers");
-      } else if (packetType === 0x01) {
+        if (Math.random() < 0.02) console.log(`[CAM${cameraId}-VIDEO] Sent`, payload.length, "bytes to", count, "browsers");
+      } else {
         // Audio chunk
         let count = 0;
         wss.clients.forEach(c => {
           if (c !== ws && c.readyState === WebSocket.OPEN && c.isBrowser && !c.audioMuted) {
-            // Send with type marker so browser knows it's audio
+            // Send with type marker so browser knows which camera
             try { c.send(msg); count++; } catch(e) {}
           }
         });
-        if (Math.random() < 0.01) console.log("[AUDIO] Sent", payload.length, "bytes to", count, "browsers");
+        if (Math.random() < 0.01) console.log(`[CAM${cameraId}-AUDIO] Sent`, payload.length, "bytes to", count, "browsers");
       }
       return;
     }

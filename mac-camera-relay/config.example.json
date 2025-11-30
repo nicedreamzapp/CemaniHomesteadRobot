@@ -1,20 +1,34 @@
 {
-  "camera": {
-    "ip": "192.168.1.XXX",
-    "rtspPort": 554,
-    "rtspPath": "/onvif1",
-    "onvifPort": 5000,
-    "username": "admin",
-    "password": "YOUR_PASSWORD"
-  },
+  "cameras": [
+    {
+      "id": 1,
+      "name": "Front",
+      "ip": "192.168.1.XXX",
+      "rtspPort": 554,
+      "rtspPath": "/onvif1",
+      "onvifPort": 5000,
+      "username": "admin",
+      "password": "your_password"
+    },
+    {
+      "id": 2,
+      "name": "Rear",
+      "ip": "192.168.1.XXX",
+      "rtspPort": 554,
+      "rtspPath": "/onvif1",
+      "onvifPort": 5000,
+      "username": "admin",
+      "password": "your_password"
+    }
+  ],
   "vps": {
     "wsUrl": "ws://your-server.com",
     "streamPort": 9999
   },
   "stream": {
-    "fps": 10,
-    "quality": 50,
-    "scale": "640:360",
+    "fps": 15,
+    "quality": 40,
+    "scale": "480:270",
     "useWebSocket": true
   }
 }

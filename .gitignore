@@ -36,3 +36,7 @@ bluepad32-template/
 # Credentials (keep credentials.h.example, ignore actual credentials)
 **/credentials.h
 !**/credentials.h.example
+
+# Camera relay config (contains camera passwords)
+mac-camera-relay/config.json
+!mac-camera-relay/config.example.json

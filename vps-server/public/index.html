@@ -384,9 +384,26 @@ textarea {
       </div>
     </div>
 
-    <!-- CAM 2 -->
-    <div class="cam-container">
-      <div class="cam-placeholder">CAM 2</div>
+    <!-- CAM 2 - Rear Camera -->
+    <div class="cam-container" id="cam2-container">
+      <div class="cam-video">
+        <div id="cam2-video" style="width:100%;height:100%;background:#000;"></div>
+      </div>
+      <div class="cam-overlay">
+        <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
+        <div class="speaker-btn" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">🔊</div>
+        <div class="ptz-overlay">
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz2="up">▲</div>
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz2="left">◀</div>
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz2="right">▶</div>
+          <div class="ptz-btn empty"></div>
+          <div class="ptz-btn" data-ptz2="down">▼</div>
+          <div class="ptz-btn empty"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -427,6 +444,10 @@ textarea {
     <div class="sensor-card">
       <span class="sensor-label">Camera 1</span>
       <span class="sensor-value" id="cam1StatusText">--</span>
+    </div>
+    <div class="sensor-card">
+      <span class="sensor-label">Camera 2</span>
+      <span class="sensor-value" id="cam2StatusText">--</span>
     </div>
 
     <h3>FUTURE SENSORS</h3>
@@ -490,12 +511,14 @@ async function playAudioChunk(data) {
   }
 }
 
-// ============ CAMERA PLAYER (MJPEG via WebSocket) ============
+// ============ CAMERA PLAYERS (MJPEG via WebSocket) ============
 let cam1Image = null;
+let cam2Image = null;
+let cam2Active = false;
+let isMuted2 = false;
 
 function initCam1() {
   console.log('[CAM1] Ready to receive MJPEG frames via WebSocket');
-  // Create an img element to display frames
   const container = document.getElementById('cam1-video');
   if (!cam1Image) {
     cam1Image = document.createElement('img');
@@ -506,28 +529,47 @@ function initCam1() {
     container.innerHTML = '';
     container.appendChild(cam1Image);
   }
-  // Frames will be received via the main WebSocket
 }
 
-function displayFrame(blob) {
-  if (!cam1Image) initCam1();
-  const url = URL.createObjectURL(blob);
-  cam1Image.onload = () => URL.revokeObjectURL(url);
-  cam1Image.src = url;
-  if (!cam1Active) {
-    cam1Active = true;
-    updateCam1Status(true, true);
+function initCam2() {
+  console.log('[CAM2] Ready to receive MJPEG frames via WebSocket');
+  const container = document.getElementById('cam2-video');
+  if (!cam2Image) {
+    cam2Image = document.createElement('img');
+    cam2Image.style.width = '100%';
+    cam2Image.style.height = '100%';
+    cam2Image.style.objectFit = 'contain';
+    cam2Image.style.background = '#000';
+    container.innerHTML = '';
+    container.appendChild(cam2Image);
   }
 }
 
-function stopCam1() {
-  cam1Active = false;
-  updateCam1Status(false, false);
+function displayFrame(blob, camId) {
+  if (camId === 1) {
+    if (!cam1Image) initCam1();
+    const url = URL.createObjectURL(blob);
+    cam1Image.onload = () => URL.revokeObjectURL(url);
+    cam1Image.src = url;
+    if (!cam1Active) {
+      cam1Active = true;
+      updateCamStatus(1, true, true);
+    }
+  } else if (camId === 2) {
+    if (!cam2Image) initCam2();
+    const url = URL.createObjectURL(blob);
+    cam2Image.onload = () => URL.revokeObjectURL(url);
+    cam2Image.src = url;
+    if (!cam2Active) {
+      cam2Active = true;
+      updateCamStatus(2, true, true);
+    }
+  }
 }
 
-function updateCam1Status(connected, streaming) {
-  const el = document.getElementById('cam1-status');
-  const txt = document.getElementById('cam1StatusText');
+function updateCamStatus(camId, connected, streaming) {
+  const el = document.getElementById('cam' + camId + '-status');
+  const txt = document.getElementById('cam' + camId + 'StatusText');
   if (streaming) {
     el.textContent = 'LIVE';
     el.className = 'cam-status-badge live';
@@ -544,28 +586,33 @@ function updateCam1Status(connected, streaming) {
   }
 }
 
+// Legacy wrapper for cam1
+function updateCam1Status(connected, streaming) {
+  updateCamStatus(1, connected, streaming);
+}
+
 // ============ PTZ ============
 const PTZ_SPEED = 1.0;  // Full speed
-let ptzMoving = false;
-let stopTimeout = null;
+let ptzMoving = { 1: false, 2: false };
+let stopTimeout = { 1: null, 2: null };
 
-function ptzMove(pan, tilt) {
-  if (stopTimeout) { clearTimeout(stopTimeout); stopTimeout = null; }
-  ptzMoving = true;
-  ws.send(JSON.stringify({ type: 'cam_ptz', action: 'move', pan, tilt, zoom: 0 }));
+function ptzMove(camId, pan, tilt) {
+  if (stopTimeout[camId]) { clearTimeout(stopTimeout[camId]); stopTimeout[camId] = null; }
+  ptzMoving[camId] = true;
+  ws.send(JSON.stringify({ type: 'cam_ptz', camera: camId, action: 'move', pan, tilt, zoom: 0 }));
 }
 
-function ptzStop() {
-  if (!ptzMoving) return;
-  // Debounce stop to avoid duplicate commands
-  if (stopTimeout) return;
-  stopTimeout = setTimeout(() => {
-    ws.send(JSON.stringify({ type: 'cam_ptz', action: 'stop' }));
-    ptzMoving = false;
-    stopTimeout = null;
-  }, 50);
+function ptzStop(camId) {
+  if (!ptzMoving[camId]) return;
+  if (stopTimeout[camId]) return;
+  stopTimeout[camId] = setTimeout(() => {
+    ws.send(JSON.stringify({ type: 'cam_ptz', camera: camId, action: 'stop' }));
+    ptzMoving[camId] = false;
+    stopTimeout[camId] = null;
+  }, 10);  // Reduced from 50ms for faster response
 }
 
+// Camera 1 PTZ buttons
 document.querySelectorAll('.ptz-btn').forEach(btn => {
   const action = btn.dataset.ptz;
   if (!action) return;
@@ -573,14 +620,33 @@ document.querySelectorAll('.ptz-btn').forEach(btn => {
   btn.onmousedown = btn.ontouchstart = function(e) {
     e.preventDefault();
     switch(action) {
-      case 'up': ptzMove(0, PTZ_SPEED); break;
-      case 'down': ptzMove(0, -PTZ_SPEED); break;
-      case 'left': ptzMove(-PTZ_SPEED, 0); break;
-      case 'right': ptzMove(PTZ_SPEED, 0); break;
+      case 'up': ptzMove(1, 0, PTZ_SPEED); break;
+      case 'down': ptzMove(1, 0, -PTZ_SPEED); break;
+      case 'left': ptzMove(1, -PTZ_SPEED, 0); break;
+      case 'right': ptzMove(1, PTZ_SPEED, 0); break;
     }
   };
   btn.onmouseup = btn.ontouchend = btn.onmouseleave = function() {
-    if (['up','down','left','right'].includes(action)) ptzStop();
+    if (['up','down','left','right'].includes(action)) ptzStop(1);
+  };
+});
+
+// Camera 2 PTZ buttons
+document.querySelectorAll('.ptz-btn').forEach(btn => {
+  const action = btn.dataset.ptz2;
+  if (!action) return;
+
+  btn.onmousedown = btn.ontouchstart = function(e) {
+    e.preventDefault();
+    switch(action) {
+      case 'up': ptzMove(2, 0, PTZ_SPEED); break;
+      case 'down': ptzMove(2, 0, -PTZ_SPEED); break;
+      case 'left': ptzMove(2, -PTZ_SPEED, 0); break;
+      case 'right': ptzMove(2, PTZ_SPEED, 0); break;
+    }
+  };
+  btn.onmouseup = btn.ontouchend = btn.onmouseleave = function() {
+    if (['up','down','left','right'].includes(action)) ptzStop(2);
   };
 });
 
@@ -592,20 +658,25 @@ ws.onopen = () => {
 };
 
 ws.onmessage = function(e) {
-  // Handle binary frames (first byte = type: 0x00=video, 0x01=audio)
+  // Handle binary frames
+  // Packet types: Cam1: 0x00=video, 0x01=audio | Cam2: 0x02=video, 0x03=audio
   if (e.data instanceof ArrayBuffer) {
     const data = new Uint8Array(e.data);
     if (data.length < 2) return;
 
     const packetType = data[0];
     const payload = data.slice(1);
+    const cameraId = Math.floor(packetType / 2) + 1;  // 0,1 -> cam1, 2,3 -> cam2
+    const isVideo = packetType % 2 === 0;
 
-    if (packetType === 0x00) {
+    if (isVideo) {
       // Video frame (JPEG)
-      displayFrame(new Blob([payload], {type: 'image/jpeg'}));
-    } else if (packetType === 0x01) {
-      // Audio chunk (MP3)
-      if (!isMuted) {
+      displayFrame(new Blob([payload], {type: 'image/jpeg'}), cameraId);
+    } else {
+      // Audio chunk (MP3) - play if not muted for that camera
+      if (cameraId === 1 && !isMuted) {
+        playAudioChunk(payload);
+      } else if (cameraId === 2 && !isMuted2) {
         playAudioChunk(payload);
       }
     }
@@ -618,9 +689,13 @@ ws.onmessage = function(e) {
       if (data.length < 2) return;
       const packetType = data[0];
       const payload = data.slice(1);
-      if (packetType === 0x00) {
-        displayFrame(new Blob([payload], {type: 'image/jpeg'}));
-      } else if (packetType === 0x01 && !isMuted) {
+      const cameraId = Math.floor(packetType / 2) + 1;
+      const isVideo = packetType % 2 === 0;
+      if (isVideo) {
+        displayFrame(new Blob([payload], {type: 'image/jpeg'}), cameraId);
+      } else if (cameraId === 1 && !isMuted) {
+        playAudioChunk(payload);
+      } else if (cameraId === 2 && !isMuted2) {
         playAudioChunk(payload);
       }
     });
@@ -745,5 +820,21 @@ function toggleMute() {
 document.addEventListener('click', function() {
   initAudio();
 }, { once: true });
+
+// Toggle mute for camera 2
+function toggleMute2() {
+  initAudio();
+  isMuted2 = !isMuted2;
+  const btn = document.getElementById("speakerBtn2");
+  if (isMuted2) {
+    btn.textContent = "🔇";
+    btn.style.color = "#ff4444";
+    btn.style.opacity = "0.5";
+  } else {
+    btn.textContent = "🔊";
+    btn.style.color = "#44ff44";
+    btn.style.opacity = "0.7";
+  }
+}
 </script></body>
 </html>
