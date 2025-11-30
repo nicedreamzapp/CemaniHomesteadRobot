@@ -95,7 +95,10 @@ body {
   bottom: 0;
   pointer-events: none;
 }
-.speaker-btn { position: absolute; top: 10px; right: 50px; font-size: 24px; cursor: pointer; opacity: 0.7; transition: all 0.2s; z-index: 10; color: #44ff44; pointer-events: auto; } .speaker-btn:hover { opacity: 1; transform: scale(1.1); } .speaker-btn.muted { opacity: 0.5; color: #ff4444; } .cam-status-badge {
+.speaker-btn { position: absolute; top: 10px; right: 50px; font-size: 24px; cursor: pointer; opacity: 0.7; transition: all 0.2s; z-index: 10; color: #44ff44; pointer-events: auto; } .speaker-btn:hover { opacity: 1; transform: scale(1.1); } .speaker-btn.muted { opacity: 0.5; color: #ff4444; }
+.mic-btn { position: absolute; top: 10px; right: 90px; font-size: 24px; cursor: pointer; opacity: 0.5; transition: all 0.2s; z-index: 10; color: #888; pointer-events: auto; background: rgba(0,0,0,0.5); border-radius: 50%; padding: 5px; } .mic-btn:hover { opacity: 0.8; transform: scale(1.1); } .mic-btn.active { opacity: 1; color: #44ff44; background: rgba(0,100,0,0.7); animation: pulse-mic 1s infinite; }
+@keyframes pulse-mic { 0%, 100% { box-shadow: 0 0 5px #44ff44; } 50% { box-shadow: 0 0 20px #44ff44, 0 0 30px #44ff44; } }
+.cam-status-badge {
   position: absolute;
   top: 10px;
   left: 10px;
@@ -391,6 +394,7 @@ textarea {
       </div>
       <div class="cam-overlay">
         <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
+        <div class="mic-btn" id="micBtn2" onmousedown="startTalkback()" onmouseup="stopTalkback()" onmouseleave="stopTalkback()" title="Hold to Talk">🎤</div>
         <div class="speaker-btn" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">🔊</div>
         <div class="ptz-overlay">
           <div class="ptz-btn empty"></div>
@@ -474,8 +478,55 @@ textarea {
 </div>
 
 <script>
-const ws = new WebSocket('ws://' + location.host);
+// ============ DUAL WEBSOCKET ARCHITECTURE ============
+// ws = Main connection for video, status, robot control (can be slow/buffered)
+// ptzWs = Priority connection for PTZ commands ONLY (instant, no buffering)
+// Auto-detect protocol: use wss:// for https://, ws:// for http://
+const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(wsProtocol + '//' + location.host);
 ws.binaryType = 'arraybuffer';  // Handle binary as ArrayBuffer for type detection
+
+// PTZ via /ptz path (nginx proxies to port 3002)
+let ptzWs = null;
+let ptzConnected = false;
+
+function connectPtzWs() {
+  const ptzUrl = wsProtocol + '//' + location.host + '/ptz';
+  console.log('[PTZ-WS] Connecting to priority channel:', ptzUrl);
+  ptzWs = new WebSocket(ptzUrl);
+
+  ptzWs.onopen = () => {
+    console.log('[PTZ-WS] Connected to priority PTZ channel!');
+    ptzConnected = true;
+    ptzWs.send(JSON.stringify({ type: 'ptz_browser_hello' }));
+  };
+
+  ptzWs.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'ptz_relay_status') {
+        console.log('[PTZ-WS] Relay status:', data.connected ? 'CONNECTED' : 'DISCONNECTED');
+      }
+      if (data.type === 'cam_ptz_result') {
+        console.log('[PTZ-WS] Result:', data.success ? 'OK' : 'FAILED');
+      }
+    } catch (err) {}
+  };
+
+  ptzWs.onclose = () => {
+    console.log('[PTZ-WS] Disconnected, reconnecting in 2s...');
+    ptzConnected = false;
+    setTimeout(connectPtzWs, 2000);
+  };
+
+  ptzWs.onerror = (err) => {
+    console.log('[PTZ-WS] Error, will reconnect...');
+  };
+}
+
+// Start PTZ connection
+connectPtzWs();
+
 let currentTab = 'teensy';
 let cam1Active = false;
 
@@ -545,21 +596,38 @@ function initCam2() {
   }
 }
 
+// ZERO BUFFER: Only show the LATEST frame, throw away everything else
+let pendingFrameUrl = { 1: null, 2: null };
+
 function displayFrame(blob, camId) {
+  // Immediately revoke any old pending frame - we only want the latest
+  if (pendingFrameUrl[camId]) {
+    URL.revokeObjectURL(pendingFrameUrl[camId]);
+  }
+
+  // Create URL for latest frame
+  const url = URL.createObjectURL(blob);
+  pendingFrameUrl[camId] = url;
+
+  // Display immediately
   if (camId === 1) {
     if (!cam1Image) initCam1();
-    const url = URL.createObjectURL(blob);
-    cam1Image.onload = () => URL.revokeObjectURL(url);
     cam1Image.src = url;
+    cam1Image.onload = () => {
+      URL.revokeObjectURL(url);
+      if (pendingFrameUrl[1] === url) pendingFrameUrl[1] = null;
+    };
     if (!cam1Active) {
       cam1Active = true;
       updateCamStatus(1, true, true);
     }
   } else if (camId === 2) {
     if (!cam2Image) initCam2();
-    const url = URL.createObjectURL(blob);
-    cam2Image.onload = () => URL.revokeObjectURL(url);
     cam2Image.src = url;
+    cam2Image.onload = () => {
+      URL.revokeObjectURL(url);
+      if (pendingFrameUrl[2] === url) pendingFrameUrl[2] = null;
+    };
     if (!cam2Active) {
       cam2Active = true;
       updateCamStatus(2, true, true);
@@ -591,25 +659,34 @@ function updateCam1Status(connected, streaming) {
   updateCamStatus(1, connected, streaming);
 }
 
-// ============ PTZ ============
+// ============ PTZ (PRIORITY CHANNEL) ============
 const PTZ_SPEED = 1.0;  // Full speed
 let ptzMoving = { 1: false, 2: false };
 let stopTimeout = { 1: null, 2: null };
 
+// Send PTZ via priority WebSocket (bypasses video traffic!)
+function sendPtz(data) {
+  if (ptzWs && ptzWs.readyState === WebSocket.OPEN) {
+    ptzWs.send(JSON.stringify(data));
+    return true;
+  }
+  // Fallback to main WS if PTZ channel not available
+  console.log('[PTZ] Priority channel unavailable, using main WS');
+  ws.send(JSON.stringify(data));
+  return false;
+}
+
 function ptzMove(camId, pan, tilt) {
   if (stopTimeout[camId]) { clearTimeout(stopTimeout[camId]); stopTimeout[camId] = null; }
   ptzMoving[camId] = true;
-  ws.send(JSON.stringify({ type: 'cam_ptz', camera: camId, action: 'move', pan, tilt, zoom: 0 }));
+  sendPtz({ type: 'cam_ptz', camera: camId, action: 'move', pan, tilt, zoom: 0 });
 }
 
 function ptzStop(camId) {
   if (!ptzMoving[camId]) return;
-  if (stopTimeout[camId]) return;
-  stopTimeout[camId] = setTimeout(() => {
-    ws.send(JSON.stringify({ type: 'cam_ptz', camera: camId, action: 'stop' }));
-    ptzMoving[camId] = false;
-    stopTimeout[camId] = null;
-  }, 10);  // Reduced from 50ms for faster response
+  // Immediate stop via priority channel
+  sendPtz({ type: 'cam_ptz', camera: camId, action: 'stop' });
+  ptzMoving[camId] = false;
 }
 
 // Camera 1 PTZ buttons
@@ -631,8 +708,8 @@ document.querySelectorAll('.ptz-btn').forEach(btn => {
   };
 });
 
-// Camera 2 PTZ buttons
-document.querySelectorAll('.ptz-btn').forEach(btn => {
+// Camera 2 PTZ buttons (use [data-ptz2] selector)
+document.querySelectorAll('[data-ptz2]').forEach(btn => {
   const action = btn.dataset.ptz2;
   if (!action) return;
 
@@ -714,13 +791,23 @@ ws.onmessage = function(e) {
     document.getElementById('status').className = 'status ' + (d.connected ? 'online' : '');
     document.getElementById('esp32Status').textContent = d.connected ? 'Connected' : 'Disconnected';
 
-    if(d.wifi && d.wifi !== 'unknown') document.getElementById('wifi').textContent = d.wifi;
-    if(d.rssi) document.getElementById('rssi').textContent = d.rssi + ' dBm';
-    if(d.ip && d.ip !== 'unknown') document.getElementById('ip').textContent = d.ip;
-    if(d.version && d.version !== 'unknown') document.getElementById('version').textContent = 'v' + d.version;
-    if(d.uptime) {
-      var mins = Math.floor(d.uptime / 60);
-      document.getElementById('uptime').textContent = mins + 'm';
+    // Only show WiFi/IP/etc when robot is CONNECTED - otherwise show "--"
+    if(d.connected) {
+      if(d.wifi && d.wifi !== 'unknown') document.getElementById('wifi').textContent = d.wifi;
+      if(d.rssi) document.getElementById('rssi').textContent = d.rssi + ' dBm';
+      if(d.ip && d.ip !== 'unknown') document.getElementById('ip').textContent = d.ip;
+      if(d.version && d.version !== 'unknown') document.getElementById('version').textContent = 'v' + d.version;
+      if(d.uptime) {
+        var mins = Math.floor(d.uptime / 60);
+        document.getElementById('uptime').textContent = mins + 'm';
+      }
+    } else {
+      // Robot is OFFLINE - clear all connection info
+      document.getElementById('wifi').textContent = '--';
+      document.getElementById('rssi').textContent = '--';
+      document.getElementById('ip').textContent = '--';
+      document.getElementById('version').textContent = '--';
+      document.getElementById('uptime').textContent = '--';
     }
 
     if(d.camera) {
@@ -732,6 +819,26 @@ ws.onmessage = function(e) {
   if(d.type === 'camera_status') {
     updateCam1Status(d.connected, d.streaming);
     if(d.streaming && !cam1Active) initCam1();
+  }
+
+  // Handle per-camera streaming status from server
+  if(d.type === 'camera_streams') {
+    if(d.cameras) {
+      // Camera 1
+      if(d.cameras[1]) {
+        if(!d.cameras[1].streaming) {
+          cam1Active = false;
+          updateCamStatus(1, false, false);
+        }
+      }
+      // Camera 2
+      if(d.cameras[2]) {
+        if(!d.cameras[2].streaming) {
+          cam2Active = false;
+          updateCamStatus(2, false, false);
+        }
+      }
+    }
   }
 };
 
@@ -834,6 +941,116 @@ function toggleMute2() {
     btn.textContent = "🔊";
     btn.style.color = "#44ff44";
     btn.style.opacity = "0.7";
+  }
+}
+
+// ============ TWO-WAY AUDIO (TALKBACK) ============
+let talkbackStream = null;
+let talkbackContext = null;
+let talkbackProcessor = null;
+let talkbackActive = false;
+
+async function startTalkback() {
+  if (talkbackActive) return;
+
+  const micBtn = document.getElementById('micBtn2');
+
+  // Check if we're on HTTPS or localhost (required for microphone)
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    console.error('[TALKBACK] Microphone requires HTTPS. Current protocol:', location.protocol);
+    alert('Two-way audio requires HTTPS. Please access the site via HTTPS to use the microphone feature.\n\nAlternatively, you can test locally at http://localhost');
+    return;
+  }
+
+  try {
+    // Request microphone access
+    talkbackStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 8000
+      }
+    });
+
+    talkbackActive = true;
+    micBtn.classList.add('active');
+    console.log('[TALKBACK] Microphone active');
+
+    // Create audio context for processing
+    talkbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
+    const source = talkbackContext.createMediaStreamSource(talkbackStream);
+
+    // Create a script processor to capture raw audio data
+    // 4096 samples at 8kHz = 512ms chunks
+    talkbackProcessor = talkbackContext.createScriptProcessor(4096, 1, 1);
+
+    talkbackProcessor.onaudioprocess = function(e) {
+      if (!talkbackActive) return;
+
+      // Get raw PCM data from input
+      const inputData = e.inputBuffer.getChannelData(0);
+
+      // Convert Float32 to Int16 (PCM)
+      const pcmData = new Int16Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        // Clamp and scale to 16-bit range
+        const s = Math.max(-1, Math.min(1, inputData[i]));
+        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+
+      // Send to server - type 0x10 = talkback audio for cam2
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const packet = new Uint8Array(1 + pcmData.byteLength);
+        packet[0] = 0x10;  // Talkback marker
+        packet.set(new Uint8Array(pcmData.buffer), 1);
+        ws.send(packet.buffer);
+      }
+    };
+
+    // Connect the audio graph
+    source.connect(talkbackProcessor);
+    talkbackProcessor.connect(talkbackContext.destination);
+
+    // Tell server we're starting talkback
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'talkback_start', camera: 2 }));
+    }
+
+  } catch (err) {
+    console.error('[TALKBACK] Failed to get microphone:', err);
+    micBtn.classList.remove('active');
+    alert('Could not access microphone. Please allow microphone permissions.');
+  }
+}
+
+function stopTalkback() {
+  if (!talkbackActive) return;
+
+  talkbackActive = false;
+  const micBtn = document.getElementById('micBtn2');
+  micBtn.classList.remove('active');
+  console.log('[TALKBACK] Microphone stopped');
+
+  // Tell server we're stopping talkback
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'talkback_stop', camera: 2 }));
+  }
+
+  // Clean up audio processing
+  if (talkbackProcessor) {
+    talkbackProcessor.disconnect();
+    talkbackProcessor = null;
+  }
+
+  if (talkbackContext) {
+    talkbackContext.close();
+    talkbackContext = null;
+  }
+
+  // Stop microphone stream
+  if (talkbackStream) {
+    talkbackStream.getTracks().forEach(track => track.stop());
+    talkbackStream = null;
   }
 }
 </script></body>

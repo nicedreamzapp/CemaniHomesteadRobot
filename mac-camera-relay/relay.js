@@ -1,53 +1,103 @@
 /**
  * Mac Camera Relay - Bridges local Sricams to VPS
- *
- * This runs on your Mac Mini and:
- * 1. Connects to VPS via WebSocket (like your robot does)
- * 2. Streams video from multiple cameras to VPS via FFmpeg
- * 3. Receives PTZ commands from VPS and sends to cameras
+ * Simplified version: VIDEO ONLY, no audio/microphone
  */
 
 const WebSocket = require('ws');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Full paths for launchd compatibility
-const FFMPEG = '/opt/homebrew/bin/ffmpeg';
-const CURL = '/usr/bin/curl';
+// SINGLETON: Only allow one instance
+const LOCKFILE = '/tmp/relay.lock';
+try {
+  // Check if another instance is running
+  if (fs.existsSync(LOCKFILE)) {
+    const oldPid = parseInt(fs.readFileSync(LOCKFILE, 'utf8'));
+    try {
+      process.kill(oldPid, 0); // Test if process exists
+      console.log(`[ERROR] Another relay instance running (PID ${oldPid}). Exiting.`);
+      process.exit(1);
+    } catch (e) {
+      // Old process is dead, remove stale lock
+      fs.unlinkSync(LOCKFILE);
+    }
+  }
+  fs.writeFileSync(LOCKFILE, String(process.pid));
+} catch (e) {
+  console.error('[ERROR] Could not create lock file:', e.message);
+}
+process.on('exit', () => { try { fs.unlinkSync(LOCKFILE); } catch (e) {} });
 
-// ============ CONFIGURATION ============
-// Load config from config.json (keeps secrets out of git)
+const FFMPEG = '/opt/homebrew/bin/ffmpeg';
+
+// Load config
 const configPath = path.join(__dirname, 'config.json');
 if (!fs.existsSync(configPath)) {
-  console.error('ERROR: config.json not found! Copy config.example.json to config.json and fill in your settings.');
+  console.error('ERROR: config.json not found!');
   process.exit(1);
 }
 const CONFIG = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-// ============ VPS CONNECTION ============
+// Connections
 let vpsSocket = null;
+let ptzSocket = null;
 let reconnectTimer = null;
+let ptzReconnectTimer = null;
 
 // Per-camera state
 const cameraState = {};
-
-// Initialize state for each camera
 CONFIG.cameras.forEach(cam => {
   cameraState[cam.id] = {
     videoProcess: null,
-    audioProcess: null,
-    videoStats: { sent: 0, avgSize: 0 },
-    audioStats: { sent: 0, avgSize: 0 }
+    videoStarting: false,
+    stats: { sent: 0, avgSize: 0 }
   };
 });
 
-// Packet type markers:
-// Camera 1: 0x00 = video, 0x01 = audio
-// Camera 2: 0x02 = video, 0x03 = audio
+// Video marker bytes
 function getVideoMarker(camId) { return (camId - 1) * 2; }
-function getAudioMarker(camId) { return (camId - 1) * 2 + 1; }
+
+// Kill any existing ffmpeg processes for this camera
+function killExistingFfmpeg(camIp) {
+  try {
+    execSync(`pkill -9 -f "rtsp://${camIp}" 2>/dev/null`, { stdio: 'ignore' });
+  } catch (e) { /* no processes to kill */ }
+}
+
+// Count ffmpeg processes for a camera IP
+function countFfmpegProcesses(camIp) {
+  try {
+    const result = execSync(`pgrep -f "rtsp://${camIp}" 2>/dev/null`, { encoding: 'utf8' });
+    return result.trim().split('\n').filter(p => p).length;
+  } catch (e) { return 0; }
+}
+
+// Kill duplicate ffmpeg processes (keep only the one we're tracking)
+function killDuplicates(cam) {
+  const state = cameraState[cam.id];
+  // Skip if we're already starting a stream (prevents cleanup loop)
+  if (state.videoStarting) return;
+
+  const count = countFfmpegProcesses(cam.ip);
+  // Only act if there are truly duplicates (more than 1 process)
+  // AND we have a tracked process (to avoid killing during normal startup)
+  if (count > 1 && state.videoProcess) {
+    const ourPid = state.videoProcess.pid;
+    console.log(`[CLEANUP] CAM${cam.id} has ${count} ffmpeg processes (ours: ${ourPid}), killing duplicates...`);
+
+    // Kill all except our tracked process
+    try {
+      const result = execSync(`pgrep -f "rtsp://${cam.ip}" 2>/dev/null`, { encoding: 'utf8' });
+      const pids = result.trim().split('\n').filter(p => p && parseInt(p) !== ourPid);
+      pids.forEach(pid => {
+        try { process.kill(parseInt(pid), 'SIGKILL'); } catch (e) {}
+      });
+      if (pids.length > 0) console.log(`[CLEANUP] Killed duplicate PIDs: ${pids.join(', ')}`);
+    } catch (e) {}
+  }
+}
 
 function connectToVPS() {
   if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) return;
@@ -57,428 +107,366 @@ function connectToVPS() {
   try {
     vpsSocket = new WebSocket(CONFIG.vps.wsUrl);
   } catch (err) {
-    console.error('[VPS] Connection error:', err.message);
+    console.error('[VPS] Error:', err.message);
     scheduleReconnect();
     return;
   }
 
   vpsSocket.on('open', () => {
     console.log('[VPS] Connected!');
+    if (vpsSocket._socket) vpsSocket._socket.setNoDelay(true);
 
-    // Announce as camera relay with all cameras
     vpsSocket.send(JSON.stringify({
       type: 'camera_hello',
       cameras: CONFIG.cameras.map(c => ({ id: c.id, name: c.name, ip: c.ip }))
     }));
 
-    // Start streaming all cameras (video only for now - audio causes lag with 2 cameras)
+    // Stop any existing streams and start fresh
     CONFIG.cameras.forEach(cam => {
-      startVideoStream(cam);
-      // startAudioStream(cam);  // Disabled - too many RTSP connections cause lag
+      stopVideoStream(cam);
+      killExistingFfmpeg(cam.ip);
     });
+
+    setTimeout(() => {
+      console.log('[VPS] Starting streams...');
+      CONFIG.cameras.forEach(cam => startVideoStream(cam));
+    }, 1000);
   });
 
-  vpsSocket.on('message', async (data) => {
+  vpsSocket.on('message', async (data, isBinary) => {
+    // Ignore binary (old audio packets)
+    if (isBinary || Buffer.isBuffer(data)) return;
+
     try {
       const msg = JSON.parse(data.toString());
 
-      // Handle PTZ commands from VPS (with camera ID)
       if (msg.type === 'cam_ptz') {
-        const camId = msg.camera || 1;
-        const cam = CONFIG.cameras.find(c => c.id === camId);
-        if (cam) {
-          await handlePTZ(cam, msg);
-        }
+        const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
+        if (cam) await handlePTZ(cam, msg);
       }
 
-      // Handle camera settings
       if (msg.type === 'cam_setting') {
-        const camId = msg.camera || 1;
-        const cam = CONFIG.cameras.find(c => c.id === camId);
-        if (cam) {
-          await handleSetting(cam, msg);
-        }
+        const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
+        if (cam) await handleSetting(cam, msg);
       }
 
-      // Handle snapshot request
       if (msg.type === 'cam_snapshot') {
-        const camId = msg.camera || 1;
-        const cam = CONFIG.cameras.find(c => c.id === camId);
-        if (cam) {
-          await sendSnapshot(cam);
-        }
+        const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
+        if (cam) await sendSnapshot(cam);
       }
-
     } catch (err) {
-      console.error('[VPS] Message error:', err.message);
+      // Ignore parse errors from binary data
     }
   });
 
   vpsSocket.on('close', () => {
     console.log('[VPS] Disconnected');
     vpsSocket = null;
-    // Stop all cameras
-    CONFIG.cameras.forEach(cam => {
-      stopVideoStream(cam);
-      stopAudioStream(cam);
-    });
+    CONFIG.cameras.forEach(cam => stopVideoStream(cam));
     scheduleReconnect();
   });
 
-  vpsSocket.on('error', (err) => {
-    console.error('[VPS] Error:', err.message);
-  });
+  vpsSocket.on('error', (err) => console.error('[VPS] Error:', err.message));
 }
 
 function scheduleReconnect() {
   if (reconnectTimer) return;
-  console.log('[VPS] Reconnecting in 5 seconds...');
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connectToVPS();
   }, 5000);
 }
 
-// ============ VIDEO STREAMING VIA FFMPEG ============
-function startVideoStream(cam) {
-  const state = cameraState[cam.id];
-  if (state.videoProcess) {
-    console.log(`[CAM${cam.id}] Video already running`);
+// PTZ priority channel
+function getPtzUrl() {
+  try {
+    const url = new URL(CONFIG.vps.wsUrl);
+    url.port = '3002';
+    return url.toString();
+  } catch (e) {
+    const host = CONFIG.vps.wsUrl.replace('ws://', '').split(':')[0].split('/')[0];
+    return `ws://${host}:3002`;
+  }
+}
+
+function connectToPtzChannel() {
+  if (ptzSocket && ptzSocket.readyState === WebSocket.OPEN) return;
+
+  const ptzUrl = getPtzUrl();
+  console.log('[PTZ] Connecting to', ptzUrl);
+
+  try {
+    ptzSocket = new WebSocket(ptzUrl);
+  } catch (err) {
+    schedulePtzReconnect();
     return;
   }
 
-  const rtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
-  console.log(`[CAM${cam.id}] Starting video stream at ${CONFIG.stream.fps}fps`);
-  console.log(`[CAM${cam.id}] RTSP URL: ${rtspUrl}`);
+  ptzSocket.on('open', () => {
+    console.log('[PTZ] Connected!');
+    if (ptzSocket._socket) ptzSocket._socket.setNoDelay(true);
+    ptzSocket.send(JSON.stringify({
+      type: 'ptz_relay_hello',
+      cameras: CONFIG.cameras.map(c => ({ id: c.id, name: c.name }))
+    }));
+  });
 
-  const quality = Math.round(31 - (CONFIG.stream.quality / 100 * 29));
-  state.videoProcess = spawn(FFMPEG, [
-    '-timeout', '5000000',
+  ptzSocket.on('message', async (data) => {
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === 'cam_ptz') {
+        const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
+        if (cam) await handlePTZ(cam, msg, true);
+      }
+    } catch (err) {}
+  });
+
+  ptzSocket.on('close', () => {
+    ptzSocket = null;
+    schedulePtzReconnect();
+  });
+
+  ptzSocket.on('error', () => {});
+}
+
+function schedulePtzReconnect() {
+  if (ptzReconnectTimer) return;
+  ptzReconnectTimer = setTimeout(() => {
+    ptzReconnectTimer = null;
+    connectToPtzChannel();
+  }, 2000);
+}
+
+// VIDEO STREAMING
+function startVideoStream(cam) {
+  const state = cameraState[cam.id];
+
+  if (state.videoProcess) {
+    console.log(`[CAM${cam.id}] Already running`);
+    return;
+  }
+
+  if (state.videoStarting) {
+    console.log(`[CAM${cam.id}] Already starting`);
+    return;
+  }
+
+  state.videoStarting = true;
+  const rtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
+  console.log(`[CAM${cam.id}] Starting: ${rtspUrl}`);
+
+  // Simple ffmpeg command - no fancy buffers that cause issues
+  const proc = spawn(FFMPEG, [
+    '-rtsp_transport', 'udp',
     '-i', rtspUrl,
     '-vf', `scale=${CONFIG.stream.scale}`,
     '-f', 'image2pipe',
-    '-vcodec', 'mjpeg',
-    '-q:v', String(quality),
-    '-r', String(CONFIG.stream.fps),
+    '-c:v', 'mjpeg',
+    '-q:v', '12',  // Lower quality = less CPU
+    '-r', '15',    // 15fps output
     '-'
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  state.videoProcess = proc;
+  state.videoStarting = false;
+  console.log(`[CAM${cam.id}] Started (pid ${proc.pid})`);
 
   let frameBuffer = Buffer.alloc(0);
   const JPEG_START = Buffer.from([0xFF, 0xD8]);
   const JPEG_END = Buffer.from([0xFF, 0xD9]);
-  const videoMarker = getVideoMarker(cam.id);
+  const marker = getVideoMarker(cam.id);
+  let lastSent = 0;
 
-  state.videoProcess.stdout.on('data', (chunk) => {
+  proc.stdout.on('data', (chunk) => {
     frameBuffer = Buffer.concat([frameBuffer, chunk]);
 
+    // Find last complete frame
+    let frame = null;
     while (true) {
-      const startIdx = frameBuffer.indexOf(JPEG_START);
-      if (startIdx === -1) break;
+      const start = frameBuffer.indexOf(JPEG_START);
+      if (start === -1) break;
+      const end = frameBuffer.indexOf(JPEG_END, start);
+      if (end === -1) break;
+      frame = frameBuffer.slice(start, end + 2);
+      frameBuffer = frameBuffer.slice(end + 2);
+    }
 
-      const endIdx = frameBuffer.indexOf(JPEG_END, startIdx);
-      if (endIdx === -1) break;
+    // Rate limit to ~15fps
+    const now = Date.now();
+    if (frame && (now - lastSent) >= 66) {
+      lastSent = now;
+      state.stats.sent++;
+      state.stats.avgSize = Math.round((state.stats.avgSize * 0.9) + (frame.length * 0.1));
 
-      const frame = frameBuffer.slice(startIdx, endIdx + 2);
-      frameBuffer = frameBuffer.slice(endIdx + 2);
-
-      state.videoStats.sent++;
-      state.videoStats.avgSize = Math.round((state.videoStats.avgSize * 0.9) + (frame.length * 0.1));
-
-      if (CONFIG.stream.useWebSocket && vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        const packet = Buffer.concat([Buffer.from([videoMarker]), frame]);
-        vpsSocket.send(packet);
+      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+        if (vpsSocket.bufferedAmount < 50000) {
+          vpsSocket.send(Buffer.concat([Buffer.from([marker]), frame]));
+        }
       }
     }
 
-    if (frameBuffer.length > 500000) {
+    // Prevent memory bloat
+    if (frameBuffer.length > 100000) {
       frameBuffer = Buffer.alloc(0);
     }
   });
 
-  state.videoProcess.stderr.on('data', (data) => {
+  proc.stderr.on('data', (data) => {
     const msg = data.toString();
-    if (msg.includes('Error') || msg.includes('error')) {
-      console.log(`[CAM${cam.id}-FFMPEG]`, msg.trim());
+    if (msg.includes('Error') || msg.includes('error') || msg.includes('failed')) {
+      console.log(`[CAM${cam.id}]`, msg.trim().substring(0, 100));
     }
   });
 
-  state.videoProcess.on('close', (code) => {
-    console.log(`[CAM${cam.id}] Video exited with code ${code}, will restart in 3 seconds...`);
+  proc.on('close', (code) => {
+    console.log(`[CAM${cam.id}] Exited (${code})`);
     state.videoProcess = null;
+    state.videoStarting = false;
+    // Restart after delay
     setTimeout(() => {
-      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN && !state.videoProcess) {
         startVideoStream(cam);
       }
-    }, 3000);
+    }, 5000);
   });
 
-  state.videoProcess.on('error', (err) => {
-    console.error(`[CAM${cam.id}] Video process error:`, err.message);
+  proc.on('error', (err) => {
+    console.error(`[CAM${cam.id}] Error:`, err.message);
     state.videoProcess = null;
-    setTimeout(() => startVideoStream(cam), 3000);
+    state.videoStarting = false;
   });
 }
 
 function stopVideoStream(cam) {
   const state = cameraState[cam.id];
+  state.videoStarting = false;
   if (state.videoProcess) {
-    console.log(`[CAM${cam.id}] Stopping video...`);
-    state.videoProcess.kill('SIGTERM');
+    console.log(`[CAM${cam.id}] Stopping...`);
+    state.videoProcess.kill('SIGKILL');
     state.videoProcess = null;
   }
 }
 
-// ============ AUDIO STREAMING VIA FFMPEG ============
-function startAudioStream(cam) {
-  const state = cameraState[cam.id];
-  if (state.audioProcess) {
-    console.log(`[CAM${cam.id}] Audio already running`);
-    return;
-  }
-
-  const rtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
-  console.log(`[CAM${cam.id}] Starting audio stream`);
-
-  state.audioProcess = spawn(FFMPEG, [
-    '-timeout', '5000000',
-    '-i', rtspUrl,
-    '-vn',
-    '-acodec', 'libmp3lame',
-    '-ar', '16000',
-    '-ac', '1',
-    '-b:a', '32k',
-    '-f', 'mp3',
-    '-flush_packets', '1',
-    '-'
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  let audioBuffer = Buffer.alloc(0);
-  const CHUNK_SIZE = 2048;
-  const audioMarker = getAudioMarker(cam.id);
-
-  state.audioProcess.stdout.on('data', (chunk) => {
-    audioBuffer = Buffer.concat([audioBuffer, chunk]);
-
-    while (audioBuffer.length >= CHUNK_SIZE) {
-      const audioChunk = audioBuffer.slice(0, CHUNK_SIZE);
-      audioBuffer = audioBuffer.slice(CHUNK_SIZE);
-
-      state.audioStats.sent++;
-      state.audioStats.avgSize = Math.round((state.audioStats.avgSize * 0.9) + (audioChunk.length * 0.1));
-
-      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        const packet = Buffer.concat([Buffer.from([audioMarker]), audioChunk]);
-        vpsSocket.send(packet);
-      }
-    }
-  });
-
-  state.audioProcess.stderr.on('data', (data) => {
-    const msg = data.toString();
-    if (msg.includes('Error') || msg.includes('error')) {
-      console.log(`[CAM${cam.id}-AUDIO]`, msg.trim());
-    }
-  });
-
-  state.audioProcess.on('close', (code) => {
-    console.log(`[CAM${cam.id}] Audio exited with code ${code}`);
-    state.audioProcess = null;
-    setTimeout(() => {
-      if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-        startAudioStream(cam);
-      }
-    }, 3000);
-  });
-
-  state.audioProcess.on('error', (err) => {
-    console.error(`[CAM${cam.id}] Audio process error:`, err.message);
-    state.audioProcess = null;
-  });
-}
-
-function stopAudioStream(cam) {
-  const state = cameraState[cam.id];
-  if (state.audioProcess) {
-    console.log(`[CAM${cam.id}] Stopping audio...`);
-    state.audioProcess.kill('SIGTERM');
-    state.audioProcess = null;
-  }
-}
-
-// ============ ONVIF PTZ CONTROL ============
+// PTZ Control
 function sendOnvif(cam, body, isStop = false) {
   return new Promise((resolve) => {
-    const cleanBody = body.replace(/\s+/g, ' ').trim();
-    const xml = `<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Header><Security xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><UsernameToken><Username>${cam.username}</Username><Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${cam.password}</Password></UsernameToken></Security></s:Header><s:Body>${cleanBody}</s:Body></s:Envelope>`;
+    const xml = `<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Header><Security xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><UsernameToken><Username>${cam.username}</Username><Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${cam.password}</Password></UsernameToken></Security></s:Header><s:Body>${body.replace(/\s+/g, ' ')}</s:Body></s:Envelope>`;
 
-    const curl = spawn(CURL, [
-      '-s',
-      '--connect-timeout', '3',
-      '-X', 'POST',
-      '-H', 'Content-Type: application/soap+xml; charset=utf-8',
-      '-d', xml,
-      `http://${cam.ip}:${cam.onvifPort}/onvif/ptz_service`
-    ]);
-
-    let stdout = '';
-    curl.stdout.on('data', (data) => { stdout += data.toString(); });
-
-    curl.on('close', (code) => {
-      const success = stdout.includes('Response') || code === 52;
-      console.log(`[CAM${cam.id}-ONVIF]`, isStop ? 'STOP' : 'MOVE', success ? 'OK' : 'FAILED');
-      resolve({ success });
+    const req = http.request({
+      hostname: cam.ip,
+      port: cam.onvifPort,
+      path: '/onvif/ptz_service',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/soap+xml', 'Content-Length': Buffer.byteLength(xml) },
+      timeout: 2000
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        console.log(`[CAM${cam.id}]`, isStop ? 'STOP' : 'MOVE', res.statusCode === 200 ? 'OK' : 'FAIL');
+        resolve({ success: res.statusCode === 200 });
+      });
     });
 
-    curl.on('error', (err) => {
-      console.error(`[CAM${cam.id}-ONVIF] Error:`, err.message);
-      resolve({ success: false, error: err.message });
-    });
+    req.on('error', (e) => resolve({ success: false, error: e.message }));
+    req.on('timeout', () => { req.destroy(); resolve({ success: false, error: 'timeout' }); });
+    req.write(xml);
+    req.end();
   });
 }
 
-async function handlePTZ(cam, msg) {
-  console.log(`[CAM${cam.id}-PTZ]`, msg.action);
-
-  let body = '';
-  let isStop = false;
+async function handlePTZ(cam, msg, usePtzSocket = false) {
+  let body = '', isStop = false;
 
   switch (msg.action) {
     case 'move':
-      body = `<tptz:ContinuousMove>
-        <tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken>
-        <tptz:Velocity>
-          <tt:PanTilt x="${msg.pan || 0}" y="${msg.tilt || 0}"/>
-          <tt:Zoom x="${msg.zoom || 0}"/>
-        </tptz:Velocity>
-      </tptz:ContinuousMove>`;
+      body = `<tptz:ContinuousMove><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:Velocity><tt:PanTilt x="${msg.pan||0}" y="${msg.tilt||0}"/><tt:Zoom x="${msg.zoom||0}"/></tptz:Velocity></tptz:ContinuousMove>`;
       break;
-
     case 'stop':
       isStop = true;
-      body = `<tptz:Stop>
-        <tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken>
-        <tptz:PanTilt>true</tptz:PanTilt>
-        <tptz:Zoom>true</tptz:Zoom>
-      </tptz:Stop>`;
+      body = `<tptz:Stop><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:PanTilt>true</tptz:PanTilt><tptz:Zoom>true</tptz:Zoom></tptz:Stop>`;
       break;
-
     case 'goto_preset':
-      body = `<tptz:GotoPreset>
-        <tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken>
-        <tptz:PresetToken>${msg.preset}</tptz:PresetToken>
-      </tptz:GotoPreset>`;
-      break;
-
-    case 'set_preset':
-      body = `<tptz:SetPreset>
-        <tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken>
-        <tptz:PresetName>${msg.name}</tptz:PresetName>
-      </tptz:SetPreset>`;
+      body = `<tptz:GotoPreset><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:PresetToken>${msg.preset}</tptz:PresetToken></tptz:GotoPreset>`;
       break;
   }
 
   if (body) {
     const result = await sendOnvif(cam, body, isStop);
-    if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-      vpsSocket.send(JSON.stringify({ type: 'cam_ptz_result', camera: cam.id, ...result }));
+    const socket = usePtzSocket && ptzSocket?.readyState === WebSocket.OPEN ? ptzSocket : vpsSocket;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'cam_ptz_result', camera: cam.id, ...result }));
     }
-  }
-}
-
-// ============ CAMERA SETTINGS (CGI) ============
-async function sendCgi(cam, path) {
-  try {
-    const url = `http://${cam.username}:${cam.password}@${cam.ip}${path}`;
-    const response = await fetch(url);
-    return { success: response.ok };
-  } catch (err) {
-    return { success: false, error: err.message };
   }
 }
 
 async function handleSetting(cam, msg) {
-  console.log(`[CAM${cam.id}-SETTING]`, msg.setting, msg);
-
-  let result;
-
+  let path = '';
   switch (msg.setting) {
     case 'flip':
-      result = await sendCgi(cam, `/cgi-bin/hi3510/param.cgi?cmd=setimageattr&-flip=${msg.flip ? 1 : 0}&-mirror=${msg.mirror ? 1 : 0}`);
+      path = `/cgi-bin/hi3510/param.cgi?cmd=setimageattr&-flip=${msg.flip?1:0}&-mirror=${msg.mirror?1:0}`;
       break;
-
     case 'nightvision':
-      result = await sendCgi(cam, `/cgi-bin/hi3510/param.cgi?cmd=setinfrared&-infraredstat=${msg.mode}`);
-      break;
-
-    case 'motion':
-      result = await sendCgi(cam, `/cgi-bin/hi3510/param.cgi?cmd=setmdattr&-enable=${msg.enabled ? 1 : 0}&-s=${msg.sensitivity || 5}`);
+      path = `/cgi-bin/hi3510/param.cgi?cmd=setinfrared&-infraredstat=${msg.mode}`;
       break;
   }
-
-  if (result && vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-    vpsSocket.send(JSON.stringify({ type: 'cam_setting_result', camera: cam.id, setting: msg.setting, ...result }));
+  if (path) {
+    try {
+      await fetch(`http://${cam.username}:${cam.password}@${cam.ip}${path}`);
+    } catch (e) {}
   }
 }
 
 async function sendSnapshot(cam) {
-  console.log(`[CAM${cam.id}] Capturing snapshot...`);
-
   try {
-    const url = `http://${cam.username}:${cam.password}@${cam.ip}/tmpfs/auto.jpg`;
-    const response = await fetch(url);
-    const buffer = await response.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
-
-    if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
-      vpsSocket.send(JSON.stringify({
-        type: 'cam_snapshot_data',
-        camera: cam.id,
-        data: base64
-      }));
+    const res = await fetch(`http://${cam.username}:${cam.password}@${cam.ip}/tmpfs/auto.jpg`);
+    const buf = await res.arrayBuffer();
+    const base64 = Buffer.from(buf).toString('base64');
+    if (vpsSocket?.readyState === WebSocket.OPEN) {
+      vpsSocket.send(JSON.stringify({ type: 'cam_snapshot_data', camera: cam.id, data: base64 }));
     }
-    console.log(`[CAM${cam.id}] Snapshot sent`, Math.round(base64.length / 1024), 'KB');
-  } catch (err) {
-    console.error(`[CAM${cam.id}] Snapshot error:`, err.message);
-  }
+  } catch (e) {}
 }
 
-// ============ STARTUP ============
-console.log('========================================');
-console.log('  Multi-Camera Relay');
-console.log('========================================');
-CONFIG.cameras.forEach(cam => {
-  console.log(`Camera ${cam.id} (${cam.name}): ${cam.ip}`);
-});
+// STARTUP
+console.log('=================================');
+console.log('  Camera Relay (Video Only)');
+console.log('=================================');
+CONFIG.cameras.forEach(c => console.log(`CAM${c.id}: ${c.ip}`));
 console.log('VPS:', CONFIG.vps.wsUrl);
-console.log('========================================');
+console.log('=================================');
+
+// Kill any existing ffmpeg processes first
+CONFIG.cameras.forEach(cam => killExistingFfmpeg(cam.ip));
 
 connectToVPS();
+connectToPtzChannel();
 
-// Watchdog - check every 10 seconds if streaming should be running
+// Watchdog - restart dead streams
 setInterval(() => {
-  if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+  if (vpsSocket?.readyState === WebSocket.OPEN) {
     CONFIG.cameras.forEach(cam => {
       const state = cameraState[cam.id];
-      if (!state.videoProcess) {
-        console.log(`[WATCHDOG] CAM${cam.id} video not running - restarting...`);
+      if (!state.videoProcess && !state.videoStarting) {
+        console.log(`[WATCHDOG] CAM${cam.id} restarting...`);
         startVideoStream(cam);
       }
-      // Audio disabled for dual camera - causes lag
-      // if (!state.audioProcess) {
-      //   console.log(`[WATCHDOG] CAM${cam.id} audio not running - restarting...`);
-      //   startAudioStream(cam);
-      // }
     });
   }
-}, 10000);
+}, 15000);
 
-// Log stats every 10 seconds
+// Process cleanup - kill duplicates every 5 seconds
+setInterval(() => {
+  CONFIG.cameras.forEach(cam => killDuplicates(cam));
+}, 5000);
+
+// Stats
 setInterval(() => {
   CONFIG.cameras.forEach(cam => {
-    const state = cameraState[cam.id];
-    if (state.videoStats.sent > 0) {
-      console.log(`[CAM${cam.id}] FPS: ${Math.round(state.videoStats.sent/10)}, Avg: ${Math.round(state.videoStats.avgSize/1024)}KB`);
-      state.videoStats.sent = 0;
+    const s = cameraState[cam.id].stats;
+    if (s.sent > 0) {
+      console.log(`[CAM${cam.id}] ${Math.round(s.sent/10)}fps ${Math.round(s.avgSize/1024)}KB`);
+      s.sent = 0;
     }
   });
 }, 10000);
@@ -486,10 +474,8 @@ setInterval(() => {
 // Cleanup
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
-  CONFIG.cameras.forEach(cam => {
-    stopVideoStream(cam);
-    stopAudioStream(cam);
-  });
-  if (vpsSocket) vpsSocket.close();
+  CONFIG.cameras.forEach(cam => stopVideoStream(cam));
+  vpsSocket?.close();
+  ptzSocket?.close();
   process.exit(0);
 });

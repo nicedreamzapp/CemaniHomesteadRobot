@@ -1,6 +1,6 @@
 /*
- * Cemani Robot Controller v3.0.3
- * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket
+ * Cemani Robot Controller v3.0.4
+ * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket (SSL)
  * Upload via Arduino IDE with Bluepad32 board package
  *
  * SETUP: Copy credentials.h.example to credentials.h and add your WiFi passwords
@@ -51,7 +51,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.3");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.4");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -94,7 +94,7 @@ void setup() {
     Serial.println("\n[WiFi] Failed - controller still works!");
   }
 
-  webSocket.begin("robot.marijuanaunion.com", 80, "/");
+  webSocket.beginSSL("robot.marijuanaunion.com", 443, "/");
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(5000);
   webSocket.enableHeartbeat(15000, 3000, 2);
@@ -233,7 +233,7 @@ void handleGamepad() {
 void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.3\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.4\",\"wifi\":\"" +
                      WiFi.SSID() + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +

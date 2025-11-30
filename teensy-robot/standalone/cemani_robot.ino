@@ -358,13 +358,13 @@ void update_firmware(Stream *in, Stream *out,
 #define INVERT_DRIVER_2 false
 
 #define MAX_SPEED_RPM 150
-#define MAX_TURN_RPM 35
+#define MAX_TURN_RPM 20          // Was 35 - slower turns to avoid skid
 
 #define ACCEL_RATE_NORMAL 10
-#define ACCEL_RATE_TURN 4
+#define ACCEL_RATE_TURN 2        // Was 4 - slower software ramp for turns
 
 #define DRIVER_ACCEL_NORMAL 300
-#define DRIVER_ACCEL_TURN 800
+#define DRIVER_ACCEL_TURN 1200   // Was 800 - slower hardware accel for turns (higher=slower)
 
 #define TORQUE_NORMAL 1000
 #define TORQUE_TURN 200

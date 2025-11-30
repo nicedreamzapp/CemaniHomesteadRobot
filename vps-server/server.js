@@ -41,55 +41,130 @@ let cameraStatus = {
   streaming: false
 };
 
+// Per-camera streaming status with timeout detection
+const perCameraStatus = {
+  1: { streaming: false, lastFrame: 0 },
+  2: { streaming: false, lastFrame: 0 }
+};
+const CAMERA_TIMEOUT_MS = 3000; // Mark as not streaming if no frame for 3 seconds
+
 // HLS output directory
 const HLS_DIR = "/opt/robot-server/public/hls";
 if (!fs.existsSync(HLS_DIR)) fs.mkdirSync(HLS_DIR, { recursive: true });
 
-// ============ CAMERA STREAM SERVER (WebSocket-based, resize-safe) ============
-// Receives frames from Mac relay via main WS, broadcasts to browser clients via dedicated WS
-let currentFrame = null;
-let browserCamClients = new Set();
-
-const streamServer = http.createServer((req, res) => {
+// ============ PRIORITY PTZ CONTROL SERVER (Port 3002) ============
+// Separate WebSocket for PTZ commands - bypasses video traffic completely
+const ptzServer = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Camera stream server - connect via WebSocket at /cam1/ws');
+  res.end('PTZ Control Server - Priority channel for camera control');
 });
+const ptzWss = new WebSocket.Server({ server: ptzServer });
 
-// WebSocket server for browser camera clients
-const camWss = new WebSocket.Server({ server: streamServer, path: '/cam1/ws' });
+// Track PTZ relay connection (from Mac) and browser PTZ clients
+let ptzRelaySocket = null;
+let browserPtzClients = new Set();
 
-camWss.on('connection', (ws) => {
-  console.log('[CAM-WS] Browser connected');
-  browserCamClients.add(ws);
+ptzWss.on('connection', (ws, req) => {
+  console.log('[PTZ-WS] Client connected from', req.socket.remoteAddress);
 
-  // Send current frame immediately if available
-  if (currentFrame) {
-    try { ws.send(currentFrame); } catch(e) {}
+  // Enable TCP_NODELAY for instant PTZ response
+  if (req.socket) {
+    req.socket.setNoDelay(true);
   }
 
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+
+  ws.on('message', (msg) => {
+    ws.isAlive = true;
+    try {
+      const data = JSON.parse(msg.toString());
+
+      // Mac relay announcing itself on PTZ channel
+      if (data.type === 'ptz_relay_hello') {
+        ptzRelaySocket = ws;
+        ws.isPtzRelay = true;
+        console.log('[PTZ-WS] Mac PTZ relay connected');
+        // Notify browsers
+        browserPtzClients.forEach(c => {
+          if (c.readyState === WebSocket.OPEN) {
+            c.send(JSON.stringify({ type: 'ptz_relay_status', connected: true }));
+          }
+        });
+        return;
+      }
+
+      // Browser announcing itself
+      if (data.type === 'ptz_browser_hello') {
+        ws.isBrowser = true;
+        browserPtzClients.add(ws);
+        console.log('[PTZ-WS] Browser connected, total:', browserPtzClients.size);
+        ws.send(JSON.stringify({ type: 'ptz_relay_status', connected: !!ptzRelaySocket }));
+        return;
+      }
+
+      // PTZ commands from browser -> forward to Mac relay INSTANTLY
+      if (data.type === 'cam_ptz' && ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+        ptzRelaySocket.send(JSON.stringify(data));
+        console.log('[PTZ-WS] CMD:', data.action, 'cam:', data.camera || 1);
+        return;
+      }
+
+      // PTZ results from Mac relay -> forward to browsers
+      if (data.type === 'cam_ptz_result' && ws.isPtzRelay) {
+        browserPtzClients.forEach(c => {
+          if (c.readyState === WebSocket.OPEN) {
+            c.send(JSON.stringify(data));
+          }
+        });
+        return;
+      }
+
+    } catch (err) {
+      console.error('[PTZ-WS] Error:', err.message);
+    }
+  });
+
   ws.on('close', () => {
-    console.log('[CAM-WS] Browser disconnected');
-    browserCamClients.delete(ws);
+    if (ws.isPtzRelay) {
+      ptzRelaySocket = null;
+      console.log('[PTZ-WS] Mac PTZ relay disconnected');
+      browserPtzClients.forEach(c => {
+        if (c.readyState === WebSocket.OPEN) {
+          c.send(JSON.stringify({ type: 'ptz_relay_status', connected: false }));
+        }
+      });
+    }
+    if (ws.isBrowser) {
+      browserPtzClients.delete(ws);
+      console.log('[PTZ-WS] Browser disconnected, total:', browserPtzClients.size);
+    }
   });
 
   ws.on('error', () => {
-    browserCamClients.delete(ws);
+    browserPtzClients.delete(ws);
   });
 });
 
-// Broadcast frame to all browser clients
-function broadcastFrame(frame) {
-  currentFrame = frame;
-  browserCamClients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      try { client.send(frame); } catch(e) { browserCamClients.delete(client); }
+// PTZ keepalive - faster interval for responsive control
+setInterval(() => {
+  ptzWss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      if (ws.isPtzRelay) ptzRelaySocket = null;
+      browserPtzClients.delete(ws);
+      return ws.terminate();
     }
+    ws.isAlive = false;
+    ws.ping();
   });
-}
+}, 10000);  // 10 second ping for PTZ (faster than main)
 
-streamServer.listen(9999, '0.0.0.0', () => {
-  console.log('[STREAM] Camera WebSocket server listening on port 9999');
+ptzServer.listen(3002, '0.0.0.0', () => {
+  console.log('[PTZ-SERVER] Priority PTZ control listening on port 3002');
 });
+
+// NOTE: Port 9999 camera stream server REMOVED - was unused and wasting resources
+// Video now streams through main WebSocket on port 3001
 
 // ============ COMPILE SETUP ============
 const TEMP_DIR = "/opt/robot-server/temp-sketch";
@@ -104,12 +179,38 @@ const PING_INTERVAL = 30000;
 // ============ WEBSOCKET HANDLER ============
 wss.on("connection", (ws, req) => {
   console.log("[WS] Client connected from", req.socket.remoteAddress);
+
+  // Enable TCP_NODELAY for lower latency (disable Nagle's algorithm)
+  if (req.socket) {
+    req.socket.setNoDelay(true);
+  }
+
+  // CRITICAL: Track when this client connected - only send frames AFTER this time
+  ws.connectedAt = Date.now();
+  ws.frameCount = 0;
+
   ws.send(JSON.stringify({type: "status", ...robotStatus, camera: cameraStatus}));
   ws.isAlive = true;
   ws.isBrowser = true;  // Assume browser until proven otherwise
   ws.on("pong", () => { ws.isAlive = true; });
 
   ws.on("message", (msg, isBinary) => {
+    // Mark alive on any message - camera sends video constantly
+    ws.isAlive = true;
+
+    // Handle binary talkback audio from browser (0x10 = talkback for cam2)
+    if (isBinary && ws.isBrowser) {
+      const data = Buffer.from(msg);
+      if (data.length > 1 && data[0] === 0x10) {
+        // Forward talkback audio to camera relay
+        if (cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
+          cameraSocket.send(msg);
+          if (Math.random() < 0.05) console.log('[TALKBACK] Forwarding', data.length, 'bytes to relay');
+        }
+        return;
+      }
+    }
+
     // Handle binary frames from camera relay
     // Packet types: Cam1: 0x00=video, 0x01=audio | Cam2: 0x02=video, 0x03=audio
     if (isBinary && ws.isCamera) {
@@ -122,16 +223,28 @@ wss.on("connection", (ws, req) => {
       const isVideo = packetType % 2 === 0;
 
       if (isVideo) {
-        // Video frame
+        // Video frame - track per-camera status
         cameraStatus.streaming = true;
+        const frameTime = Date.now();
+        if (perCameraStatus[cameraId]) {
+          perCameraStatus[cameraId].streaming = true;
+          perCameraStatus[cameraId].lastFrame = frameTime;
+        }
         let count = 0;
+        let dropped = 0;
         wss.clients.forEach(c => {
           if (c !== ws && c.readyState === WebSocket.OPEN && c.isBrowser) {
-            // Send with type marker so browser knows which camera
+            // ZERO BUFFER: If socket has ANY pending data, skip this browser
+            // They'll get the next frame instead - always live, never behind
+            if (c.bufferedAmount > 0) {
+              dropped++;
+              return;
+            }
+            // Send frame
             try { c.send(msg); count++; } catch(e) {}
           }
         });
-        if (Math.random() < 0.02) console.log(`[CAM${cameraId}-VIDEO] Sent`, payload.length, "bytes to", count, "browsers");
+        if (Math.random() < 0.02) console.log(`[CAM${cameraId}-VIDEO] Sent`, payload.length, "bytes to", count, "browsers" + (dropped ? `, dropped ${dropped}` : ''));
       } else {
         // Audio chunk
         let count = 0;
@@ -198,6 +311,7 @@ wss.on("connection", (ws, req) => {
       if(data.type === "get_status") {
         ws.isBrowser = true;  // Mark as browser client
         ws.send(JSON.stringify({type:"status", ...robotStatus, camera: cameraStatus}));
+        ws.send(JSON.stringify({type:"camera_streams", cameras: perCameraStatus}));
       }
 
       // Handle audio mute toggle from browser
@@ -248,6 +362,12 @@ wss.on("connection", (ws, req) => {
         cameraSocket.send(JSON.stringify(data));
       }
 
+      // Forward talkback start/stop to relay
+      if((data.type === "talkback_start" || data.type === "talkback_stop") && cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
+        cameraSocket.send(JSON.stringify(data));
+        console.log('[TALKBACK]', data.type, 'camera:', data.camera);
+      }
+
     } catch (err) {
       console.error("[WS] Error:", err.message);
     }
@@ -257,6 +377,12 @@ wss.on("connection", (ws, req) => {
     if(ws.isRobot) {
       robotSocket = null;
       robotStatus.connected = false;
+      // Clear all status info when disconnected - don't show stale data
+      robotStatus.wifi = "unknown";
+      robotStatus.rssi = 0;
+      robotStatus.ip = "unknown";
+      robotStatus.version = "unknown";
+      robotStatus.uptime = 0;
       broadcast({type:"status", ...robotStatus, camera: cameraStatus});
       console.log("[ROBOT] ESP32 disconnected");
     }
@@ -282,6 +408,24 @@ setInterval(() => {
     ws.ping();
   });
 }, PING_INTERVAL);
+
+// ============ PER-CAMERA STREAMING TIMEOUT CHECK ============
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  for (const camId of [1, 2]) {
+    const cam = perCameraStatus[camId];
+    const wasStreaming = cam.streaming;
+    cam.streaming = (now - cam.lastFrame) < CAMERA_TIMEOUT_MS;
+    if (wasStreaming !== cam.streaming) {
+      changed = true;
+      console.log(`[CAM${camId}] Streaming: ${cam.streaming}`);
+    }
+  }
+  if (changed) {
+    broadcast({type: "camera_streams", cameras: perCameraStatus});
+  }
+}, 1000);
 
 function broadcast(d, skip=null) {
   const msg = JSON.stringify(d);
