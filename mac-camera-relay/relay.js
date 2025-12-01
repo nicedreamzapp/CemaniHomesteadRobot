@@ -9,7 +9,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// SINGLETON: Only allow one instance
+// SINGLETON: Only allow one instance - but be smart about stale locks
 const LOCKFILE = '/tmp/relay.lock';
 try {
   // Check if another instance is running
@@ -17,10 +17,25 @@ try {
     const oldPid = parseInt(fs.readFileSync(LOCKFILE, 'utf8'));
     try {
       process.kill(oldPid, 0); // Test if process exists
-      console.log(`[ERROR] Another relay instance running (PID ${oldPid}). Exiting.`);
-      process.exit(1);
+      // Process exists - check if it's actually a relay.js process
+      const { execSync } = require('child_process');
+      try {
+        const psOutput = execSync(`ps -p ${oldPid} -o command= 2>/dev/null`, { encoding: 'utf8' });
+        if (psOutput.includes('relay.js')) {
+          console.log(`[ERROR] Another relay instance running (PID ${oldPid}). Exiting.`);
+          process.exit(1);
+        } else {
+          // PID exists but it's not a relay - stale lock
+          console.log(`[INFO] Stale lock (PID ${oldPid} is not relay.js), removing...`);
+          fs.unlinkSync(LOCKFILE);
+        }
+      } catch (e) {
+        // ps failed, probably the process is gone
+        fs.unlinkSync(LOCKFILE);
+      }
     } catch (e) {
       // Old process is dead, remove stale lock
+      console.log('[INFO] Removing stale lock file');
       fs.unlinkSync(LOCKFILE);
     }
   }
@@ -29,6 +44,7 @@ try {
   console.error('[ERROR] Could not create lock file:', e.message);
 }
 process.on('exit', () => { try { fs.unlinkSync(LOCKFILE); } catch (e) {} });
+process.on('SIGTERM', () => { try { fs.unlinkSync(LOCKFILE); } catch (e) {} process.exit(0); });
 
 const FFMPEG = '/opt/homebrew/bin/ffmpeg';
 
@@ -51,13 +67,17 @@ const cameraState = {};
 CONFIG.cameras.forEach(cam => {
   cameraState[cam.id] = {
     videoProcess: null,
+    audioProcess: null,
     videoStarting: false,
-    stats: { sent: 0, avgSize: 0 }
+    audioStarting: false,
+    stats: { sent: 0, avgSize: 0 },
+    lastFrameTime: 0  // Track when we last received a frame
   };
 });
 
-// Video marker bytes
+// Packet marker bytes: Cam1: 0x00=video, 0x01=audio | Cam2: 0x02=video, 0x03=audio
 function getVideoMarker(camId) { return (camId - 1) * 2; }
+function getAudioMarker(camId) { return (camId - 1) * 2 + 1; }
 
 // Kill any existing ffmpeg processes for this camera
 function killExistingFfmpeg(camIp) {
@@ -81,13 +101,12 @@ function killDuplicates(cam) {
   if (state.videoStarting) return;
 
   const count = countFfmpegProcesses(cam.ip);
-  // Only act if there are truly duplicates (more than 1 process)
-  // AND we have a tracked process (to avoid killing during normal startup)
+  // We expect 1 combined process per camera now
   if (count > 1 && state.videoProcess) {
     const ourPid = state.videoProcess.pid;
+
     console.log(`[CLEANUP] CAM${cam.id} has ${count} ffmpeg processes (ours: ${ourPid}), killing duplicates...`);
 
-    // Kill all except our tracked process
     try {
       const result = execSync(`pgrep -f "rtsp://${cam.ip}" 2>/dev/null`, { encoding: 'utf8' });
       const pids = result.trim().split('\n').filter(p => p && parseInt(p) !== ourPid);
@@ -124,12 +143,16 @@ function connectToVPS() {
     // Stop any existing streams and start fresh
     CONFIG.cameras.forEach(cam => {
       stopVideoStream(cam);
+      stopAudioStream(cam);
       killExistingFfmpeg(cam.ip);
     });
 
     setTimeout(() => {
       console.log('[VPS] Starting streams...');
-      CONFIG.cameras.forEach(cam => startVideoStream(cam));
+      CONFIG.cameras.forEach(cam => {
+        startVideoStream(cam);
+        startAudioStream(cam);
+      });
     }, 1000);
   });
 
@@ -162,7 +185,10 @@ function connectToVPS() {
   vpsSocket.on('close', () => {
     console.log('[VPS] Disconnected');
     vpsSocket = null;
-    CONFIG.cameras.forEach(cam => stopVideoStream(cam));
+    CONFIG.cameras.forEach(cam => {
+      stopVideoStream(cam);
+      stopAudioStream(cam);
+    });
     scheduleReconnect();
   });
 
@@ -237,7 +263,7 @@ function schedulePtzReconnect() {
   }, 2000);
 }
 
-// VIDEO STREAMING
+// VIDEO STREAMING - cam1 video only, cam2 video+audio
 function startVideoStream(cam) {
   const state = cameraState[cam.id];
 
@@ -253,34 +279,63 @@ function startVideoStream(cam) {
 
   state.videoStarting = true;
   const rtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
-  console.log(`[CAM${cam.id}] Starting: ${rtspUrl}`);
 
-  // Simple ffmpeg command - no fancy buffers that cause issues
-  const proc = spawn(FFMPEG, [
-    '-rtsp_transport', 'udp',
-    '-i', rtspUrl,
-    '-vf', `scale=${CONFIG.stream.scale}`,
-    '-f', 'image2pipe',
-    '-c:v', 'mjpeg',
-    '-q:v', '12',  // Lower quality = less CPU
-    '-r', '15',    // 15fps output
-    '-'
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let proc;
+
+  if (cam.id === 1) {
+    // CAM 1: VIDEO ONLY - no audio
+    console.log(`[CAM${cam.id}] Starting video only: ${rtspUrl}`);
+    proc = spawn(FFMPEG, [
+      '-rtsp_transport', 'udp',
+      '-i', rtspUrl,
+      '-vf', `scale=${CONFIG.stream.scale}`,
+      '-f', 'image2pipe',
+      '-c:v', 'mjpeg',
+      '-q:v', '10',
+      '-r', '12',
+      '-'
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  } else {
+    // CAM 2: VIDEO + AUDIO
+    console.log(`[CAM${cam.id}] Starting video+audio: ${rtspUrl}`);
+    proc = spawn(FFMPEG, [
+      '-rtsp_transport', 'udp',
+      '-i', rtspUrl,
+      // Video output -> stdout
+      '-map', '0:v',
+      '-vf', `scale=${CONFIG.stream.scale}`,
+      '-f', 'image2pipe',
+      '-c:v', 'mjpeg',
+      '-q:v', '10',
+      '-r', '12',
+      'pipe:1',
+      // Audio output -> fd3
+      '-map', '0:a?',
+      '-acodec', 'libmp3lame',
+      '-ar', '22050',
+      '-ac', '1',
+      '-b:a', '32k',
+      '-f', 'mp3',
+      'pipe:3'
+    ], {
+      stdio: ['ignore', 'pipe', 'pipe', 'pipe']
+    });
+  }
 
   state.videoProcess = proc;
   state.videoStarting = false;
   console.log(`[CAM${cam.id}] Started (pid ${proc.pid})`);
 
+  // VIDEO from stdout
   let frameBuffer = Buffer.alloc(0);
   const JPEG_START = Buffer.from([0xFF, 0xD8]);
   const JPEG_END = Buffer.from([0xFF, 0xD9]);
-  const marker = getVideoMarker(cam.id);
-  let lastSent = 0;
+  const videoMarker = getVideoMarker(cam.id);
+  let lastVideoSent = 0;
 
   proc.stdout.on('data', (chunk) => {
     frameBuffer = Buffer.concat([frameBuffer, chunk]);
 
-    // Find last complete frame
     let frame = null;
     while (true) {
       const start = frameBuffer.indexOf(JPEG_START);
@@ -291,25 +346,43 @@ function startVideoStream(cam) {
       frameBuffer = frameBuffer.slice(end + 2);
     }
 
-    // Rate limit to ~15fps
     const now = Date.now();
-    if (frame && (now - lastSent) >= 66) {
-      lastSent = now;
+    if (frame && (now - lastVideoSent) >= 80) {
+      lastVideoSent = now;
       state.stats.sent++;
       state.stats.avgSize = Math.round((state.stats.avgSize * 0.9) + (frame.length * 0.1));
+      state.lastFrameTime = now;  // Track frame receipt for health check
 
       if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
         if (vpsSocket.bufferedAmount < 50000) {
-          vpsSocket.send(Buffer.concat([Buffer.from([marker]), frame]));
+          vpsSocket.send(Buffer.concat([Buffer.from([videoMarker]), frame]));
         }
       }
     }
 
-    // Prevent memory bloat
     if (frameBuffer.length > 100000) {
       frameBuffer = Buffer.alloc(0);
     }
   });
+
+  // AUDIO from fd3 - only for cam2
+  if (cam.id === 2 && proc.stdio[3]) {
+    const audioMarker = getAudioMarker(cam.id);
+    let audioBuffer = Buffer.alloc(0);
+
+    proc.stdio[3].on('data', (chunk) => {
+      audioBuffer = Buffer.concat([audioBuffer, chunk]);
+
+      if (audioBuffer.length >= 600) {
+        if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
+          if (vpsSocket.bufferedAmount < 30000) {
+            vpsSocket.send(Buffer.concat([Buffer.from([audioMarker]), audioBuffer]));
+          }
+        }
+        audioBuffer = Buffer.alloc(0);
+      }
+    });
+  }
 
   proc.stderr.on('data', (data) => {
     const msg = data.toString();
@@ -322,12 +395,11 @@ function startVideoStream(cam) {
     console.log(`[CAM${cam.id}] Exited (${code})`);
     state.videoProcess = null;
     state.videoStarting = false;
-    // Restart after delay
     setTimeout(() => {
       if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN && !state.videoProcess) {
         startVideoStream(cam);
       }
-    }, 5000);
+    }, 3000);
   });
 
   proc.on('error', (err) => {
@@ -347,7 +419,37 @@ function stopVideoStream(cam) {
   }
 }
 
-// PTZ Control
+// No-ops - audio handled in video stream for cam2
+function startAudioStream(cam) {}
+function stopAudioStream(cam) {}
+
+// PTZ Control - Fire and forget for instant response
+function sendOnvifFireAndForget(cam, body, isStop = false) {
+  const xml = `<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Header><Security xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><UsernameToken><Username>${cam.username}</Username><Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${cam.password}</Password></UsernameToken></Security></s:Header><s:Body>${body.replace(/\s+/g, ' ')}</s:Body></s:Envelope>`;
+
+  const req = http.request({
+    hostname: cam.ip,
+    port: cam.onvifPort,
+    path: '/onvif/ptz_service',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/soap+xml', 'Content-Length': Buffer.byteLength(xml) },
+    timeout: 500
+  }, (res) => {
+    // Just log, don't wait for full response
+    console.log(`[CAM${cam.id}]`, isStop ? 'STOP' : 'MOVE', res.statusCode === 200 ? 'OK' : 'FAIL');
+  });
+
+  // Disable Nagle's algorithm for instant send
+  req.on('socket', (socket) => { socket.setNoDelay(true); });
+  req.on('error', () => {});  // Ignore errors for fire-and-forget
+  req.on('timeout', () => { req.destroy(); });
+  req.write(xml);
+  req.end();
+
+  return { success: true };  // Assume success for instant response
+}
+
+// Legacy async version for settings that need response
 function sendOnvif(cam, body, isStop = false) {
   return new Promise((resolve) => {
     const xml = `<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Header><Security xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><UsernameToken><Username>${cam.username}</Username><Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${cam.password}</Password></UsernameToken></Security></s:Header><s:Body>${body.replace(/\s+/g, ' ')}</s:Body></s:Envelope>`;
@@ -358,16 +460,16 @@ function sendOnvif(cam, body, isStop = false) {
       path: '/onvif/ptz_service',
       method: 'POST',
       headers: { 'Content-Type': 'application/soap+xml', 'Content-Length': Buffer.byteLength(xml) },
-      timeout: 2000
+      timeout: 500
     }, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
-        console.log(`[CAM${cam.id}]`, isStop ? 'STOP' : 'MOVE', res.statusCode === 200 ? 'OK' : 'FAIL');
         resolve({ success: res.statusCode === 200 });
       });
     });
 
+    req.on('socket', (socket) => { socket.setNoDelay(true); });
     req.on('error', (e) => resolve({ success: false, error: e.message }));
     req.on('timeout', () => { req.destroy(); resolve({ success: false, error: 'timeout' }); });
     req.write(xml);
@@ -375,7 +477,7 @@ function sendOnvif(cam, body, isStop = false) {
   });
 }
 
-async function handlePTZ(cam, msg, usePtzSocket = false) {
+function handlePTZ(cam, msg, usePtzSocket = false) {
   let body = '', isStop = false;
 
   switch (msg.action) {
@@ -392,7 +494,9 @@ async function handlePTZ(cam, msg, usePtzSocket = false) {
   }
 
   if (body) {
-    const result = await sendOnvif(cam, body, isStop);
+    // Fire and forget - don't wait for camera response
+    const result = sendOnvifFireAndForget(cam, body, isStop);
+    // Send immediate "success" to browser so UI feels instant
     const socket = usePtzSocket && ptzSocket?.readyState === WebSocket.OPEN ? ptzSocket : vpsSocket;
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'cam_ptz_result', camera: cam.id, ...result }));
@@ -430,7 +534,7 @@ async function sendSnapshot(cam) {
 
 // STARTUP
 console.log('=================================');
-console.log('  Camera Relay (Video Only)');
+console.log('  Camera Relay (Video + Audio)');
 console.log('=================================');
 CONFIG.cameras.forEach(c => console.log(`CAM${c.id}: ${c.ip}`));
 console.log('VPS:', CONFIG.vps.wsUrl);
@@ -442,18 +546,32 @@ CONFIG.cameras.forEach(cam => killExistingFfmpeg(cam.ip));
 connectToVPS();
 connectToPtzChannel();
 
-// Watchdog - restart dead streams
+// Watchdog - restart dead or stalled streams
+const STALL_TIMEOUT_MS = 10000;  // Restart if no frames for 10 seconds
 setInterval(() => {
   if (vpsSocket?.readyState === WebSocket.OPEN) {
+    const now = Date.now();
     CONFIG.cameras.forEach(cam => {
       const state = cameraState[cam.id];
+
+      // Restart if no process running
       if (!state.videoProcess && !state.videoStarting) {
-        console.log(`[WATCHDOG] CAM${cam.id} restarting...`);
+        console.log(`[WATCHDOG] CAM${cam.id} not running, restarting...`);
+        killExistingFfmpeg(cam.ip);
         startVideoStream(cam);
+        return;
+      }
+
+      // Restart if process is running but no frames received (camera offline/rebooting)
+      if (state.videoProcess && state.lastFrameTime > 0 && (now - state.lastFrameTime) > STALL_TIMEOUT_MS) {
+        console.log(`[WATCHDOG] CAM${cam.id} stalled (no frames for ${Math.round((now - state.lastFrameTime)/1000)}s), restarting...`);
+        stopVideoStream(cam);
+        killExistingFfmpeg(cam.ip);
+        setTimeout(() => startVideoStream(cam), 1000);
       }
     });
   }
-}, 15000);
+}, 5000);  // Check every 5 seconds
 
 // Process cleanup - kill duplicates every 5 seconds
 setInterval(() => {
@@ -474,7 +592,10 @@ setInterval(() => {
 // Cleanup
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
-  CONFIG.cameras.forEach(cam => stopVideoStream(cam));
+  CONFIG.cameras.forEach(cam => {
+    stopVideoStream(cam);
+    stopAudioStream(cam);
+  });
   vpsSocket?.close();
   ptzSocket?.close();
   process.exit(0);

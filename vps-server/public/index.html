@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -96,8 +97,6 @@ body {
   pointer-events: none;
 }
 .speaker-btn { position: absolute; top: 10px; right: 50px; font-size: 24px; cursor: pointer; opacity: 0.7; transition: all 0.2s; z-index: 10; color: #44ff44; pointer-events: auto; } .speaker-btn:hover { opacity: 1; transform: scale(1.1); } .speaker-btn.muted { opacity: 0.5; color: #ff4444; }
-.mic-btn { position: absolute; top: 10px; right: 90px; font-size: 24px; cursor: pointer; opacity: 0.5; transition: all 0.2s; z-index: 10; color: #888; pointer-events: auto; background: rgba(0,0,0,0.5); border-radius: 50%; padding: 5px; } .mic-btn:hover { opacity: 0.8; transform: scale(1.1); } .mic-btn.active { opacity: 1; color: #44ff44; background: rgba(0,100,0,0.7); animation: pulse-mic 1s infinite; }
-@keyframes pulse-mic { 0%, 100% { box-shadow: 0 0 5px #44ff44; } 50% { box-shadow: 0 0 20px #44ff44, 0 0 30px #44ff44; } }
 .cam-status-badge {
   position: absolute;
   top: 10px;
@@ -111,24 +110,6 @@ body {
   pointer-events: auto;
 }
 .cam-status-badge.live { background: rgba(81,207,102,0.9); }
-.cam-mic-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.6);
-  border: 2px solid rgba(255,255,255,0.3);
-  color: #fff;
-  font-size: 16px;
-  cursor: pointer;
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.cam-mic-btn.active { background: rgba(81,207,102,0.8); border-color: #51cf66; }
 
 /* PTZ D-pad overlay */
 .ptz-overlay {
@@ -172,48 +153,299 @@ body {
   align-items: center;
   gap: 8px;
 }
-.joystick-container {
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(20, 20, 40, 0.7));
-  width: 150px;
-  height: 150px;
-  border-radius: 50%;
+
+/* COMPASS DIAL */
+.compass-container {
   position: relative;
-  border: 3px solid #51cf66;
+  width: 160px;
+  height: 160px;
 }
-.joystick {
-  width: 55px;
-  height: 55px;
-  background: radial-gradient(circle at 30% 30%, #ff8787, #ff6b6b, #e94560);
+.compass-ring {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  position: absolute;
-  top: 47px;
-  left: 47px;
-  cursor: move;
-  border: 3px solid rgba(255, 107, 107, 0.6);
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.8), rgba(20, 30, 50, 0.8));
+  border: 3px solid #00ff88;
+  position: relative;
 }
-.center-mark {
-  width: 14px;
-  height: 14px;
-  background: radial-gradient(circle, #51cf66, #00ff88);
-  border-radius: 50%;
+.compass-dir {
   position: absolute;
-  top: 68px;
-  left: 68px;
-  pointer-events: none;
-}
-.reset-btn {
-  background: radial-gradient(circle, #51cf66, #00ff88);
   width: 36px;
   height: 36px;
+  background: rgba(0, 255, 136, 0.2);
+  border: 2px solid rgba(0, 255, 136, 0.5);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  border: 3px solid #74c0fc;
-  font-size: 16px;
+  font-size: 11px;
   font-weight: bold;
-  color: #0a0a0a;
+  color: #00ff88;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.compass-dir:hover { background: rgba(0, 255, 136, 0.5); transform: scale(1.1); }
+.compass-dir:active { background: #00ff88; color: #000; }
+.compass-dir.n { top: 0px; left: 50%; transform: translateX(-50%); }
+.compass-dir.e { top: 50%; right: 0px; transform: translateY(-50%); }
+.compass-dir.s { bottom: 0px; left: 50%; transform: translateX(-50%); }
+.compass-dir.w { top: 50%; left: 0px; transform: translateY(-50%); }
+.compass-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 50px;
+  background: radial-gradient(circle, #1a1a2e, #0a0a1a);
+  border: 2px solid #51cf66;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+.compass-center-label {
+  font-size: 8px;
+  color: #74c0fc;
+}
+.compass-center-value {
+  font-size: 12px;
+  color: #51cf66;
+  font-weight: bold;
+}
+
+/* DISTANCE BUTTONS */
+.dist-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+}
+.dist-btn {
+  flex: 1;
+  padding: 10px 6px;
+  background: rgba(81, 207, 102, 0.2);
+  border: 2px solid rgba(81, 207, 102, 0.5);
+  border-radius: 8px;
+  font-size: 11px;
+  color: #51cf66;
+  cursor: pointer;
+  text-align: center;
+  font-weight: bold;
+  transition: all 0.15s;
+}
+.dist-btn:hover { background: rgba(81, 207, 102, 0.4); }
+.dist-btn:active { background: #51cf66; color: #000; }
+
+/* COMMAND QUEUE */
+.cmd-queue {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 8px;
+}
+.cmd-queue-label { font-size: 9px; color: #74c0fc; margin-bottom: 4px; }
+.cmd-queue-display {
+  min-height: 24px;
+  background: #0a0a0a;
+  border: 1px solid #00ff88;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: #51cf66;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.cmd-chip {
+  background: rgba(0, 255, 136, 0.2);
+  border: 1px solid #00ff88;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cmd-chip .remove { cursor: pointer; color: #ff6b6b; }
+
+/* QUICK ACTIONS */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  width: 100%;
+  margin-top: 6px;
+}
+.qbtn {
+  background: rgba(0, 255, 136, 0.15);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  border-radius: 6px;
+  padding: 6px 4px;
+  font-size: 9px;
+  color: #00ff88;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.qbtn:hover { background: rgba(0, 255, 136, 0.3); }
+.qbtn:active { background: rgba(0, 255, 136, 0.5); }
+.qbtn.fwd { background: rgba(81, 207, 102, 0.3); }
+.qbtn.back { background: rgba(255, 107, 107, 0.2); border-color: rgba(255, 107, 107, 0.4); color: #ff6b6b; }
+.qbtn.turn { background: rgba(116, 192, 252, 0.2); border-color: rgba(116, 192, 252, 0.4); color: #74c0fc; }
+
+/* EXECUTE CONTROLS */
+.exec-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+.exec-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 11px;
+  cursor: pointer;
+  border: none;
+  text-transform: uppercase;
+}
+.exec-btn.go {
+  background: linear-gradient(135deg, #51cf66, #00ff88);
+  color: #000;
+}
+.exec-btn.stop {
+  background: linear-gradient(135deg, #ff6b6b, #e94560);
+  color: #fff;
+}
+.exec-btn.clear {
+  background: rgba(116, 192, 252, 0.3);
+  color: #74c0fc;
+  border: 1px solid #74c0fc;
+}
+
+/* MOVEMENT STATUS */
+.move-status {
+  width: 100%;
+  text-align: center;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: bold;
+  margin-top: 6px;
+}
+.move-status.idle { background: rgba(116, 192, 252, 0.2); color: #74c0fc; }
+.move-status.moving { background: rgba(81, 207, 102, 0.3); color: #51cf66; animation: pulse 1s infinite; }
+.move-status.error { background: rgba(255, 107, 107, 0.3); color: #ff6b6b; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+/* MINI RADAR MAP */
+.radar-container {
+  width: 100%;
+  height: 140px;
+  background: linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 10, 20, 0.9));
+  border: 2px solid rgba(0, 255, 136, 0.3);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.radar-grid {
+  position: absolute;
+  width: 400%;
+  height: 400%;
+  top: -150%;
+  left: -150%;
+  background-image:
+    linear-gradient(rgba(0, 255, 136, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.2) 1px, transparent 1px);
+  background-size: 20px 20px; /* Each square = 0.5m */
+  transition: transform 0.3s;
+}
+.radar-scale {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 8px;
+  color: rgba(0, 255, 136, 0.6);
+  z-index: 10;
+  background: rgba(0,0,0,0.5);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.radar-label {
+  position: absolute;
+  font-size: 9px;
+  color: rgba(0, 255, 136, 0.7);
+  padding: 2px 4px;
+  z-index: 10;
+  font-weight: bold;
+}
+/* Robot icon - ALWAYS CENTERED, grid moves behind it */
+.radar-robot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  transition: transform 0.3s;
+  z-index: 5;
+}
+.robot-body {
+  width: 18px;
+  height: 22px;
+  background: linear-gradient(to bottom, #51cf66 0%, #51cf66 35%, #2b8a3e 35%, #2b8a3e 100%);
+  border: 2px solid #00ff88;
+  border-radius: 5px 5px 3px 3px;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.6);
+}
+.robot-front {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 10px solid #51cf66;
+  filter: drop-shadow(0 0 4px #00ff88);
+}
+.robot-wheels {
+  position: absolute;
+  bottom: 2px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+.robot-wheel {
+  width: 5px;
+  height: 10px;
+  background: #1a1a2e;
+  border-radius: 2px;
+  border: 1px solid #333;
+}
+/* Center crosshair */
+.radar-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border: 1px dashed rgba(0, 255, 136, 0.3);
+  border-radius: 50%;
+  pointer-events: none;
 }
 .stats {
   display: flex;
@@ -250,6 +482,7 @@ body {
   border-radius: 8px;
   border: 2px solid #00ff88;
   min-height: 150px;
+  max-height: 200px;
 }
 input[type="text"] {
   padding: 8px;
@@ -284,55 +517,198 @@ input[type="text"] {
 h3 { font-size: 13px; color: #e0f7ff; margin-bottom: 6px; }
 
 /* Code editor section */
-.code-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  margin-top: 8px;
-}
-.tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+.code-section { margin-top: 10px; }
+.tabs { display: flex; gap: 5px; margin-bottom: 8px; }
 .tab {
   padding: 6px 12px;
-  background: linear-gradient(135deg, rgba(233, 69, 96, 0.5), rgba(160, 32, 64, 0.5));
-  border: 2px solid #ff6b6b;
-  border-radius: 8px 8px 0 0;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  border-radius: 6px;
   cursor: pointer;
-  font-weight: bold;
   font-size: 10px;
+  color: #e0f7ff;
 }
-.tab.active { background: linear-gradient(135deg, #ff6b6b, #e94560); }
-.editor {
-  flex: 1;
-  background: #0a0a0a;
-  padding: 8px;
-  border: 2px solid #00ff88;
-  border-radius: 0 8px 8px 8px;
-  min-height: 80px;
-}
-textarea {
+.tab:hover { background: rgba(0, 255, 136, 0.2); }
+.tab.active { background: rgba(0, 255, 136, 0.3); border-color: #00ff88; color: #00ff88; }
+.editor textarea {
   width: 100%;
-  height: 100%;
-  background: transparent;
-  border: none;
+  height: 120px;
+  background: #0a0a0a;
   color: #51cf66;
+  border: 2px solid #00ff88;
+  border-radius: 8px;
+  padding: 8px;
   font-family: 'Courier New', monospace;
   font-size: 10px;
-  resize: none;
-  outline: none;
+  resize: vertical;
 }
 .btn {
-  background: linear-gradient(135deg, #ff6b6b, #e94560);
-  border: 2px solid #ff8787;
-  color: #fff;
-  padding: 8px;
+  background: linear-gradient(135deg, #51cf66, #00ff88);
+  color: #0a0a0a;
+  padding: 10px 15px;
   border-radius: 8px;
-  cursor: pointer;
   text-align: center;
   font-weight: bold;
   font-size: 11px;
-  margin-top: 6px;
+  cursor: pointer;
+  margin-top: 8px;
+  border: none;
 }
+.btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+/* ============ RESPONSIVE DESIGN ============ */
+
+/* LARGE SCREENS (>1600px) - Make everything fit without scrolling */
+@media (min-width: 1600px) {
+  .container {
+    grid-template-columns: 1fr 320px 340px;
+    grid-template-rows: 60px 1fr;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+  .cameras-column {
+    flex-direction: row;
+    gap: 15px;
+  }
+  .cam-container {
+    min-height: 200px;
+    max-height: 45vh;
+  }
+  .header {
+    padding: 10px 20px;
+  }
+  h1 { font-size: 20px; }
+}
+
+/* EXTRA LARGE SCREENS (>1920px) - Even more compact */
+@media (min-width: 1920px) {
+  .container {
+    grid-template-columns: 1fr 300px 320px;
+    padding: 10px;
+    gap: 10px;
+  }
+  .cameras-column {
+    padding: 8px;
+  }
+  .cam-container {
+    max-height: 40vh;
+  }
+}
+
+/* TABLET (768px - 1024px) */
+@media (max-width: 1024px) {
+  .container {
+    grid-template-columns: 1fr 240px;
+    grid-template-rows: 60px 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+  .header h1 { font-size: 16px; }
+  .info { gap: 10px; }
+}
+
+/* PHONE (<768px) - Cameras are priority */
+@media (max-width: 768px) {
+  .container {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    padding: 10px;
+    gap: 10px;
+  }
+  .header {
+    flex-wrap: wrap;
+    padding: 10px;
+    gap: 10px;
+  }
+  .header h1 {
+    font-size: 14px;
+    width: 100%;
+    text-align: center;
+  }
+  .status { font-size: 18px; }
+  .info {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .cameras-column {
+    flex: none;
+    padding: 8px;
+  }
+  .cam-container {
+    min-height: 35vh;
+    flex: none;
+  }
+  /* Bigger PTZ buttons for touch */
+  .ptz-overlay {
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(3, 48px);
+    gap: 4px;
+  }
+  .ptz-btn {
+    font-size: 18px;
+  }
+  .speaker-btn {
+    font-size: 32px;
+    top: 8px;
+    right: 8px;
+  }
+  .middle-column {
+    padding: 8px;
+  }
+  .joystick-container {
+    width: 120px;
+    height: 120px;
+  }
+  .joystick {
+    width: 45px;
+    height: 45px;
+    top: 37px;
+    left: 37px;
+  }
+  .center-mark {
+    top: 53px;
+    left: 53px;
+  }
+  .sidebar {
+    display: block;
+    padding: 10px;
+  }
+  /* Hide everything in sidebar except code section on phone */
+  .sidebar h3:not(:last-of-type),
+  .sidebar .sensor-card {
+    display: none;
+  }
+  .sidebar .code-section {
+    display: block;
+  }
+  .serial-section {
+    min-height: 120px;
+  }
+  .serial {
+    min-height: 80px;
+  }
+}
+
+/* SMALL PHONE (<480px) */
+@media (max-width: 480px) {
+  .header h1 { font-size: 12px; }
+  .status { font-size: 14px; }
+  .cam-container {
+    min-height: 30vh;
+  }
+  .ptz-overlay {
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+  }
+  .info-item { display: none; }
+  .info-item:nth-child(1), .info-item:nth-child(2) { display: flex; }
+}
+
 </style>
 </head>
 <body>
@@ -372,7 +748,7 @@ textarea {
         <div id="cam1-video" style="width:100%;height:100%;background:#000;"></div>
       </div>
       <div class="cam-overlay">
-        <div class="cam-status-badge" id="cam1-status">OFFLINE</div><div class="speaker-btn" id="speakerBtn" onclick="toggleMute()" title="Toggle Sound">🔊</div>
+        <div class="cam-status-badge" id="cam1-status">OFFLINE</div>
         <div class="ptz-overlay">
           <div class="ptz-btn empty"></div>
           <div class="ptz-btn" data-ptz="up">▲</div>
@@ -394,7 +770,6 @@ textarea {
       </div>
       <div class="cam-overlay">
         <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
-        <div class="mic-btn" id="micBtn2" onmousedown="startTalkback()" onmouseup="stopTalkback()" onmouseleave="stopTalkback()" title="Hold to Talk">🎤</div>
         <div class="speaker-btn" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">🔊</div>
         <div class="ptz-overlay">
           <div class="ptz-btn empty"></div>
@@ -415,15 +790,64 @@ textarea {
   <div class="middle-column glass">
     <h3>ROBOT CONTROL</h3>
     <div class="robot-controls">
-      <div class="joystick-container">
-        <div class="center-mark"></div>
-        <div class="joystick" id="joystick"></div>
+      <!-- DIRECTION PAD - Tap direction to move that way -->
+      <div class="compass-container">
+        <div class="compass-ring">
+          <div class="compass-dir n" id="dirF">FWD</div>
+          <div class="compass-dir e" id="dirR">R</div>
+          <div class="compass-dir s" id="dirB">BACK</div>
+          <div class="compass-dir w" id="dirL">L</div>
+          <div class="compass-center">
+            <div class="compass-center-label">MOVE</div>
+            <div class="compass-center-value" id="currentDir">--</div>
+          </div>
+        </div>
       </div>
-      <div class="reset-btn" onclick="reset()">R</div>
-      <div class="stats">
-        <div class="stat-line"><span>Max RPM:</span><span class="stat-value" id="maxRpm">0</span></div>
-        <div class="stat-line"><span>Left:</span><span class="stat-value" id="leftRpm">0</span></div>
-        <div class="stat-line"><span>Right:</span><span class="stat-value" id="rightRpm">0</span></div>
+
+      <!-- DISTANCE - How far to move -->
+      <div class="dist-row">
+        <div class="dist-btn" data-dist="0.1">0.1m</div>
+        <div class="dist-btn" data-dist="0.5">0.5m</div>
+        <div class="dist-btn" data-dist="1">1m</div>
+        <div class="dist-btn" data-dist="2">2m</div>
+      </div>
+
+      <!-- COMMAND QUEUE DISPLAY -->
+      <div class="cmd-queue">
+        <div class="cmd-queue-label">COMMAND QUEUE</div>
+        <div class="cmd-queue-display" id="cmdQueueDisplay">
+          <span style="color:#666">No commands queued</span>
+        </div>
+      </div>
+
+      <!-- STATUS -->
+      <div class="move-status idle" id="moveStatus">Tap direction, then distance</div>
+
+      <!-- EXECUTE CONTROLS -->
+      <div class="exec-row">
+        <button class="exec-btn clear" onclick="clearQueue()">CLEAR</button>
+        <button class="exec-btn go" onclick="executeQueue()">GO</button>
+        <button class="exec-btn stop" onclick="emergencyStop()">STOP</button>
+      </div>
+
+      <!-- MINI RADAR MAP -->
+      <div class="radar-container" id="radarMap">
+        <div class="radar-grid" id="radarGrid"></div>
+        <div class="radar-crosshair"></div>
+        <div class="radar-label" style="top:2px;left:50%;transform:translateX(-50%);">N</div>
+        <div class="radar-label" style="bottom:2px;left:50%;transform:translateX(-50%);">S</div>
+        <div class="radar-label" style="left:4px;top:50%;transform:translateY(-50%);">W</div>
+        <div class="radar-label" style="right:4px;top:50%;transform:translateY(-50%);">E</div>
+        <div class="radar-scale">□ = 0.5m</div>
+        <div class="radar-robot" id="radarRobot">
+          <div class="robot-front"></div>
+          <div class="robot-body">
+            <div class="robot-wheels">
+              <div class="robot-wheel"></div>
+              <div class="robot-wheel"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -466,13 +890,14 @@ textarea {
     <div class="code-section">
       <h3>CODE EDITOR</h3>
       <div class="tabs">
-        <div class="tab active" data-tab="teensy">Teensy</div>
-        <div class="tab" data-tab="esp32">ESP32</div>
+        <div class="tab" data-tab="teensy">Teensy</div>
+        <div class="tab active" data-tab="esp32">ESP32</div>
       </div>
       <div class="editor">
-        <textarea id="editor" placeholder="// Code..."></textarea>
+        <textarea id="editor" placeholder="// ESP32 code..."></textarea>
       </div>
       <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
+      <div class="btn" id="flashPrebuiltBtn" style="background:linear-gradient(135deg,#74c0fc,#4da3f0);margin-top:5px;">FLASH PREBUILT</div>
     </div>
   </div>
 </div>
@@ -527,7 +952,6 @@ function connectPtzWs() {
 // Start PTZ connection
 connectPtzWs();
 
-let currentTab = 'teensy';
 let cam1Active = false;
 
 // ============ AUDIO PLAYER (MP3 via MediaSource) ============
@@ -782,8 +1206,14 @@ ws.onmessage = function(e) {
   var d = JSON.parse(e.data);
 
   if(d.type === 'serial') {
-    document.getElementById('serial').innerHTML += d.data + '<br>';
-    document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
+    var serialDiv = document.getElementById('serial');
+    serialDiv.innerHTML += d.data + '<br>';
+    // Keep only last 50 lines to prevent layout changes
+    var lines = serialDiv.innerHTML.split('<br>');
+    if (lines.length > 50) {
+      serialDiv.innerHTML = lines.slice(-50).join('<br>');
+    }
+    serialDiv.scrollTop = serialDiv.scrollHeight;
   }
 
   if(d.type === 'status') {
@@ -848,55 +1278,318 @@ ws.onclose = () => {
   updateCam1Status(false, false);
 };
 
-// ============ JOYSTICK ============
-var joystick = document.getElementById('joystick');
-var isDragging = false;
-var centerX = 75, centerY = 75;
+// ============ NAVIGATION CONTROL ============
+let selectedDir = null; // Which direction user tapped (F/B/L/R)
+let selectedDist = null; // Which distance user tapped
+let commandQueue = []; // Queue of commands: [{dir, dist}, ...]
+let gridOffsetX = 0; // Grid offset in pixels (robot stays centered)
+let gridOffsetY = 0;
+let robotHeading = 0; // Robot's heading in degrees (for radar visualization)
 
-joystick.onmousedown = () => isDragging = true;
-document.onmouseup = function() {
-  if(isDragging) {
-    isDragging = false;
-    joystick.style.left = '47px';
-    joystick.style.top = '47px';
-    ws.send(JSON.stringify({type:'joystick', lx:0, ly:0}));
+// Direction labels for display
+const dirLabels = { F: 'FWD', B: 'BACK', L: 'LEFT', R: 'RIGHT' };
+const PIXELS_PER_METER = 40; // 20px per 0.5m = 40px per meter
+
+// Update display - show queued commands
+function updateDisplay() {
+  document.getElementById('currentDir').textContent = selectedDir ? dirLabels[selectedDir] : '--';
+
+  // Highlight selected direction
+  document.querySelectorAll('.compass-dir').forEach(d => {
+    d.style.background = 'rgba(0, 255, 136, 0.2)';
+    d.style.color = '#00ff88';
+  });
+  if (selectedDir) {
+    const el = document.getElementById('dir' + selectedDir);
+    if (el) {
+      el.style.background = '#00ff88';
+      el.style.color = '#000';
+    }
   }
-};
-document.onmousemove = function(e) {
-  if(!isDragging) return;
-  var rect = joystick.parentElement.getBoundingClientRect();
-  var x = e.clientX - rect.left - centerX;
-  var y = e.clientY - rect.top - centerY;
-  var dist = Math.sqrt(x*x + y*y);
-  if(dist > 47) { x = x/dist*47; y = y/dist*47; }
-  joystick.style.left = (centerX + x - 27) + 'px';
-  joystick.style.top = (centerY + y - 27) + 'px';
-  ws.send(JSON.stringify({type:'joystick', lx:Math.round(x/47*511), ly:Math.round(-y/47*511)}));
-};
+
+  // Highlight selected distance
+  document.querySelectorAll('.dist-btn').forEach(d => {
+    d.style.background = 'rgba(81, 207, 102, 0.2)';
+    d.style.color = '#51cf66';
+  });
+  if (selectedDist) {
+    document.querySelectorAll('.dist-btn').forEach(d => {
+      if (parseFloat(d.dataset.dist) === selectedDist) {
+        d.style.background = '#51cf66';
+        d.style.color = '#000';
+      }
+    });
+  }
+
+  // Update queue display
+  updateQueueDisplay();
+
+  // Update status
+  if (commandQueue.length > 0) {
+    setStatus(commandQueue.length + ' command(s) queued - Press GO', 'idle');
+  } else if (selectedDir && selectedDist) {
+    setStatus(selectedDist + 'm ' + dirLabels[selectedDir] + ' - Tap again to add, or GO', 'idle');
+  } else if (selectedDir) {
+    setStatus('Direction: ' + dirLabels[selectedDir] + ' - Now tap distance', 'idle');
+  } else {
+    setStatus('Tap direction, then distance', 'idle');
+  }
+}
+
+// Update the queue display chips
+function updateQueueDisplay() {
+  const queueDiv = document.getElementById('cmdQueueDisplay');
+  if (!queueDiv) return;
+
+  if (commandQueue.length === 0) {
+    queueDiv.innerHTML = '<span style="color:#666">No commands queued</span>';
+    return;
+  }
+
+  let html = '';
+  commandQueue.forEach((cmd, i) => {
+    html += '<span class="cmd-chip">' + cmd.dist + 'm ' + (dirLabels[cmd.dir] || cmd.dir) +
+            ' <span class="remove" onclick="removeFromQueue(' + i + ')">×</span></span>';
+  });
+  queueDiv.innerHTML = html;
+}
+
+// Remove a command from queue
+function removeFromQueue(index) {
+  commandQueue.splice(index, 1);
+  updateDisplay();
+}
+
+// Update radar - move GRID, robot stays centered and rotates
+function updateRadarRobot() {
+  const robot = document.getElementById('radarRobot');
+  const grid = document.getElementById('radarGrid');
+
+  // Robot rotation based on heading
+  robot.style.transform = `translate(-50%, -50%) rotate(${robotHeading}deg)`;
+
+  // Grid moves opposite to robot movement
+  grid.style.transform = `translate(${-gridOffsetX}px, ${-gridOffsetY}px)`;
+}
+
+// Set status message
+function setStatus(text, type) {
+  const el = document.getElementById('moveStatus');
+  el.textContent = text;
+  el.className = 'move-status ' + (type || 'idle');
+}
+
+// Tap a compass direction
+function selectDirection(dir) {
+  selectedDir = dir;
+  updateDisplay();
+}
+
+// Tap a distance - add command to queue
+function selectDistance(distance) {
+  if (!selectedDir) {
+    setStatus('Tap a direction first!', 'error');
+    return;
+  }
+
+  // Add to queue
+  commandQueue.push({ dir: selectedDir, dist: distance });
+
+  // Log it
+  const serialDiv = document.getElementById('serial');
+  serialDiv.innerHTML += '<span style="color:#74c0fc">[QUEUE] Added ' + distance + 'm ' + dirLabels[selectedDir] + '</span><br>';
+  serialDiv.scrollTop = serialDiv.scrollHeight;
+
+  // Clear selection for next command
+  selectedDir = null;
+  selectedDist = null;
+  updateDisplay();
+}
+
+// GO button - execute ALL queued commands in sequence
+function executeQueue() {
+  if (commandQueue.length === 0) {
+    setStatus('No commands queued!', 'error');
+    return;
+  }
+
+  // Copy queue and clear it
+  const commands = [...commandQueue];
+  commandQueue = [];
+
+  // Log start
+  const serialDiv = document.getElementById('serial');
+  serialDiv.innerHTML += '<span style="color:#51cf66">[GO] Executing ' + commands.length + ' command(s)...</span><br>';
+  serialDiv.scrollTop = serialDiv.scrollHeight;
+
+  // Show executing
+  setStatus('EXECUTING ' + commands.length + ' commands...', 'moving');
+
+  // Execute commands with delay between each
+  let currentIndex = 0;
+
+  function executeNext() {
+    if (currentIndex >= commands.length) {
+      // All done
+      setStatus('Completed ' + commands.length + ' commands', 'idle');
+      selectedDir = null;
+      selectedDist = null;
+      updateDisplay();
+      return;
+    }
+
+    const cmd = commands[currentIndex];
+
+    // Update status
+    setStatus('Moving ' + (currentIndex + 1) + '/' + commands.length + ': ' + cmd.dist + 'm ' + dirLabels[cmd.dir], 'moving');
+
+    // Send command to robot - F/B/L/R direction and distance
+    ws.send(JSON.stringify({
+      type: 'move_command',
+      distance: cmd.dist,
+      direction: cmd.dir  // F, B, L, R
+    }));
+
+    // Log it
+    serialDiv.innerHTML += '<span style="color:#51cf66">[MOVE] ' + cmd.dist + 'm ' + dirLabels[cmd.dir] + '</span><br>';
+    serialDiv.scrollTop = serialDiv.scrollHeight;
+
+    // Update radar visualization based on relative direction
+    const movePixels = cmd.dist * PIXELS_PER_METER;
+    const headingRad = robotHeading * Math.PI / 180;
+
+    if (cmd.dir === 'F') {
+      // Forward - move in direction robot is facing
+      gridOffsetX += Math.sin(headingRad) * movePixels;
+      gridOffsetY -= Math.cos(headingRad) * movePixels;
+    } else if (cmd.dir === 'B') {
+      // Backward - move opposite to facing
+      gridOffsetX -= Math.sin(headingRad) * movePixels;
+      gridOffsetY += Math.cos(headingRad) * movePixels;
+    } else if (cmd.dir === 'L') {
+      // Turn left 90°
+      robotHeading -= 90;
+    } else if (cmd.dir === 'R') {
+      // Turn right 90°
+      robotHeading += 90;
+    }
+    updateRadarRobot();
+
+    // Wait for command to complete, then do next
+    // Estimate time based on command type
+    let totalTime;
+    if (cmd.dir === 'L' || cmd.dir === 'R') {
+      totalTime = 90 * 100 + 500; // 90° turn at 100ms per degree + buffer
+    } else {
+      totalTime = cmd.dist * 100 * 200 + 500; // move time + buffer
+    }
+
+    currentIndex++;
+    setTimeout(executeNext, totalTime);
+  }
+
+  // Start executing
+  executeNext();
+  updateDisplay();
+}
+
+// Emergency stop
+function emergencyStop() {
+  ws.send(JSON.stringify({ type: 'emergency_stop' }));
+  selectedDir = null;
+  selectedDist = null;
+  commandQueue = [];
+  updateDisplay();
+  setStatus('STOPPED', 'error');
+
+  // Log to serial
+  const serialDiv = document.getElementById('serial');
+  serialDiv.innerHTML += '<span style="color:#ff6b6b">[STOP] Emergency stop sent - queue cleared</span><br>';
+  serialDiv.scrollTop = serialDiv.scrollHeight;
+}
+
+// Clear / reset
+function clearQueue() {
+  selectedDir = null;
+  selectedDist = null;
+  commandQueue = [];
+  gridOffsetX = 0;
+  gridOffsetY = 0;
+  robotHeading = 0;
+  updateRadarRobot();
+  updateDisplay();
+  setStatus('Cleared. Tap direction to start.', 'idle');
+
+  // Log to serial
+  const serialDiv = document.getElementById('serial');
+  serialDiv.innerHTML += '<span style="color:#74c0fc">[CLEAR] Queue cleared, radar reset</span><br>';
+  serialDiv.scrollTop = serialDiv.scrollHeight;
+}
+
+// Direction button clicks (F/B/L/R)
+document.getElementById('dirF').onclick = () => selectDirection('F');
+document.getElementById('dirR').onclick = () => selectDirection('R');
+document.getElementById('dirB').onclick = () => selectDirection('B');
+document.getElementById('dirL').onclick = () => selectDirection('L');
+
+// Distance buttons - queue the distance (don't execute yet)
+document.querySelectorAll('.dist-btn').forEach(btn => {
+  btn.onclick = function() {
+    selectDistance(parseFloat(this.dataset.dist));
+  };
+});
+
+// Initialize
+updateDisplay();
+updateRadarRobot();
 
 function reset() {
   ws.send(JSON.stringify({type:'command', data:'reset'}));
   document.getElementById('serial').innerHTML = '[RESET]<br>';
+  clearQueue();
+  robotHeading = 0;
+  simRobotX = 50;
+  simRobotY = 50;
+  updateRobotArrow();
+  updateRadarRobot();
 }
-
-// ============ CODE EDITOR ============
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.onclick = function() {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    currentTab = tab.dataset.tab;
-  };
-});
-
-document.getElementById('compileBtn').onclick = () => {
-  ws.send(JSON.stringify({type:'compile', target:currentTab, code:document.getElementById('editor').value}));
-};
 
 document.getElementById('cmd').onkeypress = function(e) {
   if(e.key === 'Enter') {
     ws.send(JSON.stringify({type:'command', data:e.target.value}));
     e.target.value = '';
   }
+};
+
+// ============ CODE EDITOR (ESP32/Teensy) ============
+let currentTab = 'esp32';
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = function() {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+    currentTab = this.dataset.tab;
+    document.getElementById('editor').placeholder = '// ' + currentTab.toUpperCase() + ' code...';
+  };
+});
+
+document.getElementById('compileBtn').onclick = () => {
+  const code = document.getElementById('editor').value;
+  if (!code.trim()) {
+    alert('Please enter some code first');
+    return;
+  }
+  ws.send(JSON.stringify({type:'compile', target:currentTab, code:code}));
+  document.getElementById('serial').innerHTML += '[COMPILING ' + currentTab.toUpperCase() + '...]<br>';
+  document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
+};
+
+// Flash pre-built hex (already compiled on server)
+document.getElementById('flashPrebuiltBtn').onclick = () => {
+  if (!confirm('Flash pre-built Teensy firmware? Robot will reboot.')) return;
+  ws.send(JSON.stringify({type:'flash_prebuilt'}));
+  document.getElementById('serial').innerHTML += '[FLASHING PREBUILT TEENSY...]<br>';
+  document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
 };
 
 </script>
@@ -944,114 +1637,5 @@ function toggleMute2() {
   }
 }
 
-// ============ TWO-WAY AUDIO (TALKBACK) ============
-let talkbackStream = null;
-let talkbackContext = null;
-let talkbackProcessor = null;
-let talkbackActive = false;
-
-async function startTalkback() {
-  if (talkbackActive) return;
-
-  const micBtn = document.getElementById('micBtn2');
-
-  // Check if we're on HTTPS or localhost (required for microphone)
-  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-    console.error('[TALKBACK] Microphone requires HTTPS. Current protocol:', location.protocol);
-    alert('Two-way audio requires HTTPS. Please access the site via HTTPS to use the microphone feature.\n\nAlternatively, you can test locally at http://localhost');
-    return;
-  }
-
-  try {
-    // Request microphone access
-    talkbackStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        sampleRate: 8000
-      }
-    });
-
-    talkbackActive = true;
-    micBtn.classList.add('active');
-    console.log('[TALKBACK] Microphone active');
-
-    // Create audio context for processing
-    talkbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
-    const source = talkbackContext.createMediaStreamSource(talkbackStream);
-
-    // Create a script processor to capture raw audio data
-    // 4096 samples at 8kHz = 512ms chunks
-    talkbackProcessor = talkbackContext.createScriptProcessor(4096, 1, 1);
-
-    talkbackProcessor.onaudioprocess = function(e) {
-      if (!talkbackActive) return;
-
-      // Get raw PCM data from input
-      const inputData = e.inputBuffer.getChannelData(0);
-
-      // Convert Float32 to Int16 (PCM)
-      const pcmData = new Int16Array(inputData.length);
-      for (let i = 0; i < inputData.length; i++) {
-        // Clamp and scale to 16-bit range
-        const s = Math.max(-1, Math.min(1, inputData[i]));
-        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-      }
-
-      // Send to server - type 0x10 = talkback audio for cam2
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        const packet = new Uint8Array(1 + pcmData.byteLength);
-        packet[0] = 0x10;  // Talkback marker
-        packet.set(new Uint8Array(pcmData.buffer), 1);
-        ws.send(packet.buffer);
-      }
-    };
-
-    // Connect the audio graph
-    source.connect(talkbackProcessor);
-    talkbackProcessor.connect(talkbackContext.destination);
-
-    // Tell server we're starting talkback
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'talkback_start', camera: 2 }));
-    }
-
-  } catch (err) {
-    console.error('[TALKBACK] Failed to get microphone:', err);
-    micBtn.classList.remove('active');
-    alert('Could not access microphone. Please allow microphone permissions.');
-  }
-}
-
-function stopTalkback() {
-  if (!talkbackActive) return;
-
-  talkbackActive = false;
-  const micBtn = document.getElementById('micBtn2');
-  micBtn.classList.remove('active');
-  console.log('[TALKBACK] Microphone stopped');
-
-  // Tell server we're stopping talkback
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'talkback_stop', camera: 2 }));
-  }
-
-  // Clean up audio processing
-  if (talkbackProcessor) {
-    talkbackProcessor.disconnect();
-    talkbackProcessor = null;
-  }
-
-  if (talkbackContext) {
-    talkbackContext.close();
-    talkbackContext = null;
-  }
-
-  // Stop microphone stream
-  if (talkbackStream) {
-    talkbackStream.getTracks().forEach(track => track.stop());
-    talkbackStream = null;
-  }
-}
 </script></body>
 </html>

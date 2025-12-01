@@ -1,7 +1,9 @@
 /*
- * Cemani Robot Controller v3.0.4
+ * Cemani Robot Controller v3.0.6
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket (SSL)
  * Upload via Arduino IDE with Bluepad32 board package
+ *
+ * v3.0.6 - Improved WiFi reconnection (faster detection, force reconnect)
  *
  * SETUP: Copy credentials.h.example to credentials.h and add your WiFi passwords
  */
@@ -24,8 +26,11 @@ GamepadPtr myGamepad = nullptr;
 bool wsConnected = false;
 unsigned long lastWiFiCheck = 0;
 unsigned long lastHeartbeat = 0;
-const unsigned long WIFI_CHECK_INTERVAL = 10000;
-const unsigned long HEARTBEAT_INTERVAL = 30000;
+unsigned long lastWiFiConnected = 0;
+int wifiDropCount = 0;
+const unsigned long WIFI_CHECK_INTERVAL = 2000;   // Check WiFi more often (was 10s)
+const unsigned long HEARTBEAT_INTERVAL = 10000;   // Send telemetry every 10s (was 15s)
+const unsigned long WIFI_RECONNECT_TIMEOUT = 3000; // Force reconnect if down >3s
 
 int16_t plx = 0, ply = 0, prx = 0, pry = 0;
 int16_t plt = 0, prt = 0;
@@ -51,7 +56,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.4");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.6");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -89,7 +94,8 @@ void setup() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("\n[WiFi] Connected to %s\n", WiFi.SSID().c_str());
-    Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[WiFi] IP: %s, RSSI: %d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    lastWiFiConnected = millis();
   } else {
     Serial.println("\n[WiFi] Failed - controller still works!");
   }
@@ -97,7 +103,9 @@ void setup() {
   webSocket.beginSSL("robot.marijuanaunion.com", 443, "/");
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(5000);
-  webSocket.enableHeartbeat(15000, 3000, 2);
+  // Heartbeat: ping every 20s, allow 10s for response, disconnect after 3 missed
+  // More tolerant settings to prevent disconnects during heavy video traffic
+  webSocket.enableHeartbeat(20000, 10000, 3);
 
   Serial.println("[SYSTEM] Ready!");
 }
@@ -108,9 +116,25 @@ void loop() {
 
   unsigned long now = millis();
 
+  // More aggressive WiFi monitoring
   if (now - lastWiFiCheck > WIFI_CHECK_INTERVAL) {
     lastWiFiCheck = now;
-    if (WiFi.status() != WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED) {
+      lastWiFiConnected = now;
+      if (wifiDropCount > 0) {
+        Serial.printf("[WiFi] Reconnected after %d drops! RSSI: %d\n", wifiDropCount, WiFi.RSSI());
+        wifiDropCount = 0;
+      }
+    } else {
+      wifiDropCount++;
+      Serial.printf("[WiFi] Disconnected! Attempt %d...\n", wifiDropCount);
+
+      // Force WiFi reconnect
+      if (now - lastWiFiConnected > WIFI_RECONNECT_TIMEOUT) {
+        Serial.println("[WiFi] Forcing disconnect/reconnect...");
+        WiFi.disconnect(true);
+        delay(100);
+      }
       wifiMulti.run();
     }
   }
@@ -233,7 +257,7 @@ void handleGamepad() {
 void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.4\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.6\",\"wifi\":\"" +
                      WiFi.SSID() + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
@@ -245,8 +269,21 @@ void sendTelemetry() {
 void forwardTeensySerial() {
   while (teensySerial.available()) {
     String line = teensySerial.readStringUntil('\n');
+    line.trim();  // Remove \r and whitespace
     if (line.length() > 0 && wsConnected) {
-      String msg = "{\"type\":\"serial\",\"data\":\"" + line + "\"}";
+      // Escape special characters for JSON safety
+      String escaped = "";
+      for (unsigned int i = 0; i < line.length(); i++) {
+        char c = line.charAt(i);
+        if (c == '\\') escaped += "\\\\";
+        else if (c == '"') escaped += "\\\"";
+        else if (c == '\n') escaped += "\\n";
+        else if (c == '\r') escaped += "\\r";
+        else if (c == '\t') escaped += "\\t";
+        else if (c < 32 || c > 126) escaped += "?";  // Replace other control chars
+        else escaped += c;
+      }
+      String msg = "{\"type\":\"serial\",\"data\":\"" + escaped + "\"}";
       webSocket.sendTXT(msg);
       Serial.println("[TEENSY] " + line);
     }
@@ -345,6 +382,48 @@ void handleFlashMessage(uint8_t* payload, size_t length) {
     if (dataStart > 8 && dataEnd > dataStart) {
       String cmd = msg.substring(dataStart, dataEnd);
       teensySerial.println(cmd);
+    }
+  }
+
+  // ============ DISCRETE MOVEMENT COMMANDS ============
+  // Handle move_command: { type: "move_command", distance: meters, direction: "N/E/S/W" }
+  // Robot calculates optimal movement (forward/backward/turn) on Teensy side
+  if (msg.indexOf("\"type\":\"move_command\"") != -1) {
+    // Parse distance in meters
+    int distStart = msg.indexOf("\"distance\":") + 11;
+    int distEnd = msg.indexOf(",", distStart);
+    if (distEnd == -1) distEnd = msg.indexOf("}", distStart);
+    float distance = msg.substring(distStart, distEnd).toFloat();
+
+    // Parse direction (N/E/S/W)
+    int dirStart = msg.indexOf("\"direction\":\"") + 13;
+    int dirEnd = msg.indexOf("\"", dirStart);
+    String direction = msg.substring(dirStart, dirEnd);
+
+    Serial.printf("[MOVE] Direction: %s, Distance: %.2fm\n", direction.c_str(), distance);
+
+    // Send to Teensy as: MOVEDIR,direction,distance_cm
+    // Teensy will calculate optimal movement (forward/backward/turn)
+    int distanceCm = (int)(distance * 100);
+    String moveCmd = "MOVEDIR," + direction + "," + String(distanceCm);
+    teensySerial.println(moveCmd);
+
+    // Echo to WebSocket for confirmation
+    if (wsConnected) {
+      String confirmMsg = "{\"type\":\"serial\",\"data\":\"Move: " + String(distance) + "m " + direction + "\"}";
+      webSocket.sendTXT(confirmMsg);
+    }
+  }
+
+  // Handle emergency stop
+  if (msg.indexOf("\"type\":\"emergency_stop\"") != -1) {
+    Serial.println("[MOVE] EMERGENCY STOP!");
+    teensySerial.println("STOP");
+    // Also zero out the joystick
+    teensySerial.println("AX,LX,0,0");
+    teensySerial.println("AX,LY,0,0");
+    if (wsConnected) {
+      webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"EMERGENCY STOP\"}");
     }
   }
 }

@@ -3,7 +3,7 @@
 // FlasherX library is embedded - no external dependencies
 // Upload via Command Center (robot.marijuanaunion.com)
 //
-// V2.4 - No Torque Limit + Wireless OTA
+// V2.7 - SAFETY UPDATE: Low speed limits, input noise filtering
 // =====================================================
 
 #include <Arduino.h>
@@ -194,22 +194,34 @@ int flash_write_block(uint32_t addr, char *data, uint32_t count) {
 
 void read_ascii_line(Stream *serial, char *line, int maxbytes) {
   int c = 0, nchar = 0;
-  while (serial->available()) {
-    c = serial->read();
-    if (c == '\n' || c == '\r')
-      continue;
-    else {
-      line[nchar++] = c;
-      break;
+  unsigned long timeout = millis() + 30000;  // 30 second timeout per line
+
+  // Wait for first non-newline character (with timeout)
+  while (millis() < timeout) {
+    if (serial->available()) {
+      c = serial->read();
+      if (c == '\n' || c == '\r')
+        continue;  // Skip leading newlines
+      else {
+        line[nchar++] = c;
+        break;
+      }
     }
   }
-  while (nchar < maxbytes && !(c == '\n' || c == '\r')) {
+
+  // Read rest of line until newline (with timeout)
+  while (nchar < maxbytes && !(c == '\n' || c == '\r') && millis() < timeout) {
     if (serial->available()) {
       c = serial->read();
       line[nchar++] = c;
     }
   }
-  line[nchar-1] = 0;
+
+  // Null terminate (handle edge cases)
+  if (nchar > 0)
+    line[nchar-1] = 0;
+  else
+    line[0] = 0;
 }
 
 int process_hex_record(hex_info_t *hex) {
@@ -357,20 +369,27 @@ void update_firmware(Stream *in, Stream *out,
 #define INVERT_DRIVER_1 true
 #define INVERT_DRIVER_2 false
 
-#define MAX_SPEED_RPM 150
-#define MAX_TURN_RPM 20          // Was 35 - slower turns to avoid skid
+// SAFETY: Max speeds - keep LOW to prevent crashes!
+#define MAX_SPEED_RPM 20         // Was 150 - WAY too fast! Keep slow for safety
+#define MAX_TURN_RPM 5           // Match web UI turn speed - super smooth
 
-#define ACCEL_RATE_NORMAL 10
-#define ACCEL_RATE_TURN 2        // Was 4 - slower software ramp for turns
+// Software acceleration (RPM change per update cycle)
+#define ACCEL_RATE_NORMAL 2      // Was 10 - slower ramp up for safety
+#define ACCEL_RATE_TURN 1        // Was 2 - very slow turn ramp
 
-#define DRIVER_ACCEL_NORMAL 300
-#define DRIVER_ACCEL_TURN 1200   // Was 800 - slower hardware accel for turns (higher=slower)
+// Hardware acceleration (ms to reach target - higher = slower)
+#define DRIVER_ACCEL_NORMAL 500  // Was 300 - slower hardware accel
+#define DRIVER_ACCEL_TURN 1500   // Was 1200 - even slower for turns
 
-#define TORQUE_NORMAL 1000
-#define TORQUE_TURN 200
+#define TORQUE_NORMAL 800        // Was 1000 - reduced torque
+#define TORQUE_TURN 150          // Was 200 - less torque for turns
 
-#define JOYSTICK_DEADZONE 0.1f
+#define JOYSTICK_DEADZONE 0.15f  // Was 0.1 - larger deadzone to filter noise
 #define MOTOR_UPDATE_INTERVAL 50
+
+// Input noise filtering - require consistent readings
+#define INPUT_FILTER_SAMPLES 3   // Require 3 consistent readings before acting
+#define INPUT_CHANGE_THRESHOLD 50 // Ignore changes smaller than this
 
 // ===== REGISTER DEFINITIONS =====
 #define REG_CONTROL_MODE    0x200D
@@ -389,6 +408,9 @@ void update_firmware(Stream *in, Stream *out,
 
 // ===== STATE VARIABLES =====
 static long currentLX = 0, currentLY = 0;
+static long filteredLX = 0, filteredLY = 0;  // Filtered joystick values
+static long pendingLX = 0, pendingLY = 0;    // Pending values for noise filter
+static int lxFilterCount = 0, lyFilterCount = 0;  // Consistent reading counter
 static int16_t lastLeftSpeed = 0, lastRightSpeed = 0;
 static int16_t targetLeftSpeed = 0, targetRightSpeed = 0;
 static uint32_t lastMotorUpdate = 0;
@@ -398,6 +420,43 @@ static bool emergencyStop = false;
 static bool motorsEnabled = false;
 static bool isTurning = false;
 static bool lastTurnState = false;
+
+// ===== INPUT NOISE FILTER =====
+// Returns true if the new value should be accepted
+bool filterInput(long newVal, long& currentVal, long& pendingVal, int& filterCount) {
+  // If new value is close to current, keep current (filter noise)
+  if (abs(newVal - currentVal) < INPUT_CHANGE_THRESHOLD) {
+    filterCount = 0;
+    return false;
+  }
+
+  // If new value matches pending, increment counter
+  if (abs(newVal - pendingVal) < INPUT_CHANGE_THRESHOLD) {
+    filterCount++;
+    if (filterCount >= INPUT_FILTER_SAMPLES) {
+      // Accept the new value after consistent readings
+      currentVal = newVal;
+      filterCount = 0;
+      return true;
+    }
+  } else {
+    // New value is different from pending, start fresh
+    pendingVal = newVal;
+    filterCount = 1;
+  }
+  return false;
+}
+
+// ===== DISCRETE MOVEMENT STATE =====
+static bool discreteMoveActive = false;
+static int discreteTurnDegrees = 0;
+static int discreteDistanceCm = 0;
+static uint32_t discreteMoveStartTime = 0;
+static int discreteMovePhase = 0;  // 0=idle, 1=turning, 2=moving
+static bool discreteMoveBackward = false;  // true if moving backward after turn
+
+// Robot's current facing direction (0=N, 90=E, 180=S, 270=W)
+static int robotFacingAngle = 0;
 
 // ===== MODBUS CRC-16 =====
 uint16_t modbusCRC(const uint8_t* buf, int len) {
@@ -562,21 +621,216 @@ void emergencyStopMotors() {
   motorsEnabled = false;
   lastLeftSpeed = 0;
   lastRightSpeed = 0;
+  discreteMoveActive = false;
+  discreteMovePhase = 0;
+}
+
+// ===== DISCRETE MOVEMENT EXECUTION =====
+// Executes direction-based movement commands from web UI
+// Robot calculates optimal way to reach target direction:
+// - Go forward if target is same as facing
+// - Go backward if target is opposite to facing
+// - Turn 90° then forward/backward for perpendicular directions
+
+// Timing constants (calibrate these!)
+// Timing constants - calibrated for slow speeds
+// At 10 RPM with ~30cm wheel, speed is ~5cm/sec, so 200ms per cm
+// At 5 RPM turn, ~100ms per degree
+#define TURN_MS_PER_DEGREE 100     // ms per degree of rotation at 5 RPM turn speed
+#define MOVE_MS_PER_CM     200     // ms per cm at 10 RPM move speed
+#define DISCRETE_TURN_RPM  5       // RPM for turning in place (slow for safety)
+#define DISCRETE_MOVE_RPM  10      // RPM for forward/backward movement (slow for safety)
+
+// Handle relative direction commands (F/B/L/R)
+// F = Forward, B = Backward, L = Turn Left 90°, R = Turn Right 90°
+void startRelativeMove(char direction, int distanceCm) {
+  // Auto-recover from emergency stop when new move command received from web UI
+  if (emergencyStop || !motorsEnabled) {
+    Serial.println("[MOVE] Auto-recovering from emergency stop...");
+    sendModbusWrite(1, REG_CONTROL_WORD, 0x08);
+    sendModbusWrite(2, REG_CONTROL_WORD, 0x08);
+    delay(50);
+    motorsEnabled = true;
+    emergencyStop = false;
+    Serial.println("[MOVE] Motors re-enabled, ready to move");
+  }
+
+  discreteMoveStartTime = millis();
+  discreteMoveActive = true;
+
+  if (direction == 'F') {
+    // Forward
+    discreteTurnDegrees = 0;
+    discreteDistanceCm = distanceCm;
+    discreteMoveBackward = false;
+    discreteMovePhase = 2;  // Moving
+    setDriverSpeed(1, DISCRETE_MOVE_RPM);
+    setDriverSpeed(2, DISCRETE_MOVE_RPM);
+    Serial.printf("[MOVE] Forward %d cm\n", distanceCm);
+    Serial1.printf("MOVE_STATUS,FORWARD,%d\n", distanceCm);
+  }
+  else if (direction == 'B') {
+    // Backward
+    discreteTurnDegrees = 0;
+    discreteDistanceCm = distanceCm;
+    discreteMoveBackward = true;
+    discreteMovePhase = 2;  // Moving
+    setDriverSpeed(1, -DISCRETE_MOVE_RPM);
+    setDriverSpeed(2, -DISCRETE_MOVE_RPM);
+    Serial.printf("[MOVE] Backward %d cm\n", distanceCm);
+    Serial1.printf("MOVE_STATUS,BACKWARD,%d\n", distanceCm);
+  }
+  else if (direction == 'L') {
+    // Turn left 90°
+    discreteTurnDegrees = -90;
+    discreteDistanceCm = 0;
+    discreteMoveBackward = false;
+    discreteMovePhase = 1;  // Turning
+    setDriverSpeed(1, -DISCRETE_TURN_RPM);
+    setDriverSpeed(2, DISCRETE_TURN_RPM);
+    Serial.println("[MOVE] Turn LEFT 90°");
+    Serial1.println("MOVE_STATUS,TURN_LEFT,90");
+  }
+  else if (direction == 'R') {
+    // Turn right 90°
+    discreteTurnDegrees = 90;
+    discreteDistanceCm = 0;
+    discreteMoveBackward = false;
+    discreteMovePhase = 1;  // Turning
+    setDriverSpeed(1, DISCRETE_TURN_RPM);
+    setDriverSpeed(2, -DISCRETE_TURN_RPM);
+    Serial.println("[MOVE] Turn RIGHT 90°");
+    Serial1.println("MOVE_STATUS,TURN_RIGHT,90");
+  }
+  else {
+    // Unknown direction
+    Serial.printf("[MOVE] Unknown direction: %c\n", direction);
+    discreteMoveActive = false;
+    discreteMovePhase = 0;
+  }
+}
+
+// Legacy compass direction support (N/E/S/W) - converts to relative
+void startDiscreteMoveDirection(char direction, int distanceCm) {
+  // For backwards compatibility, map N/E/S/W to F/B/L/R
+  // Assumes robot is always "facing north" in the UI's mental model
+  char relativeDir = 'F';
+  if (direction == 'N') relativeDir = 'F';
+  else if (direction == 'S') relativeDir = 'B';
+  else if (direction == 'E') relativeDir = 'R';  // Turn right then forward would be complex, just turn
+  else if (direction == 'W') relativeDir = 'L';
+
+  startRelativeMove(relativeDir, distanceCm);
+}
+
+// Legacy function for backward compatibility
+void startDiscreteMove(int turnDegrees, int distanceCm) {
+  if (!motorsEnabled || emergencyStop) {
+    Serial.println("[MOVE] Cannot start - motors not enabled or E-stop active");
+    Serial1.println("MOVE_ERROR,MOTORS_DISABLED");
+    return;
+  }
+
+  discreteTurnDegrees = turnDegrees;
+  discreteDistanceCm = distanceCm;
+  discreteMoveBackward = false;
+  discreteMoveStartTime = millis();
+  discreteMoveActive = true;
+
+  if (turnDegrees != 0) {
+    discreteMovePhase = 1;
+    int turnSpeed = (turnDegrees > 0) ? DISCRETE_TURN_RPM : -DISCRETE_TURN_RPM;
+    setDriverSpeed(1, turnSpeed);
+    setDriverSpeed(2, -turnSpeed);
+    Serial.printf("[MOVE] Turning %d degrees...\n", turnDegrees);
+    Serial1.printf("MOVE_STATUS,TURNING,%d\n", turnDegrees);
+  } else if (distanceCm != 0) {
+    discreteMovePhase = 2;
+    int moveSpeed = DISCRETE_MOVE_RPM;
+    setDriverSpeed(1, moveSpeed);
+    setDriverSpeed(2, moveSpeed);
+    Serial.printf("[MOVE] Moving %d cm...\n", distanceCm);
+    Serial1.printf("MOVE_STATUS,MOVING,%d\n", distanceCm);
+  } else {
+    discreteMoveActive = false;
+    discreteMovePhase = 0;
+    Serial1.println("MOVE_COMPLETE");
+  }
+}
+
+void updateDiscreteMove() {
+  if (!discreteMoveActive) return;
+
+  uint32_t elapsed = millis() - discreteMoveStartTime;
+
+  if (discreteMovePhase == 1) {
+    // Turning phase
+    uint32_t turnDuration = abs(discreteTurnDegrees) * TURN_MS_PER_DEGREE;
+    if (elapsed >= turnDuration) {
+      // Turn complete - update robot facing angle
+      robotFacingAngle += discreteTurnDegrees;
+      // Normalize to 0-359
+      while (robotFacingAngle < 0) robotFacingAngle += 360;
+      while (robotFacingAngle >= 360) robotFacingAngle -= 360;
+
+      Serial.printf("[MOVE] Turn complete (%lu ms), now facing %d°\n", elapsed, robotFacingAngle);
+
+      if (discreteDistanceCm != 0) {
+        // Start move phase
+        discreteMovePhase = 2;
+        discreteMoveStartTime = millis();
+        int moveSpeed = discreteMoveBackward ? -DISCRETE_MOVE_RPM : DISCRETE_MOVE_RPM;
+        setDriverSpeed(1, moveSpeed);
+        setDriverSpeed(2, moveSpeed);
+        Serial.printf("[MOVE] Now moving %d cm %s...\n", discreteDistanceCm,
+                      discreteMoveBackward ? "backward" : "forward");
+        Serial1.printf("MOVE_STATUS,MOVING,%d\n", discreteDistanceCm);
+      } else {
+        // All done
+        setDriverSpeed(1, 0);
+        setDriverSpeed(2, 0);
+        discreteMoveActive = false;
+        discreteMovePhase = 0;
+        Serial.println("[MOVE] Complete!");
+        Serial1.println("MOVE_COMPLETE");
+      }
+    }
+  }
+  else if (discreteMovePhase == 2) {
+    // Moving phase
+    uint32_t moveDuration = abs(discreteDistanceCm) * MOVE_MS_PER_CM;
+    if (elapsed >= moveDuration) {
+      // Move complete - stop motors
+      setDriverSpeed(1, 0);
+      setDriverSpeed(2, 0);
+      discreteMoveActive = false;
+      discreteMovePhase = 0;
+      Serial.printf("[MOVE] Move complete (%lu ms)\n", elapsed);
+      Serial1.println("MOVE_COMPLETE");
+    }
+  }
 }
 
 void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpeed) {
-  float x = -constrain(lx, -511, 511) / 511.0f;
-  float y = -constrain(ly, -511, 511) / 511.0f;
+  // SAFETY: Hard clamp inputs first
+  lx = constrain(lx, -511, 511);
+  ly = constrain(ly, -511, 511);
 
+  float x = -lx / 511.0f;
+  float y = -ly / 511.0f;
+
+  // Larger deadzone to filter noise
   if (abs(x) < JOYSTICK_DEADZONE) x = 0.0f;
   if (abs(y) < JOYSTICK_DEADZONE) y = 0.0f;
 
+  // Detect turning (mostly side-to-side input)
   float turnRatio = (abs(y) < 0.1f) ? 1.0f : abs(x) / (abs(y) + 0.01f);
   isTurning = (abs(x) > 0.2f && turnRatio > 0.8f);
 
   float leftPower = y + x;
   float rightPower = y - x;
 
+  // Normalize power to -1 to 1
   float maxPower = max(abs(leftPower), abs(rightPower));
   if (maxPower > 1.0f) {
     leftPower /= maxPower;
@@ -587,6 +841,10 @@ void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpe
 
   leftSpeed = (int16_t)(leftPower * maxRpm);
   rightSpeed = (int16_t)(rightPower * maxRpm);
+
+  // SAFETY: Final hard clamp - NEVER exceed these values
+  leftSpeed = constrain(leftSpeed, -MAX_SPEED_RPM, MAX_SPEED_RPM);
+  rightSpeed = constrain(rightSpeed, -MAX_SPEED_RPM, MAX_SPEED_RPM);
 }
 
 int16_t rampSpeed(int16_t current, int16_t target) {
@@ -641,7 +899,7 @@ void setup() {
 
   Serial.println("\n========================================");
   Serial.println("  CEMANI HOMESTEAD ROBOT - TANK DRIVE");
-  Serial.println("  V2.4 - STANDALONE BUILD + OTA");
+  Serial.println("  V2.7 - SAFETY: Low speed + noise filter");
   Serial.println("========================================");
   Serial.println("Hardware: Teensy 4.1 + 2x ZLAC8015D");
   Serial.println("Motors: 4 hub motors (2 per driver)");
@@ -687,8 +945,13 @@ void loop() {
 
       if (strncmp(buf, "STATE,CONNECTED", 15) == 0) {
         controllerConnected = true;
-        emergencyStop = false;
-        Serial.println("[CTRL] Controller connected");
+        // Auto-recover from emergency stop when controller reconnects
+        if (emergencyStop || !motorsEnabled) {
+          Serial.println("[CTRL] Controller connected - auto-recovering motors");
+          fullReset();
+        } else {
+          Serial.println("[CTRL] Controller connected");
+        }
       }
       else if (strncmp(buf, "STATE,DISCONNECTED", 18) == 0) {
         controllerConnected = false;
@@ -700,9 +963,31 @@ void loop() {
         long val;
         unsigned long ms;
         if (sscanf(buf, "AX,%2[^,],%ld,%lu", name, &val, &ms) == 3) {
+          // Validate input range - joystick should be -511 to 511
+          if (val < -600 || val > 600) {
+            Serial.printf("[NOISE] Invalid joystick value %ld - ignoring\n", val);
+            continue;
+          }
+
+          // Auto-recover if we get joystick data after being timed out
+          if (!controllerConnected) {
+            Serial.println("[CTRL] Joystick data resumed - auto-recovering");
+            controllerConnected = true;
+            if (emergencyStop || !motorsEnabled) {
+              fullReset();
+            }
+          }
           controllerConnected = true;
-          if (strcmp(name, "LX") == 0) currentLX = val;
-          else if (strcmp(name, "LY") == 0) currentLY = val;
+
+          // Apply noise filter - require consistent readings before accepting
+          if (strcmp(name, "LX") == 0) {
+            filterInput(val, filteredLX, pendingLX, lxFilterCount);
+            currentLX = filteredLX;  // Use filtered value
+          }
+          else if (strcmp(name, "LY") == 0) {
+            filterInput(val, filteredLY, pendingLY, lyFilterCount);
+            currentLY = filteredLY;  // Use filtered value
+          }
         }
       }
       else if (strncmp(buf, "BTN,", 4) == 0) {
@@ -725,13 +1010,59 @@ void loop() {
           }
         }
       }
+      // ===== DISCRETE MOVEMENT COMMANDS FROM WEB UI =====
+      // Format: MOVEDIR,direction,distanceCm (e.g., MOVEDIR,F,50 or MOVEDIR,L,0)
+      // Directions: F=Forward, B=Backward, L=TurnLeft, R=TurnRight
+      else if (strncmp(buf, "MOVEDIR,", 8) == 0) {
+        char dir;
+        int distCm;
+        if (sscanf(buf, "MOVEDIR,%c,%d", &dir, &distCm) == 2) {
+          Serial.printf("[CMD] MOVEDIR dir=%c dist=%dcm\n", dir, distCm);
+          // Cancel joystick control, start discrete move
+          currentLX = 0;
+          currentLY = 0;
+          // Use relative move for F/B/L/R, legacy for N/E/S/W
+          if (dir == 'F' || dir == 'B' || dir == 'L' || dir == 'R') {
+            startRelativeMove(dir, distCm);
+          } else {
+            startDiscreteMoveDirection(dir, distCm);
+          }
+        }
+      }
+      // Legacy format: MOVE,turnDeg,distCm (for backward compatibility)
+      else if (strncmp(buf, "MOVE,", 5) == 0) {
+        int turnDeg, distCm;
+        if (sscanf(buf, "MOVE,%d,%d", &turnDeg, &distCm) == 2) {
+          Serial.printf("[CMD] MOVE turn=%d° dist=%dcm\n", turnDeg, distCm);
+          // Cancel joystick control, start discrete move
+          currentLX = 0;
+          currentLY = 0;
+          startDiscreteMove(turnDeg, distCm);
+        }
+      }
+      else if (strcmp(buf, "STOP") == 0) {
+        Serial.println("[CMD] STOP received");
+        emergencyStopMotors();
+        Serial1.println("STOPPED");
+      }
+      else if (strcmp(buf, "RESUME") == 0) {
+        Serial.println("[CMD] RESUME received - clearing emergency stop");
+        emergencyStop = false;
+        Serial1.println("RESUMED");
+      }
     } else {
       buf[n++] = c;
     }
   }
 
-  // ===== MOTOR CONTROL UPDATE =====
-  if (controllerConnected && !emergencyStop && motorsEnabled) {
+  // ===== DISCRETE MOVEMENT UPDATE =====
+  // Process timed discrete moves from web UI (takes priority over joystick)
+  if (discreteMoveActive && !emergencyStop && motorsEnabled) {
+    updateDiscreteMove();
+  }
+  // ===== JOYSTICK MOTOR CONTROL UPDATE =====
+  // Only run joystick control when no discrete move is active
+  else if (controllerConnected && !emergencyStop && motorsEnabled && !discreteMoveActive) {
     if (now - lastMotorUpdate >= MOTOR_UPDATE_INTERVAL) {
       lastMotorUpdate = now;
 
@@ -766,10 +1097,12 @@ void loop() {
   }
 
   // ===== SAFETY: Controller timeout =====
-  if (now - lastComm > 5000 && controllerConnected) {
+  // Increased from 5s to 10s to handle WiFi reconnection hiccups
+  // ESP32 will reconnect within ~3-5s typically
+  if (now - lastComm > 10000 && controllerConnected) {
     controllerConnected = false;
     emergencyStopMotors();
-    Serial.println("[TIMEOUT] No controller data - E-STOP");
+    Serial.println("[TIMEOUT] No controller data for 10s - E-STOP");
   }
 
   // ===== ECHO DRIVER RESPONSES =====

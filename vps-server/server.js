@@ -277,7 +277,12 @@ wss.on("connection", (ws, req) => {
       }
 
       if(data.type === "telemetry") {
-        if (!ws.isRobot) { robotSocket = ws; ws.isRobot = true; ws.isBrowser = false; }
+        if (!ws.isRobot) {
+          robotSocket = ws;
+          ws.isRobot = true;
+          ws.isBrowser = false;
+          console.log("[ROBOT] ESP32 connected via telemetry");
+        }
         robotStatus.connected = true;
         robotStatus.version = data.version || robotStatus.version;
         robotStatus.wifi = data.wifi || robotStatus.wifi;
@@ -300,8 +305,34 @@ wss.on("connection", (ws, req) => {
         robotSocket.send(JSON.stringify({type:"joystick", lx:data.lx, ly:data.ly}));
       }
 
+      // ============ DISCRETE MOVEMENT COMMANDS ============
+      if(data.type === "move_command") {
+        if (robotSocket && robotSocket.readyState === WebSocket.OPEN) {
+          // Forward discrete movement command to ESP32
+          robotSocket.send(JSON.stringify({
+            type: "move_command",
+            turn: data.turn || 0,
+            distance: data.distance || 0,
+            direction: data.direction || "N"
+          }));
+          console.log("[MOVE] Command:", data.direction, data.distance + "m", "turn:", data.turn + "°");
+        } else {
+          console.log("[MOVE] ERROR: Cannot forward - robotSocket not connected (socket:", robotSocket ? "exists" : "null", ")");
+        }
+      }
+
+      if(data.type === "emergency_stop" && robotSocket && robotSocket.readyState === WebSocket.OPEN) {
+        robotSocket.send(JSON.stringify({ type: "emergency_stop" }));
+        console.log("[MOVE] EMERGENCY STOP");
+      }
+
       if(data.type === "compile") {
         handleCompile(data.target, data.code, ws);
+      }
+
+      // Flash pre-built hex file (no compile needed)
+      if(data.type === "flash_prebuilt") {
+        handleFlashPrebuilt(ws);
       }
 
       if(data.type === "ping") {
@@ -346,10 +377,16 @@ wss.on("connection", (ws, req) => {
         broadcast({type:"cam_snapshot_data", camera: data.camera, data: data.data}, ws);
       }
 
-      // ============ BROWSER CAMERA COMMANDS ============
+      // ============ CAMERA PTZ COMMANDS (from browser or ESP32) ============
       // Forward PTZ commands to camera relay
-      if(data.type === "cam_ptz" && cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
-        cameraSocket.send(JSON.stringify(data));
+      if(data.type === "cam_ptz") {
+        console.log("[PTZ] Received:", data.action, "from", ws.isRobot ? "ESP32" : "browser");
+        if(cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
+          cameraSocket.send(JSON.stringify(data));
+          console.log("[PTZ] Forwarded to camera relay");
+        } else {
+          console.log("[PTZ] ERROR: Camera relay not connected!");
+        }
       }
 
       // Forward camera settings to relay
@@ -374,7 +411,9 @@ wss.on("connection", (ws, req) => {
   });
 
   ws.on("close", () => {
-    if(ws.isRobot) {
+    // Only clear robotSocket if THIS socket is the current robotSocket
+    // Prevents old sockets from clearing new connections
+    if(ws.isRobot && ws === robotSocket) {
       robotSocket = null;
       robotStatus.connected = false;
       // Clear all status info when disconnected - don't show stale data
@@ -385,8 +424,11 @@ wss.on("connection", (ws, req) => {
       robotStatus.uptime = 0;
       broadcast({type:"status", ...robotStatus, camera: cameraStatus});
       console.log("[ROBOT] ESP32 disconnected");
+    } else if (ws.isRobot) {
+      console.log("[ROBOT] Old ESP32 socket closed (replaced by newer connection)");
     }
-    if(ws.isCamera) {
+    // Only clear cameraSocket if THIS socket is the current cameraSocket
+    if(ws.isCamera && ws === cameraSocket) {
       cameraSocket = null;
       cameraStatus.connected = false;
       cameraStatus.streaming = false;
@@ -490,11 +532,59 @@ function handleCompile(target, code, clientWs) {
           clientWs.send(JSON.stringify({ type: "compile_status", message: "Flashing... " + Math.round(lineIndex/hexLines.length*100) + "%" }));
         }
 
-        setTimeout(sendNextLine, 5);
+        // 10ms delay between lines - gives serial buffer time to drain
+        setTimeout(sendNextLine, 10);
       };
       sendNextLine();
-    }, 1000);
+    }, 2000);  // Wait 2s for Teensy to initialize flash buffer
   });
+}
+
+// ============ FLASH PREBUILT HEX ============
+function handleFlashPrebuilt(clientWs) {
+  console.log("[FLASH] Flashing pre-built hex...");
+
+  const hexPath = path.join(BUILD_DIR, "temp-sketch.ino.hex");
+  if (!fs.existsSync(hexPath)) {
+    clientWs.send(JSON.stringify({ type: "compile_error", error: "No pre-built hex found. Upload code first." }));
+    return;
+  }
+
+  if (!robotSocket || robotSocket.readyState !== WebSocket.OPEN) {
+    clientWs.send(JSON.stringify({ type: "compile_error", error: "Robot not connected" }));
+    return;
+  }
+
+  const hexData = fs.readFileSync(hexPath, "utf8");
+  console.log("[FLASH] Hex size:", hexData.length, "bytes");
+
+  clientWs.send(JSON.stringify({ type: "compile_status", message: "Sending pre-built hex to robot..." }));
+  robotSocket.send(JSON.stringify({ type: "flash_mode" }));
+
+  setTimeout(() => {
+    const hexLines = hexData.split("\n").filter(line => line.trim().length > 0);
+    console.log("[FLASH] Sending", hexLines.length, "hex lines");
+
+    let lineIndex = 0;
+    const sendNextLine = () => {
+      if (lineIndex >= hexLines.length) {
+        clientWs.send(JSON.stringify({ type: "compile_success", message: "Flashed " + hexLines.length + " lines!" }));
+        console.log("[FLASH] Complete!");
+        return;
+      }
+
+      robotSocket.send(JSON.stringify({ type: "hex_line", data: hexLines[lineIndex] }));
+      lineIndex++;
+
+      if (lineIndex % 100 === 0) {
+        clientWs.send(JSON.stringify({ type: "compile_status", message: "Flashing... " + Math.round(lineIndex/hexLines.length*100) + "%" }));
+      }
+
+      // 10ms delay between lines (was 5ms) - gives serial buffer time to drain
+      setTimeout(sendNextLine, 10);
+    };
+    sendNextLine();
+  }, 2000);  // Wait 2s for Teensy to initialize flash buffer (was 1s)
 }
 
 // ============ START SERVER ============
