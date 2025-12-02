@@ -462,6 +462,8 @@ Using two robotic arms for human-like bilateral manipulation:
 - ✅ **Phase 6.6:** Wireless programming infrastructure (VPS compilation ready)
 - ✅ **Phase 6.7:** Remote PTZ camera with live video + audio streaming
 - ✅ **Phase 6.8:** Xbox D-pad controls camera pan/tilt
+- ✅ **Phase 6.9:** Dual control system - Xbox joystick + Command Center buttons work simultaneously
+- ✅ **Phase 6.10:** Safety auto-stop on disconnect (V3.5 firmware)
 - 🚧 **Phase 7:** Autonomous predator patrol (Jetson + Lidar + YOLO)
 - 🔜 **Phase 8:** Deterrent system (siren, strobes, bear spray)
 - 🔜 **Phase 9:** OpenArm integration (future)
