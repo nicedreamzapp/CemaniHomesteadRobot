@@ -3,7 +3,7 @@
 // FlasherX library is embedded - no external dependencies
 // Upload via Command Center (robot.marijuanaunion.com)
 //
-// V3.4 - Smoother Command Center moves (15 RPM, 1s accel ramp)
+// V3.5 - Safety: Auto-stop discrete moves if no comms for 5 seconds
 // =====================================================
 
 #include <Arduino.h>
@@ -746,7 +746,20 @@ void startDiscreteMove(int turnDegrees, int distanceCm) {
 void updateDiscreteMove() {
   if (!discreteMoveActive) return;
 
-  uint32_t elapsed = millis() - discreteMoveStartTime;
+  uint32_t now = millis();
+  uint32_t elapsed = now - discreteMoveStartTime;
+
+  // SAFETY: Auto-stop if no communication for 5 seconds during discrete move
+  // This prevents runaway if ESP32 disconnects mid-move
+  if (now - lastComm > 5000) {
+    Serial.println("[SAFETY] No communication during move - AUTO STOPPING!");
+    setDriverSpeed(1, 0);
+    setDriverSpeed(2, 0);
+    discreteMoveActive = false;
+    discreteMovePhase = 0;
+    Serial1.println("MOVE_TIMEOUT");
+    return;
+  }
 
   if (discreteMovePhase == 1) {
     // Turning phase
@@ -898,7 +911,7 @@ void setup() {
 
   Serial.println("\n========================================");
   Serial.println("  CEMANI HOMESTEAD ROBOT - TANK DRIVE");
-  Serial.println("  V3.4 - Smooth Command Center + Xbox");
+  Serial.println("  V3.5 - Safety auto-stop on disconnect");
   Serial.println("========================================");
   Serial.println("Hardware: Teensy 4.1 + 2x ZLAC8015D");
   Serial.println("Motors: 4 hub motors (2 per driver)");
