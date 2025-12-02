@@ -451,6 +451,59 @@ Using two robotic arms for human-like bilateral manipulation:
 **Build Time:** 6 months from zero robotics knowledge
 **Status:** Remote control from anywhere ✅ | Wireless programming ready ✅ | Adding autonomy next 🚧
 
+### What's Working Now (Built From Scratch)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Tank Drive Platform** | ✅ Complete | 4WD hub motors, 65 lbs, pulls loaded carts |
+| **Xbox Controller** | ✅ Complete | Bluetooth via ESP32, exponential curves, perfect feel |
+| **Web Command Center** | ✅ Complete | Control from anywhere, glassmorphism UI |
+| **Dual PTZ Cameras** | ✅ Complete | Robot-mounted, RTSP streaming, ONVIF pan/tilt |
+| **D-pad Camera Control** | ✅ Complete | Xbox D-pad moves cameras while driving |
+| **Audio Streaming** | ✅ Complete | Hear surroundings through browser |
+| **Wireless Programming** | ✅ Complete | Flash Teensy from browser, no USB needed |
+| **Multi-Network Support** | ✅ Complete | Auto-connects: home, work, phone hotspot |
+| **Safety Auto-Stop** | ✅ Complete | Stops if communication lost mid-command |
+| **Real-Time Telemetry** | ✅ Complete | Motor RPM, WiFi signal, debug output |
+
+### Network Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        MULTI-NETWORK OPERATION                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  AT HOME:                                                                │
+│  [Robot] ──WiFi──▶ [Router] ──ethernet──▶ [Mac Mini] ──▶ [VPS]         │
+│     │                  │                     │                          │
+│     │              (192.168.x.x)        (camera relay)                  │
+│     │                                        │                          │
+│     └───── Cameras work ◀────────────────────┘                          │
+│                                                                          │
+│  AT WORK / PHONE HOTSPOT:                                               │
+│  [Robot] ──WiFi──▶ [Any Network] ──internet──▶ [VPS] ──▶ [Browser]     │
+│     │                                                                    │
+│     └───── Motor control works, no camera (cameras at home)             │
+│                                                                          │
+│  FUTURE (with Jetson on robot):                                         │
+│  [Robot+Jetson] ──WiFi──▶ [Any Network] ──▶ [VPS] ──▶ [Browser]        │
+│     │                                                                    │
+│     └───── EVERYTHING works from ANYWHERE                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### WiFi Range Considerations
+
+| Setup | Range | Notes |
+|-------|-------|-------|
+| **Standard router** | ~100-200ft outdoor | Current setup |
+| **+ Outdoor AP** | ~500-1000ft | Recommended for 1-acre coverage |
+| **+ High-gain antenna on ESP32** | +50% range | $12 upgrade |
+| **+ Mesh system** | Full property | Multiple access points |
+
+**1 acre = 208ft × 208ft** - Outdoor AP recommended for full coverage.
+
 ### Phase Completion
 - ✅ **Phase 1:** Tank chassis with 4WD hub motors
 - ✅ **Phase 2:** Xbox controller → ESP32 → Teensy → Motors
@@ -481,14 +534,29 @@ Using two robotic arms for human-like bilateral manipulation:
 | **Teensy 4.1** | 600MHz ARM Cortex-M7 | Main controller & Modbus master |
 | **ESP32** | Bluetooth 5.0 + WiFi | Xbox controller + web interface |
 | **RS-485 Module** | MAX3485 | Modbus RTU communication |
-| **2x 30Ah 12V LiFePO4** | Series = 24V, 60Ah total | Motor power (low CoG mounting) |
+| **2x 30Ah 12V LiFePO4** | Series = 24V, 720Wh total | Motor power (low CoG mounting) |
 | **Buck Converter** | 25W Waterproof Vehicle 24V→5V 5A | Logic power (automotive grade) |
 | **Xbox Controller** | Bluetooth 5.0 | Wireless control |
+| **2x Sricam PTZ Cameras** | 1080p, RTSP, ONVIF | Robot-mounted dual view with pan/tilt |
 | **2020 Extrusion** | Aluminum | Chassis frame |
 | **Aluminum Plates** | Various | Mounting & structure |
 | **4x Shocks** | Electric scooter | Suspension for terrain |
 | **Breakers** | 2x 40A (drivers), 1x 50A (battery bar) | Overcurrent protection |
 | **VPS Server** | Ubuntu 24.04 | Remote monitoring backend |
+| **Mac Mini M4 Pro** | 64GB RAM | Camera relay + future YOLO processing |
+
+### Battery Performance (Real-World Tested)
+
+The 720Wh LiFePO4 pack provides exceptional runtime:
+
+| Mode | Power Draw | Runtime |
+|------|------------|---------|
+| **Idle** (electronics only) | ~5W | ~6 days |
+| **With cameras streaming** | ~15W | ~2-3 days |
+| **Light patrol** (occasional movement) | ~20W avg | ~36 hours |
+| **Active driving** | ~400W | ~2 hours continuous |
+
+*Tested: Robot ran for 1 week with motor testing + 2 days continuous camera streaming with battery to spare.*
 
 ### Phase 7: Autonomous Predator Patrol (In Progress)
 
@@ -515,12 +583,219 @@ Using two robotic arms for human-like bilateral manipulation:
 | **Strobe Lights** | 12V LED bar | Visual deterrent |
 | **Bear Spray Mount** | Servo-triggered | Last resort deterrent |
 
-### Future Additions
+---
+
+## 🧠 Jetson Orin Nano: The Robot's Brain
+
+The **Jetson Orin Nano Super** (67 TOPS) is the cornerstone of future autonomy. Here's why it's essential:
+
+### Why Jetson Over Alternatives
+
+| Feature | Raspberry Pi 5 | Jetson Orin Nano | Mac Mini (Remote) |
+|---------|----------------|------------------|-------------------|
+| **Price** | ~$80 | ~$250 | Already have |
+| **AI Performance** | ~5 FPS YOLO | ~30 FPS YOLO | ~15 FPS YOLO |
+| **Latency to Motors** | ~10ms | ~10ms | ~300-500ms (via internet) |
+| **ROS2 + MoveIt** | Struggles | Smooth | N/A |
+| **Power Draw** | ~5W | ~15W | N/A (at home) |
+| **Portable** | Yes | Yes | No |
+
+**For real-time autonomous reactions, Jetson on the robot is required.** The Mac is perfect for development and remote monitoring, but can't match on-board processing for time-critical decisions.
+
+### Jetson Capabilities
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    JETSON ORIN NANO SUPER                        │
+│                      (Robot's AI Brain)                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  INPUTS:                        PROCESSING:                      │
+│  ├─ 2x Sricam PTZ (RTSP)       ├─ YOLOv8 Object Detection       │
+│  ├─ RPLidar A1 (SLAM)          ├─ ROS2 Navigation Stack         │
+│  ├─ GPS (positioning)          ├─ MoveIt2 (arm planning)        │
+│  ├─ Ultrasonics x4             ├─ Behavior Trees                │
+│  └─ PIR (wake trigger)         └─ Camera Relay to VPS           │
+│                                                                  │
+│  OUTPUTS:                                                        │
+│  ├─ Serial → Teensy (motor commands)                            │
+│  ├─ USB → OpenArm servos (arm control)                          │
+│  ├─ GPIO → Siren/Strobe (deterrents)                            │
+│  └─ WebSocket → VPS (telemetry + video)                         │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Latency Comparison
+
+| Detection Path | Total Latency | Use Case |
+|----------------|---------------|----------|
+| **Jetson on robot** | ~60ms | Autonomous reactions (predator deterrent) |
+| **Mac via LAN** | ~100ms | Local development/testing |
+| **Mac via VPS** | ~300-500ms | Remote monitoring (non-critical) |
+
+### Jetson + Mac Hybrid Architecture
+
+The optimal setup uses **both**:
+
+```
+DEVELOPMENT MODE (at home):
+[Cameras] → [Mac Mini] → YOLO → Display detections
+                ↓
+           Tune models, test algorithms
+
+DEPLOYMENT MODE (in field):
+[Cameras] → [Jetson on robot] → YOLO → Instant reaction
+                    ↓
+              [VPS] → Remote monitoring
+```
+
+---
+
+## 🦾 OpenArm 0.1: Dual-Arm Manipulation
+
+### What is OpenArm?
+
+[OpenArm 0.1](https://youtu.be/IlcA7l_imOk) is an open-source robotic arm designed for hobbyist robotics. Two arms on this platform enable **bilateral manipulation** - coordinated two-handed tasks like a human.
+
+### Why Jetson is Required for OpenArm
+
+| Task | Compute Need | Why |
+|------|--------------|-----|
+| **Inverse Kinematics** | Real-time math | Calculate joint angles from target position |
+| **MoveIt2 Planning** | Path computation | Collision-free arm trajectories |
+| **Visual Servoing** | Camera + AI | Adjust grip based on what camera sees |
+| **Coordinated Motion** | Dual-arm sync | Both arms move together smoothly |
+
+Raspberry Pi **cannot** run MoveIt2 smoothly. Jetson handles it with ease.
+
+### Full Robot Architecture with Arms
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         COMPLETE ROBOT SYSTEM                             │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│                        ┌─────────────────────┐                           │
+│                        │  JETSON ORIN NANO   │                           │
+│                        │   (AI + Planning)   │                           │
+│                        └──────────┬──────────┘                           │
+│                                   │                                       │
+│         ┌─────────────────────────┼─────────────────────────┐            │
+│         │                         │                         │            │
+│         ▼                         ▼                         ▼            │
+│  ┌─────────────┐          ┌─────────────┐          ┌─────────────┐      │
+│  │ LEFT ARM    │          │  TEENSY 4.1 │          │ RIGHT ARM   │      │
+│  │ OpenArm 0.1 │          │   (Motors)  │          │ OpenArm 0.1 │      │
+│  │ 6 servos    │          └──────┬──────┘          │ 6 servos    │      │
+│  └─────────────┘                 │                 └─────────────┘      │
+│                                  │                                       │
+│                           ┌──────┴──────┐                                │
+│                           │ ZLAC8015D   │                                │
+│                           │  Drivers    │                                │
+│                           └──────┬──────┘                                │
+│                                  │                                       │
+│                    ┌─────────────┼─────────────┐                        │
+│                    ▼             ▼             ▼                        │
+│               [Motor FL]   [Motor FR]   [Motor RL]   [Motor RR]         │
+│                                                                           │
+│  SENSORS:              DETERRENTS:           CAMERAS:                    │
+│  ├─ RPLidar A1         ├─ 120dB Siren        ├─ Sricam PTZ #1           │
+│  ├─ GPS NEO-M8N        ├─ Strobe Lights      └─ Sricam PTZ #2           │
+│  ├─ Ultrasonics x4     └─ Bear Spray Mount                              │
+│  └─ Industrial PIR                                                       │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### OpenArm Task Examples
+
+**Chicken Feeding (Bilateral):**
+```
+1. Navigate to feed container (Jetson + GPS/LiDAR)
+2. Left arm: grip container lid, lift
+3. Right arm: reach in with scoop, grab feed
+4. Left arm: stabilize container
+5. Right arm: transfer feed to dispenser
+6. Both arms: return to rest position
+7. Navigate to next station, repeat
+```
+
+**Predator Deterrent (Enhanced):**
+```
+1. YOLO detects: "coyote" (confidence 0.87)
+2. Jetson triggers: siren ON, strobe ON
+3. Motors: advance 0.5m toward threat
+4. BOTH ARMS: raise up and wave (appear larger)
+5. Continue until threat retreats
+6. Log encounter, resume patrol
+```
+
+### OpenArm Hardware Requirements
 
 | Component | Specs | Purpose |
 |-----------|-------|---------|
-| **2x OpenArm 0.1** | 3-5kg lift each | Bilateral manipulation (later phase) |
-| **Train Body** | Cardboard/3D printed | Kid transport mode |
+| **2x OpenArm 0.1 kits** | 6-DOF each | Bilateral manipulation |
+| **12x Servo motors** | High-torque (per OpenArm BOM) | Joint actuation |
+| **2x USB-Serial adapters** | FTDI or similar | Jetson → Arm communication |
+| **Mounting brackets** | Custom 3D printed | Attach arms to chassis |
+| **Additional buck converter** | 5V 10A+ | Power servos from 24V battery |
+
+---
+
+## 🔮 Future Possibilities
+
+### Near-Term (With Current Hardware + Jetson)
+
+| Capability | Description | Dependencies |
+|------------|-------------|--------------|
+| **Predator Detection** | YOLOv8 identifies coyotes, foxes, raccoons | Jetson + cameras |
+| **Autonomous Patrol** | Follow waypoints, return to charge station | Jetson + GPS + LiDAR |
+| **Remote Video Anywhere** | Stream from robot on any network | Jetson as relay |
+| **Deterrent Automation** | Auto-trigger siren/strobe on detection | Jetson GPIO |
+| **Path Memory** | Learn common routes, avoid obstacles | ROS2 SLAM |
+
+### Mid-Term (With OpenArm Added)
+
+| Capability | Description | Dependencies |
+|------------|-------------|--------------|
+| **Chicken Feeding** | Scoop and distribute feed | Dual arms + vision |
+| **Object Retrieval** | Pick up items, bring to location | MoveIt2 + YOLO |
+| **Door/Gate Operation** | Open latches, push doors | Force feedback |
+| **Simple Assembly** | Hold + fasten operations | Coordinated motion |
+| **Gesture Deterrent** | Wave arms to scare predators | Arm kinematics |
+
+### Long-Term (Full Autonomy)
+
+| Capability | Description | Dependencies |
+|------------|-------------|--------------|
+| **Multi-Robot Coordination** | Fleet of robots share patrol duties | ROS2 networking |
+| **Voice Commands** | "Robot, feed the chickens" | Speech recognition |
+| **Learning from Demo** | Show task once, robot repeats | Imitation learning |
+| **Tool Use** | Pick up and use tools (rake, hose) | Advanced manipulation |
+| **Human Following** | Follow person, carry items | Person tracking |
+
+### Fun/Experimental
+
+| Idea | Description | Difficulty |
+|------|-------------|------------|
+| **Fish-Controlled Mode** | Aquarium on top, fish position = steering | Medium |
+| **Train for Kids** | Pull wagon with passengers | Easy |
+| **Pirate Ship Body** | Cardboard hull, working "cannons" (confetti) | Easy |
+| **DJ Robot** | Speakers + lights for parties | Easy |
+| **Security Guard** | Patrol + announce visitors | Medium |
+
+---
+
+## 🦾 Future Additions Summary
+
+| Component | Specs | Purpose | Status |
+|-----------|-------|---------|--------|
+| **Jetson Orin Nano Super** | 8GB, 67 TOPS | AI brain + camera relay | Purchased |
+| **2x OpenArm 0.1** | 3-5kg lift each | Bilateral manipulation | Planned |
+| **Train Body** | Cardboard/3D printed | Kid transport mode | Planned |
+| **Outdoor WiFi AP** | Ubiquiti or TP-Link | 1-acre coverage | Planned |
+| **ESP32 High-Gain Antenna** | 9dBi external | Extended robot range | Planned |
 
 ---
 
