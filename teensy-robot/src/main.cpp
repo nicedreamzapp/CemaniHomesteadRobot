@@ -3,7 +3,7 @@
 // FlasherX library is embedded - no external dependencies
 // Upload via Command Center (robot.marijuanaunion.com)
 //
-// V2.7 - SAFETY UPDATE: Low speed limits, input noise filtering
+// V3.4 - Smoother Command Center moves (15 RPM, 1s accel ramp)
 // =====================================================
 
 #include <Arduino.h>
@@ -370,26 +370,26 @@ void update_firmware(Stream *in, Stream *out,
 #define INVERT_DRIVER_2 false
 
 // SAFETY: Max speeds - keep LOW to prevent crashes!
-#define MAX_SPEED_RPM 20         // Was 150 - WAY too fast! Keep slow for safety
-#define MAX_TURN_RPM 5           // Match web UI turn speed - super smooth
+#define MAX_SPEED_RPM 75         // REDUCED: Half speed for forward/backward (was 150)
+#define MAX_TURN_RPM 5           // Match web UI turn speed - super smooth (KEEP SLOW)
 
 // Software acceleration (RPM change per update cycle)
-#define ACCEL_RATE_NORMAL 2      // Was 10 - slower ramp up for safety
-#define ACCEL_RATE_TURN 1        // Was 2 - very slow turn ramp
+#define ACCEL_RATE_NORMAL 3      // REDUCED: Slower ramp up (was 10)
+#define ACCEL_RATE_TURN 1        // Keep slow turn ramp
 
 // Hardware acceleration (ms to reach target - higher = slower)
-#define DRIVER_ACCEL_NORMAL 500  // Was 300 - slower hardware accel
-#define DRIVER_ACCEL_TURN 1500   // Was 1200 - even slower for turns
+#define DRIVER_ACCEL_NORMAL 500  // SLOWER: More gradual (was 300)
+#define DRIVER_ACCEL_TURN 1500   // Keep slow for turns
 
-#define TORQUE_NORMAL 800        // Was 1000 - reduced torque
-#define TORQUE_TURN 150          // Was 200 - less torque for turns
+#define TORQUE_NORMAL 1000       // Original value
+#define TORQUE_TURN 150          // Keep low for turns
 
-#define JOYSTICK_DEADZONE 0.15f  // Was 0.1 - larger deadzone to filter noise
+#define JOYSTICK_DEADZONE 0.15f  // LARGER: More deadzone to prevent accidental moves (was 0.1)
 #define MOTOR_UPDATE_INTERVAL 50
 
-// Input noise filtering - require consistent readings
-#define INPUT_FILTER_SAMPLES 3   // Require 3 consistent readings before acting
-#define INPUT_CHANGE_THRESHOLD 50 // Ignore changes smaller than this
+// Input noise filtering - DISABLED (was too aggressive)
+#define INPUT_FILTER_SAMPLES 1   // Accept immediately (was 3)
+#define INPUT_CHANGE_THRESHOLD 5 // Much smaller threshold (was 50)
 
 // ===== REGISTER DEFINITIONS =====
 #define REG_CONTROL_MODE    0x200D
@@ -422,29 +422,11 @@ static bool isTurning = false;
 static bool lastTurnState = false;
 
 // ===== INPUT NOISE FILTER =====
-// Returns true if the new value should be accepted
+// Simplified - just accept all valid input (previous filter was too aggressive)
 bool filterInput(long newVal, long& currentVal, long& pendingVal, int& filterCount) {
-  // If new value is close to current, keep current (filter noise)
-  if (abs(newVal - currentVal) < INPUT_CHANGE_THRESHOLD) {
-    filterCount = 0;
-    return false;
-  }
-
-  // If new value matches pending, increment counter
-  if (abs(newVal - pendingVal) < INPUT_CHANGE_THRESHOLD) {
-    filterCount++;
-    if (filterCount >= INPUT_FILTER_SAMPLES) {
-      // Accept the new value after consistent readings
-      currentVal = newVal;
-      filterCount = 0;
-      return true;
-    }
-  } else {
-    // New value is different from pending, start fresh
-    pendingVal = newVal;
-    filterCount = 1;
-  }
-  return false;
+  // Simply accept the new value
+  currentVal = newVal;
+  return true;
 }
 
 // ===== DISCRETE MOVEMENT STATE =====
@@ -633,13 +615,13 @@ void emergencyStopMotors() {
 // - Turn 90° then forward/backward for perpendicular directions
 
 // Timing constants (calibrate these!)
-// Timing constants - calibrated for slow speeds
-// At 10 RPM with ~30cm wheel, speed is ~5cm/sec, so 200ms per cm
+// Timing constants - calibrated for smooth movement
+// At 15 RPM with ~30cm wheel, speed is ~7.5cm/sec, so ~133ms per cm
 // At 5 RPM turn, ~100ms per degree
-#define TURN_MS_PER_DEGREE 100     // ms per degree of rotation at 5 RPM turn speed
-#define MOVE_MS_PER_CM     200     // ms per cm at 10 RPM move speed
-#define DISCRETE_TURN_RPM  5       // RPM for turning in place (slow for safety)
-#define DISCRETE_MOVE_RPM  10      // RPM for forward/backward movement (slow for safety)
+#define TURN_MS_PER_DEGREE 100     // ms per degree of rotation
+#define MOVE_MS_PER_CM     140     // ms per cm
+#define DISCRETE_TURN_RPM  5       // RPM for turning - slow and smooth
+#define DISCRETE_MOVE_RPM  15      // RPM for forward/backward - gentle speed
 
 // Handle relative direction commands (F/B/L/R)
 // F = Forward, B = Backward, L = Turn Left 90°, R = Turn Right 90°
@@ -654,6 +636,9 @@ void startRelativeMove(char direction, int distanceCm) {
     emergencyStop = false;
     Serial.println("[MOVE] Motors re-enabled, ready to move");
   }
+
+  // Set slow acceleration for smooth discrete moves (1000ms ramp)
+  setAccelTimes(1000, 500);
 
   discreteMoveStartTime = millis();
   discreteMoveActive = true;
@@ -811,6 +796,15 @@ void updateDiscreteMove() {
   }
 }
 
+// Apply exponential curve to joystick input for finer control at low values
+// input: -1.0 to 1.0, returns -1.0 to 1.0 with curve applied
+float applyJoystickCurve(float input) {
+  // Quadratic curve: output = sign(input) * input^2
+  // This means half-stick gives 25% power, not 50%
+  float sign = (input >= 0) ? 1.0f : -1.0f;
+  return sign * input * input;
+}
+
 void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpeed) {
   // SAFETY: Hard clamp inputs first
   lx = constrain(lx, -511, 511);
@@ -822,6 +816,11 @@ void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpe
   // Larger deadzone to filter noise
   if (abs(x) < JOYSTICK_DEADZONE) x = 0.0f;
   if (abs(y) < JOYSTICK_DEADZONE) y = 0.0f;
+
+  // Apply exponential curve for finer control at low speeds
+  // Half-stick now gives ~25% speed instead of 50%
+  x = applyJoystickCurve(x);
+  y = applyJoystickCurve(y);
 
   // Detect turning (mostly side-to-side input)
   float turnRatio = (abs(y) < 0.1f) ? 1.0f : abs(x) / (abs(y) + 0.01f);
@@ -899,7 +898,7 @@ void setup() {
 
   Serial.println("\n========================================");
   Serial.println("  CEMANI HOMESTEAD ROBOT - TANK DRIVE");
-  Serial.println("  V2.7 - SAFETY: Low speed + noise filter");
+  Serial.println("  V3.4 - Smooth Command Center + Xbox");
   Serial.println("========================================");
   Serial.println("Hardware: Teensy 4.1 + 2x ZLAC8015D");
   Serial.println("Motors: 4 hub motors (2 per driver)");
@@ -945,48 +944,46 @@ void loop() {
 
       if (strncmp(buf, "STATE,CONNECTED", 15) == 0) {
         controllerConnected = true;
-        // Auto-recover from emergency stop when controller reconnects
-        if (emergencyStop || !motorsEnabled) {
-          Serial.println("[CTRL] Controller connected - auto-recovering motors");
+        // Auto-enable motors when Xbox controller connects
+        if (!motorsEnabled) {
+          Serial.println("[CTRL] Xbox connected - enabling motors");
           fullReset();
         } else {
-          Serial.println("[CTRL] Controller connected");
+          Serial.println("[CTRL] Xbox connected");
         }
       }
       else if (strncmp(buf, "STATE,DISCONNECTED", 18) == 0) {
+        // Xbox disconnected - zero joystick but DON'T stop motors
+        // This allows web commands to keep working
         controllerConnected = false;
-        emergencyStopMotors();
-        Serial.println("[CTRL] Controller disconnected - STOPPING");
+        currentLX = 0;
+        currentLY = 0;
+        Serial.println("[CTRL] Xbox disconnected - joystick zeroed");
       }
       else if (strncmp(buf, "AX,", 3) == 0) {
         char name[3];
         long val;
         unsigned long ms;
         if (sscanf(buf, "AX,%2[^,],%ld,%lu", name, &val, &ms) == 3) {
-          // Validate input range - joystick should be -511 to 511
-          if (val < -600 || val > 600) {
-            Serial.printf("[NOISE] Invalid joystick value %ld - ignoring\n", val);
-            continue;
-          }
+          // Validate input range
+          if (val < -600 || val > 600) continue;
 
-          // Auto-recover if we get joystick data after being timed out
-          if (!controllerConnected) {
-            Serial.println("[CTRL] Joystick data resumed - auto-recovering");
-            controllerConnected = true;
-            if (emergencyStop || !motorsEnabled) {
-              fullReset();
-            }
+          // Auto-recover from E-STOP when joystick moves significantly
+          // This lets you "wake up" the robot by moving the stick
+          bool significantInput = (abs(val) > 100);
+          if (significantInput && (emergencyStop || !motorsEnabled)) {
+            Serial.println("[CTRL] Joystick input - auto-recovering from E-STOP");
+            emergencyStop = false;
+            fullReset();
           }
           controllerConnected = true;
 
-          // Apply noise filter - require consistent readings before accepting
+          // Direct assignment - no filtering
           if (strcmp(name, "LX") == 0) {
-            filterInput(val, filteredLX, pendingLX, lxFilterCount);
-            currentLX = filteredLX;  // Use filtered value
+            currentLX = val;
           }
           else if (strcmp(name, "LY") == 0) {
-            filterInput(val, filteredLY, pendingLY, lyFilterCount);
-            currentLY = filteredLY;  // Use filtered value
+            currentLY = val;
           }
         }
       }
@@ -995,17 +992,10 @@ void loop() {
         unsigned long ms;
         if (sscanf(buf, "BTN,%ld,%ld,%lu", &id, &state, &ms) == 3) {
           if (state == 1) {
-            if (id == 7) {
+            // ONLY A button (id 0) triggers E-STOP - same as web STOP button
+            if (id == 0) {
+              Serial.println("[BTN] A pressed - EMERGENCY STOP!");
               emergencyStopMotors();
-              Serial.println("[BTN] START pressed - E-STOP ACTIVATED");
-            }
-            else if (id == 6) {
-              Serial.println("[BTN] BACK pressed - Resuming...");
-              fullReset();
-            }
-            else if (id == 0) {
-              Serial.println("[BTN] A pressed - Resetting drivers...");
-              fullReset();
             }
           }
         }
@@ -1097,12 +1087,13 @@ void loop() {
   }
 
   // ===== SAFETY: Controller timeout =====
-  // Increased from 5s to 10s to handle WiFi reconnection hiccups
-  // ESP32 will reconnect within ~3-5s typically
+  // Timeout just zeros joystick - doesn't stop motors
+  // This allows web commands to keep working even if Xbox times out
   if (now - lastComm > 10000 && controllerConnected) {
     controllerConnected = false;
-    emergencyStopMotors();
-    Serial.println("[TIMEOUT] No controller data for 10s - E-STOP");
+    currentLX = 0;
+    currentLY = 0;
+    Serial.println("[TIMEOUT] No Xbox data - joystick zeroed (motors still enabled)");
   }
 
   // ===== ECHO DRIVER RESPONSES =====

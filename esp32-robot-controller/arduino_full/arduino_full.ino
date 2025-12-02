@@ -1,9 +1,9 @@
 /*
- * Cemani Robot Controller v3.0.6
+ * Cemani Robot Controller v3.0.8
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket (SSL)
  * Upload via Arduino IDE with Bluepad32 board package
  *
- * v3.0.6 - Improved WiFi reconnection (faster detection, force reconnect)
+ * v3.0.8 - More tolerant heartbeat to stop online/offline bouncing
  *
  * SETUP: Copy credentials.h.example to credentials.h and add your WiFi passwords
  */
@@ -56,7 +56,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.6");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.8");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -102,10 +102,10 @@ void setup() {
 
   webSocket.beginSSL("robot.marijuanaunion.com", 443, "/");
   webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000);
-  // Heartbeat: ping every 20s, allow 10s for response, disconnect after 3 missed
-  // More tolerant settings to prevent disconnects during heavy video traffic
-  webSocket.enableHeartbeat(20000, 10000, 3);
+  webSocket.setReconnectInterval(3000);
+  // Heartbeat: ping every 30s, allow 15s for response, disconnect after 5 missed
+  // Very tolerant to prevent bouncing on/offline
+  webSocket.enableHeartbeat(30000, 15000, 5);
 
   Serial.println("[SYSTEM] Ready!");
 }
@@ -257,7 +257,7 @@ void handleGamepad() {
 void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.6\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.8\",\"wifi\":\"" +
                      WiFi.SSID() + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
@@ -395,17 +395,23 @@ void handleFlashMessage(uint8_t* payload, size_t length) {
     if (distEnd == -1) distEnd = msg.indexOf("}", distStart);
     float distance = msg.substring(distStart, distEnd).toFloat();
 
-    // Parse direction (N/E/S/W)
+    // Parse direction - web UI sends "FORWARD", "BACK", "LEFT", "RIGHT"
     int dirStart = msg.indexOf("\"direction\":\"") + 13;
     int dirEnd = msg.indexOf("\"", dirStart);
     String direction = msg.substring(dirStart, dirEnd);
 
-    Serial.printf("[MOVE] Direction: %s, Distance: %.2fm\n", direction.c_str(), distance);
+    // Convert to single char for Teensy (F/B/L/R)
+    char dirChar = 'F';
+    if (direction == "BACK" || direction == "S" || direction == "B") dirChar = 'B';
+    else if (direction == "LEFT" || direction == "W" || direction == "L") dirChar = 'L';
+    else if (direction == "RIGHT" || direction == "E" || direction == "R") dirChar = 'R';
+    else if (direction == "FORWARD" || direction == "N" || direction == "F") dirChar = 'F';
+
+    Serial.printf("[MOVE] Direction: %s -> %c, Distance: %.2fm\n", direction.c_str(), dirChar, distance);
 
     // Send to Teensy as: MOVEDIR,direction,distance_cm
-    // Teensy will calculate optimal movement (forward/backward/turn)
     int distanceCm = (int)(distance * 100);
-    String moveCmd = "MOVEDIR," + direction + "," + String(distanceCm);
+    String moveCmd = "MOVEDIR," + String(dirChar) + "," + String(distanceCm);
     teensySerial.println(moveCmd);
 
     // Echo to WebSocket for confirmation

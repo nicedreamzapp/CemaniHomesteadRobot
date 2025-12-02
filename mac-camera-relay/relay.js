@@ -278,16 +278,18 @@ function startVideoStream(cam) {
   }
 
   state.videoStarting = true;
-  const rtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
+  const rtspUrl = `rtsp://${cam.username}:${cam.password}@${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
 
   let proc;
 
   if (cam.id === 1) {
     // CAM 1: VIDEO ONLY - no audio
-    console.log(`[CAM${cam.id}] Starting video only: ${rtspUrl}`);
+    // Use same reliable settings as cam2
+    console.log(`[CAM${cam.id}] Starting video only: rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
       '-rtsp_transport', 'udp',
       '-i', rtspUrl,
+      '-map', '0:v',
       '-vf', `scale=${CONFIG.stream.scale}`,
       '-f', 'image2pipe',
       '-c:v', 'mjpeg',
@@ -297,7 +299,7 @@ function startVideoStream(cam) {
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
   } else {
     // CAM 2: VIDEO + AUDIO
-    console.log(`[CAM${cam.id}] Starting video+audio: ${rtspUrl}`);
+    console.log(`[CAM${cam.id}] Starting video+audio: rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
       '-rtsp_transport', 'udp',
       '-i', rtspUrl,
