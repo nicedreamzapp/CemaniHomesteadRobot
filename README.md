@@ -103,12 +103,15 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 **Features:**
 - 🎮 **Virtual Joystick** - Tank steering control (simulates Xbox controller)
 - 📊 **Real-Time Telemetry** - Live motor RPM, WiFi signal, session stats
+- 🔋 **Battery Monitor** - Live voltage + percentage (24V LiFePO4 8S)
+- 🌡️ **Temperature Display** - Driver and motor temps in Fahrenheit
+- ⚡ **Motor Stats** - Left/Right speed (RPM), torque (Amps), encoder position
 - 🖥️ **Serial Monitor** - Watch Teensy debug output in browser
 - 💻 **Code Editor** - Edit Teensy/ESP32/Driver code with syntax highlighting
 - ⚡ **Compile & Upload** - Wireless firmware updates via browser
 - 📡 **Command Input** - Send custom commands to robot
 - 🔄 **Reset Button** - Soft reset (simulates Xbox A button)
-- 📷 **Camera Feeds** - Dual IP camera streams (future)
+- 📷 **Camera Feeds** - Dual IP camera streams with PTZ control
 - 🔋 **System Status** - ESP32, Teensy, ZLAC drivers health
 - 🛰️ **Future Sensors** - Jetson Orin, LiDAR, GPS, PIR, OpenArm placeholders
 
@@ -465,6 +468,7 @@ Using two robotic arms for human-like bilateral manipulation:
 | **Multi-Network Support** | ✅ Complete | Auto-connects: home, work, phone hotspot |
 | **Safety Auto-Stop** | ✅ Complete | Stops if communication lost mid-command |
 | **Real-Time Telemetry** | ✅ Complete | Motor RPM, WiFi signal, debug output |
+| **Driver Telemetry** | ✅ Complete | Live battery voltage, motor/driver temps (°F), RPM, torque |
 
 ### Network Architecture
 
@@ -517,6 +521,7 @@ Using two robotic arms for human-like bilateral manipulation:
 - ✅ **Phase 6.8:** Xbox D-pad controls camera pan/tilt
 - ✅ **Phase 6.9:** Dual control system - Xbox joystick + Command Center buttons work simultaneously
 - ✅ **Phase 6.10:** Safety auto-stop on disconnect (V3.5 firmware)
+- ✅ **Phase 6.11:** Driver telemetry - live battery V, motor/driver temps, RPM, torque via Modbus reads
 - 🚧 **Phase 7:** Autonomous predator patrol (Jetson + Lidar + YOLO)
 - 🔜 **Phase 8:** Deterrent system (siren, strobes, bear spray)
 - 🔜 **Phase 9:** OpenArm integration (future)

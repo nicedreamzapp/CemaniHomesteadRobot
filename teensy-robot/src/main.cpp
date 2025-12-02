@@ -406,6 +406,25 @@ void update_firmware(Stream *in, Stream *out,
 #define REG_TORQUE_LEFT     0x20A1
 #define REG_TORQUE_RIGHT    0x20A3
 
+// ===== TELEMETRY REGISTER DEFINITIONS (from ZLAC8015D manual) =====
+#define REG_BUS_VOLTAGE     0x20A1  // Bus voltage (0.01V units) - BATTERY!
+#define REG_STATUS_WORD     0x20A2  // Status word (running/stopped/alarm)
+#define REG_MOTOR_TEMP      0x20A4  // Motor temps (high=L, low=R, 1°C)
+#define REG_ERROR_L         0x20A5  // Error code left
+#define REG_ERROR_R         0x20A6  // Error code right
+#define REG_POS_L_HIGH      0x20A7  // Position L high word
+#define REG_POS_L_LOW       0x20A8  // Position L low word
+#define REG_POS_R_HIGH      0x20A9  // Position R high word
+#define REG_POS_R_LOW       0x20AA  // Position R low word
+#define REG_VEL_ACT_L       0x20AB  // Actual velocity L (0.1 RPM)
+#define REG_VEL_ACT_R       0x20AC  // Actual velocity R (0.1 RPM)
+#define REG_TORQUE_ACT_L    0x20AD  // Actual torque L (0.1A)
+#define REG_TORQUE_ACT_R    0x20AE  // Actual torque R (0.1A)
+#define REG_DRIVER_TEMP     0x20B0  // Driver temperature (0.1°C)
+
+// Telemetry update interval
+#define TELEMETRY_INTERVAL  1000   // Read telemetry every 1 second
+
 // ===== STATE VARIABLES =====
 static long currentLX = 0, currentLY = 0;
 static long filteredLX = 0, filteredLY = 0;  // Filtered joystick values
@@ -420,6 +439,19 @@ static bool emergencyStop = false;
 static bool motorsEnabled = false;
 static bool isTurning = false;
 static bool lastTurnState = false;
+
+// ===== TELEMETRY STATE =====
+static uint32_t lastTelemetryUpdate = 0;
+static uint16_t telemetry_busVoltage = 0;    // 0.01V units
+static uint16_t telemetry_motorTemp = 0;     // high=L, low=R, 1°C
+static uint16_t telemetry_driverTemp1 = 0;   // Driver 1 temp (0.1°C)
+static uint16_t telemetry_driverTemp2 = 0;   // Driver 2 temp (0.1°C)
+static int16_t telemetry_velocityL = 0;      // 0.1 RPM
+static int16_t telemetry_velocityR = 0;      // 0.1 RPM
+static int16_t telemetry_torqueL = 0;        // 0.1A
+static int16_t telemetry_torqueR = 0;        // 0.1A
+static int32_t telemetry_positionL = 0;      // encoder counts
+static int32_t telemetry_positionR = 0;      // encoder counts
 
 // ===== INPUT NOISE FILTER =====
 // Simplified - just accept all valid input (previous filter was too aggressive)
@@ -455,6 +487,158 @@ uint16_t modbusCRC(const uint8_t* buf, int len) {
     }
   }
   return crc;
+}
+
+// ===== MODBUS READ REGISTERS (for telemetry) =====
+// Reads a single register and returns the value, or -1 on error
+int32_t readModbusRegister(uint8_t id, uint16_t reg) {
+  // Build read request: ID, FC03, RegHi, RegLo, NumRegsHi, NumRegsLo, CRC
+  uint8_t frame[8];
+  frame[0] = id;
+  frame[1] = 0x03;  // Function code: Read Holding Registers
+  frame[2] = reg >> 8;
+  frame[3] = reg & 0xFF;
+  frame[4] = 0x00;  // Number of registers (high)
+  frame[5] = 0x01;  // Number of registers (low) = 1
+  uint16_t crc = modbusCRC(frame, 6);
+  frame[6] = crc & 0xFF;
+  frame[7] = crc >> 8;
+
+  // Clear any pending data
+  while (Serial3.available()) Serial3.read();
+
+  // Send request
+  Serial3.write(frame, 8);
+  Serial3.flush();
+
+  // Wait for response (timeout 50ms)
+  uint32_t start = millis();
+  while (Serial3.available() < 7 && millis() - start < 50) {
+    delayMicroseconds(100);
+  }
+
+  if (Serial3.available() < 7) {
+    return -1;  // Timeout
+  }
+
+  // Read response: ID, FC, ByteCount, DataHi, DataLo, CRC
+  uint8_t resp[16];
+  int len = 0;
+  while (Serial3.available() && len < 16) {
+    resp[len++] = Serial3.read();
+  }
+
+  // Validate response
+  if (len < 7 || resp[0] != id || resp[1] != 0x03 || resp[2] != 2) {
+    return -1;  // Invalid response
+  }
+
+  // Check CRC
+  uint16_t respCrc = modbusCRC(resp, len - 2);
+  uint16_t recvCrc = resp[len-2] | (resp[len-1] << 8);
+  if (respCrc != recvCrc) {
+    return -1;  // CRC error
+  }
+
+  // Return data value
+  return (resp[3] << 8) | resp[4];
+}
+
+// Read telemetry from driver - ONE register per call to minimize interference
+// We rotate through registers, reading one per telemetry cycle
+static uint8_t telemReadIndex = 0;
+
+void readDriverTelemetry() {
+  int32_t val;
+
+  // Read one register per cycle to minimize interference with motor commands
+  switch (telemReadIndex) {
+    case 0:
+      // Bus voltage from driver 1 (register 0x20A1) - battery voltage
+      val = readModbusRegister(1, 0x20A1);
+      if (val >= 0) telemetry_busVoltage = (uint16_t)val;
+      break;
+    case 1:
+      // Motor temperature from driver 1 (register 0x20A4)
+      val = readModbusRegister(1, 0x20A4);
+      if (val >= 0) telemetry_motorTemp = (uint16_t)val;
+      break;
+    case 2:
+      // Driver 1 temperature (register 0x20B0)
+      val = readModbusRegister(1, 0x20B0);
+      if (val >= 0) telemetry_driverTemp1 = (uint16_t)val;
+      break;
+    case 3:
+      // Driver 2 temperature
+      val = readModbusRegister(2, 0x20B0);
+      if (val >= 0) telemetry_driverTemp2 = (uint16_t)val;
+      break;
+    case 4:
+      // Actual velocity L
+      val = readModbusRegister(1, 0x20AB);
+      if (val >= 0) telemetry_velocityL = (int16_t)val;
+      break;
+    case 5:
+      // Actual velocity R
+      val = readModbusRegister(1, 0x20AC);
+      if (val >= 0) telemetry_velocityR = (int16_t)val;
+      break;
+  }
+
+  telemReadIndex = (telemReadIndex + 1) % 6;  // Cycle through 6 registers
+}
+
+// Convert Celsius to Fahrenheit
+float celsiusToFahrenheit(float celsius) {
+  return celsius * 9.0f / 5.0f + 32.0f;
+}
+
+// Send telemetry to ESP32 (which forwards to VPS)
+void sendTelemetryToESP32() {
+  // Convert values and send as JSON-like format
+  float batteryV = telemetry_busVoltage * 0.01f;
+  // 24V LiFePO4 8S: 20V=0%, 29.2V=100% (9.2V range)
+  int batteryPercent = constrain((int)((batteryV - 20.0f) / 9.2f * 100.0f), 0, 100);
+
+  // Motor temps (1°C per unit, high byte = L, low byte = R)
+  int motorTempL_C = (telemetry_motorTemp >> 8) & 0xFF;
+  int motorTempR_C = telemetry_motorTemp & 0xFF;
+  int motorTempL_F = (int)celsiusToFahrenheit(motorTempL_C);
+  int motorTempR_F = (int)celsiusToFahrenheit(motorTempR_C);
+
+  // Driver temps (0.1°C per unit)
+  float driverTemp1_C = telemetry_driverTemp1 * 0.1f;
+  float driverTemp2_C = telemetry_driverTemp2 * 0.1f;
+  int driverTemp1_F = (int)celsiusToFahrenheit(driverTemp1_C);
+  int driverTemp2_F = (int)celsiusToFahrenheit(driverTemp2_C);
+
+  // Velocities (0.1 RPM per unit)
+  float velL = telemetry_velocityL * 0.1f;
+  float velR = telemetry_velocityR * 0.1f;
+
+  // Torque (0.1A per unit)
+  float torqueL = telemetry_torqueL * 0.1f;
+  float torqueR = telemetry_torqueR * 0.1f;
+
+  // Send to ESP32 via Serial1
+  Serial1.printf("TELEM,%.2f,%d,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%ld,%ld\n",
+    batteryV, batteryPercent,
+    motorTempL_F, motorTempR_F,
+    driverTemp1_F, driverTemp2_F,
+    velL, velR,
+    torqueL, torqueR,
+    telemetry_positionL, telemetry_positionR
+  );
+
+  // Also print to USB Serial for debugging
+  Serial.println("===== DRIVER TELEMETRY =====");
+  Serial.printf("Battery: %.2fV (%d%%)\n", batteryV, batteryPercent);
+  Serial.printf("Motor Temp L: %d°F  R: %d°F\n", motorTempL_F, motorTempR_F);
+  Serial.printf("Driver Temp 1: %d°F  2: %d°F\n", driverTemp1_F, driverTemp2_F);
+  Serial.printf("Velocity L: %.1f RPM  R: %.1f RPM\n", velL, velR);
+  Serial.printf("Torque L: %.1fA  R: %.1fA\n", torqueL, torqueR);
+  Serial.printf("Position L: %ld  R: %ld\n", telemetry_positionL, telemetry_positionR);
+  Serial.println("============================\n");
 }
 
 // ===== MODBUS WRITE SINGLE REGISTER =====
@@ -1109,7 +1293,16 @@ void loop() {
     Serial.println("[TIMEOUT] No Xbox data - joystick zeroed (motors still enabled)");
   }
 
+  // ===== TELEMETRY UPDATE =====
+  // Read and send driver telemetry every TELEMETRY_INTERVAL ms
+  if (now - lastTelemetryUpdate >= TELEMETRY_INTERVAL) {
+    lastTelemetryUpdate = now;
+    readDriverTelemetry();
+    sendTelemetryToESP32();
+  }
+
   // ===== ECHO DRIVER RESPONSES =====
+  // (Moved telemetry reads above, so just drain any leftover bytes here)
   while (Serial3.available()) {
     uint8_t b = Serial3.read();
   }

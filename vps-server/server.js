@@ -72,11 +72,11 @@ ptzWss.on('connection', (ws, req) => {
     req.socket.setNoDelay(true);
   }
 
-  ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; });
+  ws.isAlive = true; ws.missedPings = 0;
+  ws.on('pong', () => { ws.isAlive = true; ws.missedPings = 0; });
 
   ws.on('message', (msg) => {
-    ws.isAlive = true;
+    ws.isAlive = true; ws.missedPings = 0;
     try {
       const data = JSON.parse(msg.toString());
 
@@ -190,13 +190,13 @@ wss.on("connection", (ws, req) => {
   ws.frameCount = 0;
 
   ws.send(JSON.stringify({type: "status", ...robotStatus, camera: cameraStatus}));
-  ws.isAlive = true;
+  ws.isAlive = true; ws.missedPings = 0;
   ws.isBrowser = true;  // Assume browser until proven otherwise
-  ws.on("pong", () => { ws.isAlive = true; });
+  ws.on("pong", () => { ws.isAlive = true; ws.missedPings = 0; });
 
   ws.on("message", (msg, isBinary) => {
     // Mark alive on any message - camera sends video constantly
-    ws.isAlive = true;
+    ws.isAlive = true; ws.missedPings = 0;
 
     // Handle binary talkback audio from browser (0x10 = talkback for cam2)
     if (isBinary && ws.isBrowser) {
@@ -439,12 +439,19 @@ wss.on("connection", (ws, req) => {
 });
 
 // ============ PING/PONG KEEPALIVE ============
+// More tolerant: allow 3 missed pings before disconnect
 setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
-      if (ws.isRobot) { robotSocket = null; robotStatus.connected = false; broadcast({type:"status", ...robotStatus, camera: cameraStatus}); }
-      if (ws.isCamera) { cameraSocket = null; cameraStatus.connected = false; cameraStatus.streaming = false; broadcast({type:"camera_status", ...cameraStatus}); }
-      return ws.terminate();
+      ws.missedPings = (ws.missedPings || 0) + 1;
+      if (ws.missedPings >= 3) {
+        console.log("[PING] Client missed 3 pings, disconnecting");
+        if (ws.isRobot) { robotSocket = null; robotStatus.connected = false; broadcast({type:"status", ...robotStatus, camera: cameraStatus}); }
+        if (ws.isCamera) { cameraSocket = null; cameraStatus.connected = false; cameraStatus.streaming = false; broadcast({type:"camera_status", ...cameraStatus}); }
+        return ws.terminate();
+      }
+    } else {
+      ws.missedPings = 0;
     }
     ws.isAlive = false;
     ws.ping();
