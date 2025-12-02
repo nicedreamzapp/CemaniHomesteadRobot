@@ -991,41 +991,96 @@ void loop() {
 
 ---
 
-## 🚧 Technical Challenges & Solutions
+## 🚧 Technical Challenges & Solutions (Hard-Won Lessons)
 
-### Challenge 1: Motor Direction Asymmetry ✅
-**Problem:** Left/right sides spinning opposite when given same command  
-**Root Cause:** Driver CCW/CW parameters differed between units  
-**Solution:** Driver-specific inversion in code, works reliably now
+### Challenge 1: Tank Steering & Motor Symmetry ✅
+**The Hardest Part of the Entire Build**
 
-### Challenge 2: Power Stability ✅
-**Problem:** Hobby-grade DROK converters blew 4 Teensys before I learned my lesson
-**Root Cause:** Insufficient filtering and inadequate current handling
+**Problem:** Getting all 4 wheels to spin correctly in symmetry - same axis, same direction, coordinated movement.
+
+**What Made It Hard:**
+- Left/right sides spinning opposite when given same Modbus command
+- Driver CCW/CW parameters differed between ZLAC8015D units
+- Each driver controls 2 motors - had to get both sides synchronized
+- Modbus timing issues caused jerky, uncoordinated movement
+
 **Solution:**
-- Switched to 25W waterproof automotive-grade vehicle buck converter (24V→5V 5A)
-- Removed capacitors (not needed with quality automotive converter)
-- Proper breaker protection: 2x 40A to drivers, 1x 50A to battery bar
-- Zero failures since upgrading to automotive components
+- Driver-specific direction inversion in Teensy code
+- Atomic Modbus writes to both drivers (no delay between commands)
+- Careful wiring: all grounds tied together properly
+- Extensive testing to map which motor = which wheel
 
-### Challenge 3: Tip-Over Risk 🚧
-**Problem:** Adding arms on top raises center of gravity  
-**Solution:** 
+**Lesson:** Tank steering looks simple but coordinating 4 motors via 2 Modbus drivers is genuinely difficult. Expect this to take time.
+
+### Challenge 2: Power Stability - The $200+ Mistake ✅
+**Problem:** Hobby-grade DROK buck converters destroyed components repeatedly
+
+**The Damage:**
+- 🔥 **4x Teensy 4.1 boards** - fried by voltage spikes ($120)
+- 🔥 **Multiple ESP32 boards** - killed in other projects
+- 🔥 **3-4 DROK buck converters** - failed under load
+- Inconsistent voltage output, no protection, inadequate filtering
+
+**Root Cause:** DROK and similar hobby-grade converters:
+- Poor voltage regulation under load changes
+- No transient suppression
+- Inadequate current handling despite ratings
+- Zero protection circuitry
+
+**Solution - Go Automotive/Marine Grade:**
+- Switched to **25W waterproof automotive-grade vehicle buck converter** (24V→5V 5A)
+- Designed for harsh vehicle environments (vibration, temperature, load spikes)
+- Built-in protection and filtering
+- **Zero component failures since switching**
+
+**Lesson:** Never use hobby electronics for power regulation on expensive microcontrollers. The $20 "savings" on a cheap buck converter cost $200+ in destroyed components. Automotive/marine grade converters are worth every penny.
+
+### Challenge 3: Wiring & Ground Management ✅
+**Problem:** Intermittent behavior, random resets, communication failures
+
+**What Went Wrong:**
+- Ground loops between components
+- Floating grounds on RS-485 bus
+- Poor connections causing voltage drops
+
+**Solution:**
+- **All grounds tied together** at a central point
+- Star grounding topology from battery negative
+- Quality crimped connections, no breadboard jumpers
+- Twisted pair for RS-485 (A/B lines)
+
+**Lesson:** Most "weird behavior" in robotics is a grounding or wiring problem. Invest time in proper wire management before debugging code.
+
+### Challenge 4: Tip-Over Risk 🚧
+**Problem:** Adding arms on top raises center of gravity
+**Solution:**
 - Batteries mounted at lowest point, evenly distributed
 - Each 9 lb wheel provides low CoG
 - Total 65 lbs well-balanced
 - Can add 80+ lbs more if needed with reinforcement
 
-### Challenge 4: Remote Monitoring ✅
-**Problem:** No way to debug robot when not physically present  
-**Solution:** 
+### Challenge 5: Remote Monitoring ✅
+**Problem:** No way to debug robot when not physically present
+**Solution:**
 - Built VPS WebSocket server for real-time serial monitoring
 - ESP32 auto-connects to multiple WiFi networks
 - OTA updates eliminate need for USB cable access
 - Web interface accessible from anywhere with internet
 
-### Challenge 5: Encoder Integration 🔜
-**Status:** Each hub motor has encoders but not yet utilized  
+### Challenge 6: Encoder Integration 🔜
+**Status:** Each hub motor has encoders but not yet utilized
 **Plan:** Implement closed-loop PID speed control using encoder feedback
+
+### Damage Report (So You Don't Repeat My Mistakes)
+
+| Component | Quantity Destroyed | Cause | Cost |
+|-----------|-------------------|-------|------|
+| Teensy 4.1 | 4 | DROK voltage spikes | ~$120 |
+| ESP32 | 3+ | DROK voltage spikes | ~$30 |
+| DROK Buck Converters | 3-4 | Failed under load | ~$40 |
+| **Total** | - | Hobby-grade power electronics | **~$190** |
+
+**Components destroyed since switching to automotive-grade: ZERO**
 
 ---
 
