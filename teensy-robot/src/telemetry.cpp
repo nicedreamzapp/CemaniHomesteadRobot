@@ -110,20 +110,21 @@ void readDriverTelemetry() {
 }
 
 // LiFePO4 voltage to percentage lookup table (8S pack)
-// LiFePO4 has flat discharge curve - most capacity between 3.2-3.3V/cell
-// 8S: 25.6V-26.4V is ~20-80% of capacity!
+// Corrected based on actual LiFePO4 discharge curve
+// Full: 3.65V/cell (29.2V), Empty: 2.5V/cell (20V)
+// Nominal/flat region: 3.2-3.3V/cell (25.6-26.4V) = ~20-80%
 int lifepo4Percent(float voltage) {
-  // 8S LiFePO4 voltage points (per-cell × 8)
-  // Based on typical LiFePO4 discharge curve
-  if (voltage >= 28.0) return 100;  // 3.50V/cell - Full charge
-  if (voltage >= 27.2) return 95;   // 3.40V/cell - Nearly full
-  if (voltage >= 26.8) return 90;   // 3.35V/cell
-  if (voltage >= 26.4) return 80;   // 3.30V/cell - Top of flat region
-  if (voltage >= 26.0) return 60;   // 3.25V/cell - Middle of flat region
-  if (voltage >= 25.6) return 40;   // 3.20V/cell - Bottom of flat region
-  if (voltage >= 25.2) return 25;   // 3.15V/cell - Getting low
-  if (voltage >= 24.8) return 15;   // 3.10V/cell - Low
-  if (voltage >= 24.0) return 10;   // 3.00V/cell - Very low
+  // 8S LiFePO4 voltage points
+  if (voltage >= 28.8) return 100;  // 3.60V/cell - Fully charged
+  if (voltage >= 28.0) return 98;   // 3.50V/cell - Just off charger
+  if (voltage >= 27.2) return 95;   // 3.40V/cell - Very full
+  if (voltage >= 26.8) return 92;   // 3.35V/cell
+  if (voltage >= 26.4) return 88;   // 3.30V/cell - Top of flat region
+  if (voltage >= 26.0) return 80;   // 3.25V/cell - Upper flat region
+  if (voltage >= 25.6) return 65;   // 3.20V/cell - Middle flat region
+  if (voltage >= 25.2) return 45;   // 3.15V/cell - Lower flat region
+  if (voltage >= 24.8) return 25;   // 3.10V/cell - Getting low
+  if (voltage >= 24.0) return 15;   // 3.00V/cell - Low
   if (voltage >= 22.4) return 5;    // 2.80V/cell - Critical
   return 0;  // Below 22.4V - Empty/damaged
 }

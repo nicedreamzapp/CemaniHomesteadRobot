@@ -43,18 +43,20 @@ function formatTicks(ticks) {
 }
 
 // Parse TELEM data from serial
-// Format: TELEM,battV,battPct,tempLF,tempLR,tempRF,tempRR,velL,velR,torqueL,torqueR,posL,posR
-// Example: TELEM,26.08,66,69,68,82,82,0.0,0.0,0.0,0.0,-27827,-4313
+// Format: TELEM,battV,battPct,tempLF,tempLR,tempRF,tempRR,drvTemp1,drvTemp2,velL,velR,torqueL,torqueR,posL,posR
+// Index:    0     1      2      3      4      5      6       7        8      9    10     11      12    13   14
 function parseTelemFromSerial(line) {
   var trimmed = line.trim();
   if (!trimmed.startsWith('TELEM,')) return null;
   const parts = trimmed.split(',');
-  if (parts.length < 13) return null;
+  if (parts.length < 15) return null;
 
   const tempLF = parseInt(parts[3]);
   const tempLR = parseInt(parts[4]);
   const tempRF = parseInt(parts[5]);
   const tempRR = parseInt(parts[6]);
+  const drvTemp1 = parseInt(parts[7]);  // Driver 1 (RIGHT side)
+  const drvTemp2 = parseInt(parts[8]);  // Driver 2 (LEFT side)
 
   return {
     batteryV: parseFloat(parts[1]),
@@ -67,18 +69,18 @@ function parseTelemFromSerial(line) {
     // Legacy L/R averages
     motorTempL_F: Math.round((tempLF + tempLR) / 2),
     motorTempR_F: Math.round((tempRF + tempRR) / 2),
-    // Driver board temps - use motor averages as proxy
-    driverTemp1_F: Math.round((tempRF + tempRR) / 2),
-    driverTemp2_F: Math.round((tempLF + tempLR) / 2),
+    // Driver board temps (actual values from Teensy)
+    driverTemp1_F: drvTemp1,  // RIGHT side driver
+    driverTemp2_F: drvTemp2,  // LEFT side driver
     // Velocities
-    velL: parseFloat(parts[7]),
-    velR: parseFloat(parts[8]),
+    velL: parseFloat(parts[9]),
+    velR: parseFloat(parts[10]),
     // Torque
-    torqueL: parseFloat(parts[9]),
-    torqueR: parseFloat(parts[10]),
+    torqueL: parseFloat(parts[11]),
+    torqueR: parseFloat(parts[12]),
     // Encoder positions
-    posL: parseInt(parts[11]),
-    posR: parseInt(parts[12])
+    posL: parseInt(parts[13]),
+    posR: parseInt(parts[14])
   };
 }
 
