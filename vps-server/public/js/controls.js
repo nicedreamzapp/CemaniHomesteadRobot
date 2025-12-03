@@ -270,3 +270,52 @@ document.getElementById('flashPrebuiltBtn').onclick = () => {
   document.getElementById('serial').innerHTML += '[FLASHING PREBUILT TEENSY...]<br>';
   document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
 };
+
+// ============ XBOX CONTROLLER DETECTION ============
+let xboxControllerConnected = false;
+
+function updateXboxStatus(connected) {
+  xboxControllerConnected = connected;
+  const statusEl = document.getElementById('xboxStatus');
+  const stateEl = document.getElementById('xboxState');
+  
+  if (statusEl && stateEl) {
+    if (connected) {
+      statusEl.classList.add('connected');
+      stateEl.textContent = 'Connected';
+    } else {
+      statusEl.classList.remove('connected');
+      stateEl.textContent = 'Disconnected';
+    }
+  }
+}
+
+function checkGamepads() {
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let found = false;
+  
+  for (const gp of gamepads) {
+    if (gp && gp.connected) {
+      found = true;
+      break;
+    }
+  }
+  
+  if (found !== xboxControllerConnected) {
+    updateXboxStatus(found);
+  }
+}
+
+// Listen for gamepad events
+window.addEventListener('gamepadconnected', (e) => {
+  console.log('[GAMEPAD] Connected:', e.gamepad.id);
+  updateXboxStatus(true);
+});
+
+window.addEventListener('gamepaddisconnected', (e) => {
+  console.log('[GAMEPAD] Disconnected:', e.gamepad.id);
+  checkGamepads(); // Check if any are still connected
+});
+
+// Poll for gamepads (some browsers need this)
+setInterval(checkGamepads, 1000);

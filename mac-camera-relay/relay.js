@@ -291,11 +291,10 @@ function startVideoStream(cam) {
 
   if (cam.id === 1) {
     // CAM 1: VIDEO ONLY - no audio
-    // Use TCP for more reliable connection (UDP was causing slow startup)
-    // Added -fflags nobuffer and -flags low_delay for faster startup
-    console.log(`[CAM${cam.id}] Starting video only (TCP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
+    // This camera requires UDP (rejects TCP with "Nonmatching transport")
+    console.log(`[CAM${cam.id}] Starting video only (UDP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
-      '-rtsp_transport', 'tcp',
+      '-rtsp_transport', 'udp',
       '-fflags', 'nobuffer',
       '-flags', 'low_delay',
       '-i', rtspUrl,
@@ -309,10 +308,10 @@ function startVideoStream(cam) {
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
   } else {
     // CAM 2: VIDEO + AUDIO
-    // Use TCP with low-delay flags for consistent fast startup
-    console.log(`[CAM${cam.id}] Starting video+audio (TCP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
+    // Use UDP - this camera also rejects TCP with "Nonmatching transport"
+    console.log(`[CAM${cam.id}] Starting video+audio (UDP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
-      '-rtsp_transport', 'tcp',
+      '-rtsp_transport', 'udp',
       '-fflags', 'nobuffer',
       '-flags', 'low_delay',
       '-i', rtspUrl,
