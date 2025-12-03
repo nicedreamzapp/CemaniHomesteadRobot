@@ -275,6 +275,14 @@ ws.onmessage = function(e) {
       return;
     }
 
+    // Check for Xbox controller status from ESP32
+    if (d.data && (d.data.includes('Xbox Connected') || d.data.includes('Xbox connected') || d.data.includes('XBOX_CONNECTED'))) {
+      updateXboxStatus(true);
+    }
+    if (d.data && (d.data.includes('Xbox Disconnected') || d.data.includes('Xbox disconnected') || d.data.includes('XBOX_DISCONNECTED'))) {
+      updateXboxStatus(false);
+    }
+
     // Show other serial messages
     var serialDiv = document.getElementById('serial');
     serialDiv.innerHTML += d.data + '<br>';

@@ -41,6 +41,31 @@ let teensyStatus = {
 };
 const TEENSY_TIMEOUT_MS = 5000; // Mark as disconnected if no TELEM for 5 seconds
 
+// ============ ODOMETRY STATE ============
+// Robot physical parameters (8-inch wheels, ~55cm wheelbase)
+const WHEEL_CIRCUMFERENCE_MM = 203.2 * Math.PI;  // ~638.4mm per wheel rotation
+const WHEEL_BASE_MM = 550.0;  // Distance between wheels
+const COUNTS_PER_REV = 4096;  // 1024 encoder lines * 4 (quadrature)
+const MM_PER_COUNT = WHEEL_CIRCUMFERENCE_MM / COUNTS_PER_REV;  // ~0.156mm per count
+
+let odometry = {
+  // Raw encoder counts (from Teensy)
+  posL: 0,
+  posR: 0,
+  // Previous counts for delta calculation
+  prevPosL: 0,
+  prevPosR: 0,
+  // Calculated position (in mm from start)
+  x: 0,
+  y: 0,
+  heading: 0,  // radians, 0 = facing forward (positive Y)
+  // Trip stats
+  tripStartTime: Date.now(),
+  totalDistance: 0,  // mm traveled since start
+  // Trail history for mini-map - start at origin (red dot)
+  trail: [{ x: 0, y: 0 }]
+};
+
 // ============ CAMERA STATE ============
 let cameraSocket = null;
 let cameraStatus = {
@@ -315,27 +340,102 @@ wss.on("connection", (ws, req) => {
         }
 
         // Detect Teensy TELEM messages to track Teensy connection
-        // Format: TELEM,batteryV,batteryPct,motorTempL,motorTempR,driverTemp1,driverTemp2,velL,velR,torqueL,torqueR,posL,posR
+        // NEW Format: TELEM,battV,battPct,tempLF,tempLR,tempRF,tempRR,drvTemp1,drvTemp2,velL,velR,torqueL,torqueR,posL,posR
         if (data.data && data.data.startsWith("TELEM,")) {
           teensyStatus.connected = true;
           teensyStatus.lastSeen = Date.now();
 
-          // Parse and broadcast telemetry data
-          // Format: TELEM,battV,battPct,motorTempL_F,motorTempR_F,driverTemp1_F,driverTemp2_F,velL,velR,torqueL,torqueR,posL,posR
+          // Parse telemetry - now with 4 motor temps (LF, LR, RF, RR)
+          // Format: TELEM,battV,battPct,tempLF,tempLR,tempRF,tempRR,drvTemp1,drvTemp2,velL,velR,torqueL,torqueR,posL,posR
+          //         [0]   [1]   [2]     [3]    [4]    [5]    [6]    [7]      [8]      [9]  [10] [11]    [12]    [13] [14]
           const parts = data.data.split(",");
-          if (parts.length >= 11) {
+          if (parts.length >= 15) {
+            // Get position from encoders (now at index 13 and 14)
+            const posL = parseInt(parts[13]) || 0;
+            const posR = parseInt(parts[14]) || 0;
+
+            // Calculate deltas from previous encoder values
+            const deltaL = posL - odometry.prevPosL;
+            const deltaR = posR - odometry.prevPosR;
+
+            // Filter out unrealistic jumps (noise, overflow, or first reading)
+            // Max realistic delta: ~50cm per telemetry update (1 second at max speed)
+            // At 638mm wheel circumference and 4096 counts/rev: 50cm = ~3200 counts
+            const MAX_DELTA = 5000;  // ~75cm worth of encoder counts
+            const deltaValid = Math.abs(deltaL) < MAX_DELTA && Math.abs(deltaR) < MAX_DELTA;
+
+            // Only update if we have valid deltas (skip first reading or noise)
+            if (deltaValid && (deltaL !== 0 || deltaR !== 0)) {
+              // Convert to mm
+              const distL = deltaL * MM_PER_COUNT;
+              const distR = deltaR * MM_PER_COUNT;
+
+              // Average distance moved
+              const distAvg = (distL + distR) / 2;
+
+              // Change in heading (positive = turning right)
+              const deltaHeading = (distR - distL) / WHEEL_BASE_MM;
+
+              // Update position using midpoint integration
+              const newHeading = odometry.heading + deltaHeading / 2;
+              odometry.x += distAvg * Math.sin(newHeading);
+              odometry.y += distAvg * Math.cos(newHeading);
+              odometry.heading += deltaHeading;
+
+              // Keep heading in [-PI, PI]
+              while (odometry.heading > Math.PI) odometry.heading -= 2 * Math.PI;
+              while (odometry.heading < -Math.PI) odometry.heading += 2 * Math.PI;
+
+              // Update total distance
+              odometry.totalDistance += Math.abs(distAvg);
+
+              // Add to trail more frequently for smoother lines (every ~5cm)
+              const lastPoint = odometry.trail[odometry.trail.length - 1];
+              const distFromLast = lastPoint
+                ? Math.sqrt(Math.pow(odometry.x - lastPoint.x, 2) + Math.pow(odometry.y - lastPoint.y, 2))
+                : Infinity;
+
+              if (odometry.trail.length === 0 || distFromLast > 50) {  // 50mm = 5cm
+                odometry.trail.push({ x: odometry.x, y: odometry.y });
+                if (odometry.trail.length > 500) odometry.trail.shift();  // Keep more points
+              }
+            }
+
+            // Always store previous values for delta calculation
+            odometry.prevPosL = posL;
+            odometry.prevPosR = posR;
+            odometry.posL = posL;
+            odometry.posR = posR;
+
             const telemData = {
               type: "teensy_telemetry",
               batteryV: parseFloat(parts[1]),
               batteryPct: parseInt(parts[2]),
-              motorTempL_F: parseInt(parts[3]),
-              motorTempR_F: parseInt(parts[4]),
-              driverTemp1_F: parseInt(parts[5]),
-              driverTemp2_F: parseInt(parts[6]),
-              velL: parseFloat(parts[7]),
-              velR: parseFloat(parts[8]),
-              torqueL: parseFloat(parts[9]),
-              torqueR: parseFloat(parts[10])
+              // 4 motor temps (all 4 wheels)
+              motorTempLF_F: parseInt(parts[3]),
+              motorTempLR_F: parseInt(parts[4]),
+              motorTempRF_F: parseInt(parts[5]),
+              motorTempRR_F: parseInt(parts[6]),
+              // Legacy L/R averages for compatibility
+              motorTempL_F: Math.round((parseInt(parts[3]) + parseInt(parts[4])) / 2),
+              motorTempR_F: Math.round((parseInt(parts[5]) + parseInt(parts[6])) / 2),
+              // Driver board temps
+              driverTemp1_F: parseInt(parts[7]),
+              driverTemp2_F: parseInt(parts[8]),
+              velL: parseFloat(parts[9]),
+              velR: parseFloat(parts[10]),
+              torqueL: parseFloat(parts[11]),
+              torqueR: parseFloat(parts[12]),
+              // Position data
+              posL: posL,
+              posR: posR,
+              // Odometry
+              odomX: Math.round(odometry.x),
+              odomY: Math.round(odometry.y),
+              odomHeading: odometry.heading,
+              odomHeadingDeg: Math.round(odometry.heading * 180 / Math.PI),
+              odomDistance: Math.round(odometry.totalDistance),
+              odomTrail: odometry.trail
             };
             broadcast(telemData, ws);
           }
@@ -395,6 +495,29 @@ wss.on("connection", (ws, req) => {
       if(data.type === "audio_mute") {
         ws.audioMuted = data.muted;
         console.log("[AUDIO] Browser mute:", data.muted);
+      }
+
+      // Handle odometry reset
+      if(data.type === "reset_odometry") {
+        odometry.x = 0;
+        odometry.y = 0;
+        odometry.heading = 0;
+        odometry.totalDistance = 0;
+        odometry.trail = [{ x: 0, y: 0 }];  // Start with origin point (red dot)
+        odometry.prevPosL = odometry.posL;
+        odometry.prevPosR = odometry.posR;
+        odometry.tripStartTime = Date.now();
+        console.log("[ODOM] Odometry reset - starting at origin");
+        // Broadcast the reset state immediately
+        broadcast({
+          type: "teensy_telemetry",
+          odomX: 0,
+          odomY: 0,
+          odomHeading: 0,
+          odomHeadingDeg: 0,
+          odomDistance: 0,
+          odomTrail: odometry.trail
+        });
       }
 
       // ============ CAMERA RELAY MESSAGES ============

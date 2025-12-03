@@ -5,11 +5,18 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.6"
+#define TEENSY_VERSION "3.8"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
 #define INVERT_DRIVER_2 false
+
+// ===== ODOMETRY CONFIGURATION =====
+// 8-inch hub motor wheels
+#define WHEEL_DIAMETER_MM     203.2f   // 8 inches = 203.2mm
+#define WHEEL_CIRCUMFERENCE_MM (WHEEL_DIAMETER_MM * 3.14159f)  // ~638.4mm
+#define WHEEL_BASE_MM         550.0f   // Distance between wheels (adjust for your robot)
+#define ENCODER_COUNTS_PER_REV 4096    // 1024 lines * 4 (quadrature)
 
 // SAFETY: Max speeds - keep LOW to prevent crashes!
 #define MAX_SPEED_RPM 75         // Half speed for forward/backward
