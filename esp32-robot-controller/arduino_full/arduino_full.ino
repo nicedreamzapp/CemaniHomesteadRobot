@@ -248,17 +248,36 @@ void handleGamepad() {
     }
   }
 
-  if (wsConnected && (abs(lx) > 10 || abs(ly) > 10)) {
+  // Increased deadzone from 10 to 40 to filter Xbox controller drift
+  // Xbox controllers commonly drift 15-30 units even when centered
+  if (wsConnected && (abs(lx) > 40 || abs(ly) > 40)) {
     String msg = "{\"type\":\"joystick\",\"lx\":" + String(lx) + ",\"ly\":" + String(ly) + "}";
     webSocket.sendTXT(msg);
   }
 }
 
+// Escape string for safe JSON embedding
+String escapeForJson(String input) {
+  String escaped = "";
+  for (unsigned int i = 0; i < input.length(); i++) {
+    char c = input.charAt(i);
+    if (c == '\\') escaped += "\\\\";
+    else if (c == '"') escaped += "\\\"";
+    else if (c == '\n') escaped += "\\n";
+    else if (c == '\r') escaped += "\\r";
+    else if (c == '\t') escaped += "\\t";
+    else if (c < 32 || c > 126) escaped += "?";  // Replace control chars
+    else escaped += c;
+  }
+  return escaped;
+}
+
 void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
+  String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
   String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.8\",\"wifi\":\"" +
-                     WiFi.SSID() + "\",\"rssi\":" + String(WiFi.RSSI()) +
+                     ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
                      "\",\"uptime\":" + String(millis() / 1000) + "}";
@@ -271,18 +290,7 @@ void forwardTeensySerial() {
     String line = teensySerial.readStringUntil('\n');
     line.trim();  // Remove \r and whitespace
     if (line.length() > 0 && wsConnected) {
-      // Escape special characters for JSON safety
-      String escaped = "";
-      for (unsigned int i = 0; i < line.length(); i++) {
-        char c = line.charAt(i);
-        if (c == '\\') escaped += "\\\\";
-        else if (c == '"') escaped += "\\\"";
-        else if (c == '\n') escaped += "\\n";
-        else if (c == '\r') escaped += "\\r";
-        else if (c == '\t') escaped += "\\t";
-        else if (c < 32 || c > 126) escaped += "?";  // Replace other control chars
-        else escaped += c;
-      }
+      String escaped = escapeForJson(line);
       String msg = "{\"type\":\"serial\",\"data\":\"" + escaped + "\"}";
       webSocket.sendTXT(msg);
       Serial.println("[TEENSY] " + line);

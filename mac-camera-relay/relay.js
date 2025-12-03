@@ -147,13 +147,20 @@ function connectToVPS() {
       killExistingFfmpeg(cam.ip);
     });
 
-    setTimeout(() => {
-      console.log('[VPS] Starting streams...');
-      CONFIG.cameras.forEach(cam => {
+    setTimeout(async () => {
+      console.log('[VPS] Starting streams with staggered initialization...');
+
+      // Start cameras sequentially with delays to avoid RTSP race conditions
+      for (const cam of CONFIG.cameras) {
+        console.log(`[CAM${cam.id}] Initiating stream...`);
         startVideoStream(cam);
         startAudioStream(cam);
-      });
-    }, 1000);
+        // Wait 3 seconds between cameras to avoid RTSP/network contention
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      console.log('[VPS] All camera streams initiated');
+    }, 2000);
   });
 
   vpsSocket.on('message', async (data, isBinary) => {
@@ -284,10 +291,13 @@ function startVideoStream(cam) {
 
   if (cam.id === 1) {
     // CAM 1: VIDEO ONLY - no audio
-    // Use same reliable settings as cam2
-    console.log(`[CAM${cam.id}] Starting video only: rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
+    // Use TCP for more reliable connection (UDP was causing slow startup)
+    // Added -fflags nobuffer and -flags low_delay for faster startup
+    console.log(`[CAM${cam.id}] Starting video only (TCP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
-      '-rtsp_transport', 'udp',
+      '-rtsp_transport', 'tcp',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
       '-i', rtspUrl,
       '-map', '0:v',
       '-vf', `scale=${CONFIG.stream.scale}`,
@@ -295,13 +305,16 @@ function startVideoStream(cam) {
       '-c:v', 'mjpeg',
       '-q:v', '10',
       '-r', '12',
-      '-'
+      'pipe:1'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
   } else {
     // CAM 2: VIDEO + AUDIO
-    console.log(`[CAM${cam.id}] Starting video+audio: rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
+    // Use TCP with low-delay flags for consistent fast startup
+    console.log(`[CAM${cam.id}] Starting video+audio (TCP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
-      '-rtsp_transport', 'udp',
+      '-rtsp_transport', 'tcp',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
       '-i', rtspUrl,
       // Video output -> stdout
       '-map', '0:v',
@@ -325,6 +338,7 @@ function startVideoStream(cam) {
   }
 
   state.videoProcess = proc;
+  state.videoProcess.startTime = Date.now();  // Track when process started for watchdog
   state.videoStarting = false;
   console.log(`[CAM${cam.id}] Started (pid ${proc.pid})`);
 
@@ -565,8 +579,14 @@ setInterval(() => {
       }
 
       // Restart if process is running but no frames received (camera offline/rebooting)
-      if (state.videoProcess && state.lastFrameTime > 0 && (now - state.lastFrameTime) > STALL_TIMEOUT_MS) {
-        console.log(`[WATCHDOG] CAM${cam.id} stalled (no frames for ${Math.round((now - state.lastFrameTime)/1000)}s), restarting...`);
+      // Also detect if stream never started (lastFrameTime still 0 after timeout)
+      const timeSinceStart = state.videoProcess ? (now - (state.videoProcess.startTime || now)) : 0;
+      const neverReceivedFrames = state.lastFrameTime === 0 && timeSinceStart > STALL_TIMEOUT_MS;
+      const stalled = state.lastFrameTime > 0 && (now - state.lastFrameTime) > STALL_TIMEOUT_MS;
+
+      if (state.videoProcess && (neverReceivedFrames || stalled)) {
+        const reason = neverReceivedFrames ? 'never received frames' : `no frames for ${Math.round((now - state.lastFrameTime)/1000)}s`;
+        console.log(`[WATCHDOG] CAM${cam.id} ${reason}, restarting...`);
         stopVideoStream(cam);
         killExistingFfmpeg(cam.ip);
         setTimeout(() => startVideoStream(cam), 1000);

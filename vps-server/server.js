@@ -33,6 +33,14 @@ let robotStatus = {
   lastSeen: null
 };
 
+// ============ TEENSY STATE ============
+let teensyStatus = {
+  connected: false,
+  lastSeen: 0,
+  version: "unknown"
+};
+const TEENSY_TIMEOUT_MS = 5000; // Mark as disconnected if no TELEM for 5 seconds
+
 // ============ CAMERA STATE ============
 let cameraSocket = null;
 let cameraStatus = {
@@ -272,7 +280,7 @@ wss.on("connection", (ws, req) => {
         robotStatus.version = data.version || "unknown";
         robotStatus.wifi = data.wifi || "unknown";
         robotStatus.lastSeen = Date.now();
-        broadcast({type:"status", ...robotStatus, camera: cameraStatus});
+        broadcast({type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected});
         console.log("[ROBOT] ESP32 connected");
       }
 
@@ -290,10 +298,48 @@ wss.on("connection", (ws, req) => {
         robotStatus.ip = data.ip || robotStatus.ip;
         robotStatus.uptime = data.uptime || 0;
         robotStatus.lastSeen = Date.now();
-        broadcast({type:"status", ...robotStatus, camera: cameraStatus});
+        broadcast({type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected});
       }
 
       if(data.type === "serial" && ws.isRobot) {
+        // Detect Teensy version message
+        if (data.data && data.data.startsWith("TEENSY_VERSION,")) {
+          const parts = data.data.split(",");
+          if (parts.length >= 2) {
+            teensyStatus.version = parts[1].trim();
+            teensyStatus.connected = true;
+            teensyStatus.lastSeen = Date.now();
+            console.log(`[TEENSY] Version: ${teensyStatus.version}`);
+            broadcast({type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected, teensyVersion: teensyStatus.version});
+          }
+        }
+
+        // Detect Teensy TELEM messages to track Teensy connection
+        // Format: TELEM,batteryV,batteryPct,motorTempL,motorTempR,driverTemp1,driverTemp2,velL,velR,torqueL,torqueR,posL,posR
+        if (data.data && data.data.startsWith("TELEM,")) {
+          teensyStatus.connected = true;
+          teensyStatus.lastSeen = Date.now();
+
+          // Parse and broadcast telemetry data
+          // Format: TELEM,battV,battPct,motorTempL_F,motorTempR_F,driverTemp1_F,driverTemp2_F,velL,velR,torqueL,torqueR,posL,posR
+          const parts = data.data.split(",");
+          if (parts.length >= 11) {
+            const telemData = {
+              type: "teensy_telemetry",
+              batteryV: parseFloat(parts[1]),
+              batteryPct: parseInt(parts[2]),
+              motorTempL_F: parseInt(parts[3]),
+              motorTempR_F: parseInt(parts[4]),
+              driverTemp1_F: parseInt(parts[5]),
+              driverTemp2_F: parseInt(parts[6]),
+              velL: parseFloat(parts[7]),
+              velR: parseFloat(parts[8]),
+              torqueL: parseFloat(parts[9]),
+              torqueR: parseFloat(parts[10])
+            };
+            broadcast(telemData, ws);
+          }
+        }
         broadcast({type:"serial", data:data.data}, ws);
       }
 
@@ -341,7 +387,7 @@ wss.on("connection", (ws, req) => {
 
       if(data.type === "get_status") {
         ws.isBrowser = true;  // Mark as browser client
-        ws.send(JSON.stringify({type:"status", ...robotStatus, camera: cameraStatus}));
+        ws.send(JSON.stringify({type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected}));
         ws.send(JSON.stringify({type:"camera_streams", cameras: perCameraStatus}));
       }
 
@@ -473,6 +519,14 @@ setInterval(() => {
   }
   if (changed) {
     broadcast({type: "camera_streams", cameras: perCameraStatus});
+  }
+
+  // Check Teensy timeout
+  const wasTeensyConnected = teensyStatus.connected;
+  teensyStatus.connected = (now - teensyStatus.lastSeen) < TEENSY_TIMEOUT_MS;
+  if (wasTeensyConnected !== teensyStatus.connected) {
+    console.log(`[TEENSY] Connected: ${teensyStatus.connected}`);
+    broadcast({type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected});
   }
 }, 1000);
 

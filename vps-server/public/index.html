@@ -3,625 +3,7 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: linear-gradient(135deg, #1a2332 0%, #2d3e5f 100%);
-  font-family: 'Segoe UI', 'Roboto', -apple-system, sans-serif;
-  color: #00ff88;
-  overflow-x: hidden;
-  height: 100vh;
-}
-.glass {
-  background: rgba(40, 60, 90, 0.5);
-  backdrop-filter: blur(10px);
-  border: 3px solid rgba(0, 255, 136, 0.4);
-  border-radius: 20px;
-  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6), inset 0 3px 0 rgba(255, 255, 255, 0.3), 0 0 30px rgba(0, 255, 136, 0.2);
-}
-.container {
-  display: grid;
-  grid-template-columns: 1fr 280px 340px;
-  grid-template-rows: 70px 1fr;
-  gap: 15px;
-  padding: 15px;
-  height: 100vh;
-}
-.header {
-  grid-column: 1 / -1;
-  padding: 15px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: linear-gradient(135deg, rgba(40, 60, 90, 0.7), rgba(20, 40, 70, 0.7));
-}
-h1 { font-size: 22px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,0.5); }
-.status { color: #ff6b6b; font-size: 28px; font-weight: bold; text-shadow: 0 0 15px #ff6b6b; }
-.status.online { color: #51cf66; text-shadow: 0 0 20px #51cf66; }
-.info { display: flex; gap: 20px; font-size: 12px; color: #e0f7ff; }
-.info-item { display: flex; flex-direction: column; align-items: flex-end; }
-.info-label { font-size: 9px; color: #74c0fc; text-transform: uppercase; }
-.info-value { font-size: 12px; color: #51cf66; font-weight: bold; }
-
-/* Left column - Cameras stacked */
-.cameras-column {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-}
-
-/* Camera containers */
-.cam-container {
-  background: #000;
-  border-radius: 15px;
-  border: 2px solid #00ff88;
-  overflow: hidden;
-  position: relative;
-  flex: 1;
-  min-height: 180px;
-}
-.cam-video {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #444;
-  font-size: 14px;
-}
-.cam-video video, .cam-video img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
-}
-
-/* Overlay controls */
-.cam-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-}
-.speaker-btn { position: absolute; top: 10px; right: 50px; font-size: 24px; cursor: pointer; opacity: 0.7; transition: all 0.2s; z-index: 10; color: #44ff44; pointer-events: auto; }
-.speaker-btn:hover { opacity: 1; transform: scale(1.1); }
-.speaker-btn.muted { opacity: 0.5; color: #ff4444; }
-.cam-status-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  font-size: 10px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  background: rgba(255,107,107,0.9);
-  color: #fff;
-  font-weight: bold;
-  pointer-events: auto;
-}
-.cam-status-badge.live { background: rgba(81,207,102,0.9); }
-
-/* PTZ D-pad overlay */
-.ptz-overlay {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  display: grid;
-  grid-template-columns: repeat(3, 36px);
-  grid-template-rows: repeat(3, 36px);
-  gap: 2px;
-  pointer-events: auto;
-}
-.ptz-btn {
-  background: rgba(0,0,0,0.6);
-  border: 2px solid rgba(255,255,255,0.3);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 12px;
-  font-weight: bold;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.ptz-btn:hover { background: rgba(255,255,255,0.2); }
-.ptz-btn:active { background: rgba(81,207,102,0.6); }
-.ptz-btn.empty { background: transparent; border: none; pointer-events: none; }
-
-/* Middle column */
-.middle-column {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-}
-
-.robot-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Section headers with emoji */
-.section-header {
-  font-size: 14px;
-  font-weight: bold;
-  color: #e0f7ff;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-.section-header .emoji { font-size: 18px; }
-
-/* COMPASS DIAL */
-.compass-container {
-  position: relative;
-  width: 150px;
-  height: 150px;
-}
-.compass-ring {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.8), rgba(20, 30, 50, 0.8));
-  border: 3px solid #00ff88;
-  position: relative;
-}
-.compass-dir {
-  position: absolute;
-  width: 34px;
-  height: 34px;
-  background: rgba(0, 255, 136, 0.2);
-  border: 2px solid rgba(0, 255, 136, 0.5);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: bold;
-  color: #00ff88;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.compass-dir:hover { background: rgba(0, 255, 136, 0.5); transform: scale(1.1); }
-.compass-dir:active { background: #00ff88; color: #000; }
-.compass-dir.n { top: 0px; left: 50%; transform: translateX(-50%); }
-.compass-dir.e { top: 50%; right: 0px; transform: translateY(-50%); }
-.compass-dir.s { bottom: 0px; left: 50%; transform: translateX(-50%); }
-.compass-dir.w { top: 50%; left: 0px; transform: translateY(-50%); }
-.compass-center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 45px;
-  height: 45px;
-  background: radial-gradient(circle, #1a1a2e, #0a0a1a);
-  border: 2px solid #51cf66;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-}
-.compass-center-label { font-size: 7px; color: #74c0fc; }
-.compass-center-value { font-size: 11px; color: #51cf66; font-weight: bold; }
-
-/* DISTANCE BUTTONS */
-.dist-row {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-  margin-top: 8px;
-}
-.dist-btn {
-  flex: 1;
-  padding: 8px 4px;
-  background: rgba(81, 207, 102, 0.2);
-  border: 2px solid rgba(81, 207, 102, 0.5);
-  border-radius: 8px;
-  font-size: 11px;
-  color: #51cf66;
-  cursor: pointer;
-  text-align: center;
-  font-weight: bold;
-  transition: all 0.15s;
-}
-.dist-btn:hover { background: rgba(81, 207, 102, 0.4); }
-.dist-btn:active { background: #51cf66; color: #000; }
-
-/* COMMAND QUEUE */
-.cmd-queue {
-  width: 100%;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 8px;
-  padding: 6px;
-  margin-top: 6px;
-}
-.cmd-queue-label { font-size: 9px; color: #74c0fc; margin-bottom: 4px; }
-.cmd-queue-display {
-  min-height: 22px;
-  background: #0a0a0a;
-  border: 1px solid #00ff88;
-  border-radius: 4px;
-  padding: 4px 6px;
-  font-size: 9px;
-  color: #51cf66;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-}
-.cmd-chip {
-  background: rgba(0, 255, 136, 0.2);
-  border: 1px solid #00ff88;
-  border-radius: 10px;
-  padding: 2px 6px;
-  font-size: 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.cmd-chip .remove { cursor: pointer; color: #ff6b6b; }
-
-/* STATUS */
-.move-status {
-  width: 100%;
-  text-align: center;
-  padding: 5px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: bold;
-  margin-top: 4px;
-}
-.move-status.idle { background: rgba(116, 192, 252, 0.2); color: #74c0fc; }
-.move-status.moving { background: rgba(81, 207, 102, 0.3); color: #51cf66; animation: pulse 1s infinite; }
-.move-status.error { background: rgba(255, 107, 107, 0.3); color: #ff6b6b; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-
-/* EXECUTE CONTROLS */
-.exec-row {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-  margin-top: 6px;
-}
-.exec-btn {
-  flex: 1;
-  padding: 8px;
-  border-radius: 8px;
-  font-weight: bold;
-  font-size: 10px;
-  cursor: pointer;
-  border: none;
-  text-transform: uppercase;
-}
-.exec-btn.go { background: linear-gradient(135deg, #51cf66, #00ff88); color: #000; }
-.exec-btn.stop { background: linear-gradient(135deg, #ff6b6b, #e94560); color: #fff; }
-.exec-btn.clear { background: rgba(116, 192, 252, 0.3); color: #74c0fc; border: 1px solid #74c0fc; }
-
-/* MINI RADAR */
-.radar-container {
-  width: 100%;
-  height: 100px;
-  background: linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 10, 20, 0.9));
-  border: 2px solid rgba(0, 255, 136, 0.3);
-  border-radius: 8px;
-  position: relative;
-  overflow: hidden;
-  margin-top: 6px;
-}
-.radar-grid {
-  position: absolute;
-  width: 400%;
-  height: 400%;
-  top: -150%;
-  left: -150%;
-  background-image:
-    linear-gradient(rgba(0, 255, 136, 0.2) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 136, 0.2) 1px, transparent 1px);
-  background-size: 20px 20px;
-  transition: transform 0.3s;
-}
-.radar-scale {
-  position: absolute;
-  bottom: 3px;
-  right: 5px;
-  font-size: 7px;
-  color: rgba(0, 255, 136, 0.6);
-  z-index: 10;
-  background: rgba(0,0,0,0.5);
-  padding: 2px 4px;
-  border-radius: 3px;
-}
-.radar-label {
-  position: absolute;
-  font-size: 8px;
-  color: rgba(0, 255, 136, 0.7);
-  padding: 2px 4px;
-  z-index: 10;
-  font-weight: bold;
-}
-.radar-robot {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 20px;
-  height: 24px;
-  transform: translate(-50%, -50%);
-  z-index: 5;
-}
-.robot-body {
-  width: 14px;
-  height: 18px;
-  background: linear-gradient(to bottom, #51cf66 0%, #51cf66 35%, #2b8a3e 35%, #2b8a3e 100%);
-  border: 2px solid #00ff88;
-  border-radius: 4px 4px 2px 2px;
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.6);
-}
-.robot-front {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-bottom: 8px solid #51cf66;
-}
-.robot-wheels {
-  position: absolute;
-  bottom: 2px;
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  padding: 0 1px;
-}
-.robot-wheel {
-  width: 4px;
-  height: 8px;
-  background: #1a1a2e;
-  border-radius: 2px;
-}
-.radar-crosshair {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 30px;
-  height: 30px;
-  border: 1px dashed rgba(0, 255, 136, 0.3);
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-/* Serial monitor */
-.serial-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: rgba(0,0,0,0.3);
-  border-radius: 10px;
-  padding: 8px;
-  min-height: 100px;
-}
-.serial {
-  flex: 1;
-  background: #0a0a0a;
-  padding: 6px;
-  overflow-y: auto;
-  font-size: 9px;
-  border-radius: 6px;
-  border: 2px solid #00ff88;
-  min-height: 60px;
-  max-height: 100px;
-  font-family: 'Courier New', monospace;
-}
-input[type="text"] {
-  padding: 6px;
-  background: #0a0a0a;
-  border: 2px solid #00ff88;
-  color: #51cf66;
-  border-radius: 6px;
-  width: 100%;
-  font-size: 10px;
-  margin-top: 5px;
-}
-
-/* RIGHT SIDEBAR - REDESIGNED */
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  overflow-y: auto;
-}
-
-/* TWO-COLUMN STATUS GRID */
-.status-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.status-card {
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(20, 30, 50, 0.4));
-  padding: 8px 10px;
-  border-radius: 10px;
-  border-left: 3px solid #51cf66;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.status-card .icon { font-size: 18px; }
-.status-card .info { display: flex; flex-direction: column; }
-.status-card .label { font-size: 9px; color: #74c0fc; text-transform: uppercase; }
-.status-card .value { font-size: 13px; color: #51cf66; font-weight: bold; }
-.status-card.offline { border-left-color: #ff6b6b; }
-.status-card.offline .value { color: #ff6b6b; }
-.status-card.warning { border-left-color: #ffd43b; }
-.status-card.warning .value { color: #ffd43b; }
-
-/* DRIVER TELEMETRY PANEL */
-.telemetry-panel {
-  background: linear-gradient(135deg, rgba(0, 40, 80, 0.4), rgba(0, 20, 40, 0.6));
-  border-radius: 12px;
-  padding: 10px;
-  border: 2px solid rgba(0, 200, 255, 0.3);
-}
-.telemetry-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.telemetry-item {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  padding: 8px;
-  text-align: center;
-}
-.telemetry-item .icon { font-size: 20px; margin-bottom: 2px; }
-.telemetry-item .label { font-size: 8px; color: #74c0fc; text-transform: uppercase; margin-bottom: 2px; }
-.telemetry-item .value { font-size: 18px; font-weight: bold; color: #00d4ff; }
-.telemetry-item .unit { font-size: 9px; color: #74c0fc; }
-.telemetry-item.large { grid-column: span 2; }
-.telemetry-item.battery .value { color: #51cf66; }
-.telemetry-item.temp .value { color: #ffd43b; }
-.telemetry-item.warning .value { color: #ff6b6b; }
-
-/* Motor L/R stats */
-.motor-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-.motor-col {
-  flex: 1;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  padding: 6px;
-  text-align: center;
-}
-.motor-col .header { font-size: 9px; color: #74c0fc; font-weight: bold; margin-bottom: 4px; }
-.motor-stat {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  padding: 2px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-.motor-stat:last-child { border-bottom: none; }
-.motor-stat .label { color: #888; }
-.motor-stat .val { font-weight: bold; color: #00d4ff; }
-
-/* FUTURE SENSORS - Compact chips */
-.future-sensors {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 4px;
-}
-.future-chip {
-  background: rgba(100, 100, 100, 0.15);
-  border: 1px dashed rgba(150, 150, 150, 0.3);
-  border-radius: 6px;
-  padding: 4px 6px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 8px;
-  color: #666;
-}
-.future-chip .icon { font-size: 12px; }
-
-/* CODE EDITOR */
-.code-section { margin-top: 6px; }
-.tabs { display: flex; gap: 4px; margin-bottom: 6px; }
-.tab {
-  padding: 5px 10px;
-  background: rgba(0, 255, 136, 0.1);
-  border: 1px solid rgba(0, 255, 136, 0.3);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 9px;
-  color: #e0f7ff;
-}
-.tab:hover { background: rgba(0, 255, 136, 0.2); }
-.tab.active { background: rgba(0, 255, 136, 0.3); border-color: #00ff88; color: #00ff88; }
-.editor textarea {
-  width: 100%;
-  height: 80px;
-  background: #0a0a0a;
-  color: #51cf66;
-  border: 2px solid #00ff88;
-  border-radius: 8px;
-  padding: 6px;
-  font-family: 'Courier New', monospace;
-  font-size: 9px;
-  resize: vertical;
-}
-.btn {
-  background: linear-gradient(135deg, #51cf66, #00ff88);
-  color: #0a0a0a;
-  padding: 8px 12px;
-  border-radius: 8px;
-  text-align: center;
-  font-weight: bold;
-  font-size: 10px;
-  cursor: pointer;
-  margin-top: 6px;
-  border: none;
-}
-.btn:hover { opacity: 0.9; transform: scale(1.02); }
-
-/* RESPONSIVE */
-@media (min-width: 1600px) {
-  .container {
-    grid-template-columns: 1fr 320px 380px;
-    grid-template-rows: 60px 1fr;
-    max-height: 100vh;
-    overflow: hidden;
-  }
-  .cameras-column { flex-direction: row; gap: 15px; }
-  .cam-container { min-height: 200px; max-height: 45vh; }
-}
-
-@media (max-width: 1024px) {
-  .container {
-    grid-template-columns: 1fr 260px;
-    grid-template-rows: 60px 1fr;
-  }
-  .sidebar { display: none; }
-}
-
-@media (max-width: 768px) {
-  .container {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    min-height: 100vh;
-    padding: 10px;
-    gap: 10px;
-  }
-  .header { flex-wrap: wrap; padding: 10px; gap: 10px; }
-  .header h1 { font-size: 14px; width: 100%; text-align: center; }
-  .status { font-size: 18px; }
-  .cameras-column { flex: none; padding: 8px; }
-  .cam-container { min-height: 35vh; flex: none; }
-  .ptz-overlay { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px); }
-  .ptz-btn { font-size: 18px; }
-  .sidebar { display: block; padding: 10px; }
-}
-</style>
+<link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <div class="container">
@@ -638,18 +20,13 @@ input[type="text"] {
         <span class="info-value" id="rssi">--</span>
       </div>
       <div class="info-item">
-        <span class="info-label">IP</span>
-        <span class="info-value" id="ip">--</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Ver</span>
-        <span class="info-value" id="version">--</span>
-      </div>
-      <div class="info-item">
         <span class="info-label">Up</span>
         <span class="info-value" id="uptime">--</span>
       </div>
     </div>
+    <!-- Hidden for JS compatibility -->
+    <span id="ip" style="display:none">--</span>
+    <span id="version" style="display:none">--</span>
   </div>
 
   <!-- Left: Cameras stacked -->
@@ -780,6 +157,7 @@ input[type="text"] {
         <div class="info">
           <span class="label">ESP32</span>
           <span class="value" id="esp32Status">--</span>
+          <span class="version" id="esp32Version" style="font-size:10px;opacity:0.7;"></span>
         </div>
       </div>
       <div class="status-card" id="teensyCard">
@@ -787,6 +165,7 @@ input[type="text"] {
         <div class="info">
           <span class="label">Teensy</span>
           <span class="value" id="teensyStatus">--</span>
+          <span class="version" id="teensyVersion" style="font-size:10px;opacity:0.7;"></span>
         </div>
       </div>
       <div class="status-card" id="cam1Card">
@@ -805,49 +184,112 @@ input[type="text"] {
       </div>
     </div>
 
-    <!-- DRIVER TELEMETRY PANEL -->
-    <div class="section-header"><span class="emoji">&#128200;</span> MOTOR DRIVER</div>
-    <div class="telemetry-panel">
-      <div class="telemetry-grid">
-        <!-- Battery (Bus Voltage) - Large -->
-        <div class="telemetry-item large battery" id="batteryItem">
-          <div class="icon">&#128267;</div>
-          <div class="label">Battery</div>
-          <div class="value" id="batteryVoltage">--</div>
-          <div class="unit">V (<span id="batteryPercent">--%</span>)</div>
-        </div>
-        <!-- Driver Temp -->
-        <div class="telemetry-item temp" id="driverTempItem">
-          <div class="icon">&#127777;</div>
-          <div class="label">Driver</div>
-          <div class="value" id="driverTemp">--</div>
-          <div class="unit">&deg;F</div>
-        </div>
-        <!-- Motor Avg Temp -->
-        <div class="telemetry-item temp" id="motorTempItem">
-          <div class="icon">&#9832;</div>
-          <div class="label">Motors</div>
-          <div class="value" id="motorTempAvg">--</div>
-          <div class="unit">&deg;F</div>
+    <!-- ROBOT TELEMETRY DIAGRAM -->
+    <div class="section-header"><span class="emoji">&#128663;</span> DRIVE SYSTEM</div>
+    <div class="robot-diagram-panel">
+      <!-- Battery Bar -->
+      <div class="battery-bar" id="batteryBar">
+        <div class="battery-icon">&#128267;</div>
+        <div class="battery-info">
+          <div class="battery-level">
+            <div class="battery-fill" id="batteryFill" style="width:65%"></div>
+          </div>
+          <div class="battery-text"><span id="batteryVoltage">--</span>V &bull; <span id="batteryPercent">--</span>%</div>
         </div>
       </div>
 
-      <!-- Motor L/R Stats -->
-      <div class="motor-row">
-        <div class="motor-col">
-          <div class="header">&#9664; LEFT</div>
-          <div class="motor-stat"><span class="label">Temp</span><span class="val" id="motorTempL">--&deg;F</span></div>
-          <div class="motor-stat"><span class="label">Speed</span><span class="val" id="velocityL">-- RPM</span></div>
-          <div class="motor-stat"><span class="label">Torque</span><span class="val" id="torqueL">-- A</span></div>
-          <div class="motor-stat"><span class="label">Pos</span><span class="val" id="positionL">--</span></div>
+      <!-- DRIVER BOARDS SECTION -->
+      <div class="drivers-row">
+        <div class="driver-board left">
+          <div class="driver-board-label">DRIVER 2 (LEFT)</div>
+          <div class="driver-board-temp" id="driver2TempItem">
+            <span class="temp-icon">&#127777;</span>
+            <span class="temp-val" id="driver2Temp">--</span>&deg;F
+          </div>
         </div>
-        <div class="motor-col">
-          <div class="header">RIGHT &#9654;</div>
-          <div class="motor-stat"><span class="label">Temp</span><span class="val" id="motorTempR">--&deg;F</span></div>
-          <div class="motor-stat"><span class="label">Speed</span><span class="val" id="velocityR">-- RPM</span></div>
-          <div class="motor-stat"><span class="label">Torque</span><span class="val" id="torqueR">-- A</span></div>
-          <div class="motor-stat"><span class="label">Pos</span><span class="val" id="positionR">--</span></div>
+        <div class="driver-board right">
+          <div class="driver-board-label">DRIVER 1 (RIGHT)</div>
+          <div class="driver-board-temp" id="driver1TempItem">
+            <span class="temp-icon">&#127777;</span>
+            <span class="temp-val" id="driver1Temp">--</span>&deg;F
+          </div>
         </div>
+      </div>
+
+      <!-- SEPARATOR -->
+      <div class="section-divider">
+        <span class="divider-label">MOTORS</span>
+      </div>
+
+      <!-- WHEELS/MOTORS SECTION -->
+      <div class="robot-topdown">
+        <!-- LEFT WHEELS -->
+        <div class="wheel-side left">
+          <div class="wheel-group">
+            <div class="wheel front">
+              <div class="wheel-visual stopped" id="wheelLF"></div>
+              <div class="wheel-info">
+                <div class="wheel-label">L FRONT</div>
+                <div class="wheel-temp"><span id="motorTempLF">--</span>&deg;F</div>
+              </div>
+            </div>
+            <div class="wheel rear">
+              <div class="wheel-visual stopped" id="wheelLR"></div>
+              <div class="wheel-info">
+                <div class="wheel-label">L REAR</div>
+                <div class="wheel-temp"><span id="motorTempLR">--</span>&deg;F</div>
+              </div>
+            </div>
+          </div>
+          <div class="wheel-speed">
+            <span class="speed-val" id="velocityL">0.00</span>
+            <span class="speed-unit">MPH</span>
+          </div>
+        </div>
+
+        <!-- ROBOT BODY -->
+        <div class="robot-body-topdown">
+          <div class="robot-front-indicator">&#9650; FWD</div>
+          <div class="robot-chassis">
+            <div class="chassis-inner">
+              <div class="chassis-label">CEMANI</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT WHEELS -->
+        <div class="wheel-side right">
+          <div class="wheel-group">
+            <div class="wheel front">
+              <div class="wheel-visual stopped" id="wheelRF"></div>
+              <div class="wheel-info">
+                <div class="wheel-label">R FRONT</div>
+                <div class="wheel-temp"><span id="motorTempRF">--</span>&deg;F</div>
+              </div>
+            </div>
+            <div class="wheel rear">
+              <div class="wheel-visual stopped" id="wheelRR"></div>
+              <div class="wheel-info">
+                <div class="wheel-label">R REAR</div>
+                <div class="wheel-temp"><span id="motorTempRR">--</span>&deg;F</div>
+              </div>
+            </div>
+          </div>
+          <div class="wheel-speed">
+            <span class="speed-val" id="velocityR">0.00</span>
+            <span class="speed-unit">MPH</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hidden elements for compatibility -->
+      <div style="display:none">
+        <span id="driverTemp"></span>
+        <span id="motorTempAvg"></span>
+        <span id="positionL"></span>
+        <span id="positionR"></span>
+        <span id="torqueL"></span>
+        <span id="torqueR"></span>
       </div>
     </div>
 
@@ -878,742 +320,9 @@ input[type="text"] {
   </div>
 </div>
 
-<script>
-// ============ DUAL WEBSOCKET ARCHITECTURE ============
-const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const ws = new WebSocket(wsProtocol + '//' + location.host);
-ws.binaryType = 'arraybuffer';
-
-// PTZ via /ptz path
-let ptzWs = null;
-let ptzConnected = false;
-
-function connectPtzWs() {
-  const ptzUrl = wsProtocol + '//' + location.host + '/ptz';
-  ptzWs = new WebSocket(ptzUrl);
-
-  ptzWs.onopen = () => {
-    ptzConnected = true;
-    ptzWs.send(JSON.stringify({ type: 'ptz_browser_hello' }));
-  };
-
-  ptzWs.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      if (data.type === 'ptz_relay_status') {
-        console.log('[PTZ] Relay:', data.connected ? 'OK' : 'DISCONNECTED');
-      }
-    } catch (err) {}
-  };
-
-  ptzWs.onclose = () => {
-    ptzConnected = false;
-    setTimeout(connectPtzWs, 2000);
-  };
-
-  ptzWs.onerror = () => {};
-}
-
-connectPtzWs();
-
-let cam1Active = false;
-
-// ============ AUDIO PLAYER ============
-let audioContext = null;
-let isMuted = false;
-
-function initAudio() {
-  if (audioContext) return;
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-}
-
-async function playAudioChunk(data) {
-  if (!audioContext || isMuted) return;
-  try {
-    const audioBuffer = await audioContext.decodeAudioData(data.buffer.slice(0));
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
-    source.start(0);
-  } catch (err) {}
-}
-
-// ============ CAMERA PLAYERS ============
-let cam1Image = null;
-let cam2Image = null;
-let cam2Active = false;
-let isMuted2 = false;
-
-function initCam1() {
-  const container = document.getElementById('cam1-video');
-  if (!cam1Image) {
-    cam1Image = document.createElement('img');
-    cam1Image.style.width = '100%';
-    cam1Image.style.height = '100%';
-    cam1Image.style.objectFit = 'contain';
-    cam1Image.style.background = '#000';
-    container.innerHTML = '';
-    container.appendChild(cam1Image);
-  }
-}
-
-function initCam2() {
-  const container = document.getElementById('cam2-video');
-  if (!cam2Image) {
-    cam2Image = document.createElement('img');
-    cam2Image.style.width = '100%';
-    cam2Image.style.height = '100%';
-    cam2Image.style.objectFit = 'contain';
-    cam2Image.style.background = '#000';
-    container.innerHTML = '';
-    container.appendChild(cam2Image);
-  }
-}
-
-let pendingFrameUrl = { 1: null, 2: null };
-
-function displayFrame(blob, camId) {
-  if (pendingFrameUrl[camId]) {
-    URL.revokeObjectURL(pendingFrameUrl[camId]);
-  }
-
-  const url = URL.createObjectURL(blob);
-  pendingFrameUrl[camId] = url;
-
-  if (camId === 1) {
-    if (!cam1Image) initCam1();
-    cam1Image.src = url;
-    cam1Image.onload = () => {
-      URL.revokeObjectURL(url);
-      if (pendingFrameUrl[1] === url) pendingFrameUrl[1] = null;
-    };
-    if (!cam1Active) {
-      cam1Active = true;
-      updateCamStatus(1, true, true);
-    }
-  } else if (camId === 2) {
-    if (!cam2Image) initCam2();
-    cam2Image.src = url;
-    cam2Image.onload = () => {
-      URL.revokeObjectURL(url);
-      if (pendingFrameUrl[2] === url) pendingFrameUrl[2] = null;
-    };
-    if (!cam2Active) {
-      cam2Active = true;
-      updateCamStatus(2, true, true);
-    }
-  }
-}
-
-function updateCamStatus(camId, connected, streaming) {
-  const el = document.getElementById('cam' + camId + '-status');
-  const txt = document.getElementById('cam' + camId + 'StatusText');
-  const card = document.getElementById('cam' + camId + 'Card');
-
-  if (streaming) {
-    el.textContent = 'LIVE';
-    el.className = 'cam-status-badge live';
-    txt.textContent = 'Live';
-    card.className = 'status-card';
-  } else if (connected) {
-    el.textContent = 'READY';
-    el.className = 'cam-status-badge';
-    el.style.background = 'rgba(245,159,0,0.9)';
-    txt.textContent = 'Ready';
-    card.className = 'status-card warning';
-  } else {
-    el.textContent = 'OFFLINE';
-    el.className = 'cam-status-badge';
-    txt.textContent = 'Offline';
-    card.className = 'status-card offline';
-  }
-}
-
-function updateCam1Status(connected, streaming) {
-  updateCamStatus(1, connected, streaming);
-}
-
-// ============ PTZ ============
-const PTZ_SPEED = 1.0;
-let ptzMoving = { 1: false, 2: false };
-
-function sendPtz(data) {
-  if (ptzWs && ptzWs.readyState === WebSocket.OPEN) {
-    ptzWs.send(JSON.stringify(data));
-    return true;
-  }
-  ws.send(JSON.stringify(data));
-  return false;
-}
-
-function ptzMove(camId, pan, tilt) {
-  ptzMoving[camId] = true;
-  sendPtz({ type: 'cam_ptz', camera: camId, action: 'move', pan, tilt, zoom: 0 });
-}
-
-function ptzStop(camId) {
-  if (!ptzMoving[camId]) return;
-  sendPtz({ type: 'cam_ptz', camera: camId, action: 'stop' });
-  ptzMoving[camId] = false;
-}
-
-// Camera 1 PTZ
-document.querySelectorAll('.ptz-btn').forEach(btn => {
-  const action = btn.dataset.ptz;
-  if (!action) return;
-
-  btn.onmousedown = btn.ontouchstart = function(e) {
-    e.preventDefault();
-    switch(action) {
-      case 'up': ptzMove(1, 0, PTZ_SPEED); break;
-      case 'down': ptzMove(1, 0, -PTZ_SPEED); break;
-      case 'left': ptzMove(1, -PTZ_SPEED, 0); break;
-      case 'right': ptzMove(1, PTZ_SPEED, 0); break;
-    }
-  };
-  btn.onmouseup = btn.ontouchend = btn.onmouseleave = function() {
-    if (['up','down','left','right'].includes(action)) ptzStop(1);
-  };
-});
-
-// Camera 2 PTZ
-document.querySelectorAll('[data-ptz2]').forEach(btn => {
-  const action = btn.dataset.ptz2;
-  if (!action) return;
-
-  btn.onmousedown = btn.ontouchstart = function(e) {
-    e.preventDefault();
-    switch(action) {
-      case 'up': ptzMove(2, 0, PTZ_SPEED); break;
-      case 'down': ptzMove(2, 0, -PTZ_SPEED); break;
-      case 'left': ptzMove(2, -PTZ_SPEED, 0); break;
-      case 'right': ptzMove(2, PTZ_SPEED, 0); break;
-    }
-  };
-  btn.onmouseup = btn.ontouchend = btn.onmouseleave = function() {
-    if (['up','down','left','right'].includes(action)) ptzStop(2);
-  };
-});
-
-// ============ DRIVER TELEMETRY UPDATE ============
-// Convert Celsius to Fahrenheit
-function cToF(celsius) {
-  return celsius * 9 / 5 + 32;
-}
-
-// Parse TELEM data from serial: TELEM,battV,battPct,motorTempL_F,motorTempR_F,driverTemp1_F,driverTemp2_F,velL,velR,torqueL,torqueR,posL,posR
-function parseTelemFromSerial(line) {
-  // Trim whitespace and check for TELEM prefix
-  var trimmed = line.trim();
-  if (!trimmed.startsWith('TELEM,')) return null;
-  const parts = trimmed.split(',');
-  if (parts.length < 13) return null;
-  return {
-    batteryV: parseFloat(parts[1]),
-    batteryPct: parseInt(parts[2]),
-    motorTempL_F: parseInt(parts[3]),
-    motorTempR_F: parseInt(parts[4]),
-    driverTemp1_F: parseInt(parts[5]),
-    driverTemp2_F: parseInt(parts[6]),
-    velL: parseFloat(parts[7]),
-    velR: parseFloat(parts[8]),
-    torqueL: parseFloat(parts[9]),
-    torqueR: parseFloat(parts[10]),
-    posL: parseInt(parts[11]),
-    posR: parseInt(parts[12])
-  };
-}
-
-function updateDriverTelemetry(data) {
-  // Battery voltage and percent (already calculated by Teensy)
-  if (data.batteryV !== undefined) {
-    document.getElementById('batteryVoltage').textContent = data.batteryV.toFixed(1);
-    document.getElementById('batteryPercent').textContent = data.batteryPct + '%';
-    const item = document.getElementById('batteryItem');
-    if (data.batteryPct < 20) item.className = 'telemetry-item large warning';
-    else item.className = 'telemetry-item large battery';
-  }
-
-  // Driver temperature (already in Fahrenheit from Teensy)
-  if (data.driverTemp1_F !== undefined) {
-    const avgDriverTemp = Math.round((data.driverTemp1_F + data.driverTemp2_F) / 2);
-    document.getElementById('driverTemp').textContent = avgDriverTemp;
-    const item = document.getElementById('driverTempItem');
-    if (avgDriverTemp > 158) item.className = 'telemetry-item warning'; // 158F = 70C
-    else item.className = 'telemetry-item temp';
-  }
-
-  // Motor temperatures (already in Fahrenheit from Teensy)
-  if (data.motorTempL_F !== undefined) {
-    document.getElementById('motorTempL').textContent = data.motorTempL_F + '\u00B0F';
-    document.getElementById('motorTempR').textContent = data.motorTempR_F + '\u00B0F';
-    document.getElementById('motorTempAvg').textContent = Math.round((data.motorTempL_F + data.motorTempR_F) / 2);
-    const item = document.getElementById('motorTempItem');
-    if (data.motorTempL_F > 158 || data.motorTempR_F > 158) item.className = 'telemetry-item warning';
-    else item.className = 'telemetry-item temp';
-  }
-
-  // Velocities (already in RPM from Teensy)
-  if (data.velL !== undefined) {
-    document.getElementById('velocityL').textContent = data.velL.toFixed(1) + ' RPM';
-  }
-  if (data.velR !== undefined) {
-    document.getElementById('velocityR').textContent = data.velR.toFixed(1) + ' RPM';
-  }
-
-  // Torque (already in Amps from Teensy)
-  if (data.torqueL !== undefined) {
-    document.getElementById('torqueL').textContent = data.torqueL.toFixed(1) + ' A';
-  }
-  if (data.torqueR !== undefined) {
-    document.getElementById('torqueR').textContent = data.torqueR.toFixed(1) + ' A';
-  }
-
-  // Position (encoder counts)
-  if (data.posL !== undefined) {
-    document.getElementById('positionL').textContent = data.posL.toLocaleString();
-  }
-  if (data.posR !== undefined) {
-    document.getElementById('positionR').textContent = data.posR.toLocaleString();
-  }
-}
-
-// ============ WEBSOCKET ============
-ws.onopen = () => {
-  ws.send(JSON.stringify({type: 'get_status'}));
-  setTimeout(() => { if (!cam1Active) initCam1(); }, 1000);
-};
-
-ws.onmessage = function(e) {
-  // Binary frames
-  if (e.data instanceof ArrayBuffer) {
-    const data = new Uint8Array(e.data);
-    if (data.length < 2) return;
-
-    const packetType = data[0];
-    const payload = data.slice(1);
-    const cameraId = Math.floor(packetType / 2) + 1;
-    const isVideo = packetType % 2 === 0;
-
-    if (isVideo) {
-      displayFrame(new Blob([payload], {type: 'image/jpeg'}), cameraId);
-    } else {
-      if (cameraId === 1 && !isMuted) {
-        playAudioChunk(payload);
-      } else if (cameraId === 2 && !isMuted2) {
-        playAudioChunk(payload);
-      }
-    }
-    return;
-  }
-  if (e.data instanceof Blob) {
-    e.data.arrayBuffer().then(buffer => {
-      const data = new Uint8Array(buffer);
-      if (data.length < 2) return;
-      const packetType = data[0];
-      const payload = data.slice(1);
-      const cameraId = Math.floor(packetType / 2) + 1;
-      const isVideo = packetType % 2 === 0;
-      if (isVideo) {
-        displayFrame(new Blob([payload], {type: 'image/jpeg'}), cameraId);
-      } else if (cameraId === 1 && !isMuted) {
-        playAudioChunk(payload);
-      } else if (cameraId === 2 && !isMuted2) {
-        playAudioChunk(payload);
-      }
-    });
-    return;
-  }
-
-  var d = JSON.parse(e.data);
-
-  if(d.type === 'serial') {
-    var serialDiv = document.getElementById('serial');
-    serialDiv.innerHTML += d.data + '<br>';
-    var lines = serialDiv.innerHTML.split('<br>');
-    if (lines.length > 50) {
-      serialDiv.innerHTML = lines.slice(-50).join('<br>');
-    }
-    serialDiv.scrollTop = serialDiv.scrollHeight;
-
-    // Check if this is TELEM data and parse it
-    var telemData = parseTelemFromSerial(d.data);
-    if (telemData) {
-      updateDriverTelemetry(telemData);
-    }
-  }
-
-  if(d.type === 'status') {
-    document.getElementById('status').textContent = d.connected ? 'ONLINE' : 'OFFLINE';
-    document.getElementById('status').className = 'status ' + (d.connected ? 'online' : '');
-
-    // Update ESP32 status card
-    document.getElementById('esp32Status').textContent = d.connected ? 'Online' : 'Offline';
-    document.getElementById('esp32Card').className = 'status-card' + (d.connected ? '' : ' offline');
-
-    // Update Teensy status card
-    if(d.teensyConnected !== undefined) {
-      document.getElementById('teensyStatus').textContent = d.teensyConnected ? 'Online' : 'Offline';
-      document.getElementById('teensyCard').className = 'status-card' + (d.teensyConnected ? '' : ' offline');
-    }
-
-    if(d.connected) {
-      if(d.wifi && d.wifi !== 'unknown') document.getElementById('wifi').textContent = d.wifi;
-      if(d.rssi) document.getElementById('rssi').textContent = d.rssi + ' dBm';
-      if(d.ip && d.ip !== 'unknown') document.getElementById('ip').textContent = d.ip;
-      if(d.version && d.version !== 'unknown') document.getElementById('version').textContent = 'v' + d.version;
-      if(d.uptime) {
-        var mins = Math.floor(d.uptime / 60);
-        document.getElementById('uptime').textContent = mins + 'm';
-      }
-    } else {
-      document.getElementById('wifi').textContent = '--';
-      document.getElementById('rssi').textContent = '--';
-      document.getElementById('ip').textContent = '--';
-      document.getElementById('version').textContent = '--';
-      document.getElementById('uptime').textContent = '--';
-    }
-
-    if(d.camera) {
-      updateCam1Status(d.camera.connected, d.camera.streaming);
-      if(d.camera.streaming && !cam1Active) initCam1();
-    }
-  }
-
-  if(d.type === 'camera_status') {
-    updateCam1Status(d.connected, d.streaming);
-    if(d.streaming && !cam1Active) initCam1();
-  }
-
-  if(d.type === 'camera_streams') {
-    if(d.cameras) {
-      if(d.cameras[1] && !d.cameras[1].streaming) {
-        cam1Active = false;
-        updateCamStatus(1, false, false);
-      }
-      if(d.cameras[2] && !d.cameras[2].streaming) {
-        cam2Active = false;
-        updateCamStatus(2, false, false);
-      }
-    }
-  }
-
-  // Driver telemetry
-  if(d.type === 'telemetry' || d.type === 'driver_status') {
-    updateDriverTelemetry(d);
-  }
-};
-
-ws.onclose = () => {
-  document.getElementById('status').textContent = 'DISCONNECTED';
-  document.getElementById('status').className = 'status';
-  updateCam1Status(false, false);
-};
-
-// ============ NAVIGATION CONTROL ============
-let selectedDir = null;
-let selectedDist = null;
-let commandQueue = [];
-let gridOffsetX = 0;
-let gridOffsetY = 0;
-let robotHeading = 0;
-
-const dirLabels = { F: 'FWD', B: 'BACK', L: 'LEFT', R: 'RIGHT' };
-const PIXELS_PER_METER = 40;
-
-function updateDisplay() {
-  document.getElementById('currentDir').textContent = selectedDir ? dirLabels[selectedDir] : '--';
-
-  document.querySelectorAll('.compass-dir').forEach(d => {
-    d.style.background = 'rgba(0, 255, 136, 0.2)';
-    d.style.color = '#00ff88';
-  });
-  if (selectedDir) {
-    const el = document.getElementById('dir' + selectedDir);
-    if (el) {
-      el.style.background = '#00ff88';
-      el.style.color = '#000';
-    }
-  }
-
-  document.querySelectorAll('.dist-btn').forEach(d => {
-    d.style.background = 'rgba(81, 207, 102, 0.2)';
-    d.style.color = '#51cf66';
-  });
-  if (selectedDist) {
-    document.querySelectorAll('.dist-btn').forEach(d => {
-      if (parseFloat(d.dataset.dist) === selectedDist) {
-        d.style.background = '#51cf66';
-        d.style.color = '#000';
-      }
-    });
-  }
-
-  updateQueueDisplay();
-
-  if (commandQueue.length > 0) {
-    setStatus(commandQueue.length + ' command(s) queued - Press GO', 'idle');
-  } else if (selectedDir && selectedDist) {
-    setStatus(selectedDist + 'm ' + dirLabels[selectedDir] + ' - Tap again to add, or GO', 'idle');
-  } else if (selectedDir) {
-    setStatus('Direction: ' + dirLabels[selectedDir] + ' - Now tap distance', 'idle');
-  } else {
-    setStatus('Tap direction, then distance', 'idle');
-  }
-}
-
-function updateQueueDisplay() {
-  const queueDiv = document.getElementById('cmdQueueDisplay');
-  if (!queueDiv) return;
-
-  if (commandQueue.length === 0) {
-    queueDiv.innerHTML = '<span style="color:#666">No commands queued</span>';
-    return;
-  }
-
-  let html = '';
-  commandQueue.forEach((cmd, i) => {
-    html += '<span class="cmd-chip">' + cmd.dist + 'm ' + (dirLabels[cmd.dir] || cmd.dir) +
-            ' <span class="remove" onclick="removeFromQueue(' + i + ')">&#215;</span></span>';
-  });
-  queueDiv.innerHTML = html;
-}
-
-function removeFromQueue(index) {
-  commandQueue.splice(index, 1);
-  updateDisplay();
-}
-
-function updateRadarRobot() {
-  const robot = document.getElementById('radarRobot');
-  const grid = document.getElementById('radarGrid');
-  robot.style.transform = `translate(-50%, -50%) rotate(${robotHeading}deg)`;
-  grid.style.transform = `translate(${-gridOffsetX}px, ${-gridOffsetY}px)`;
-}
-
-function setStatus(text, type) {
-  const el = document.getElementById('moveStatus');
-  el.textContent = text;
-  el.className = 'move-status ' + (type || 'idle');
-}
-
-function selectDirection(dir) {
-  selectedDir = dir;
-  updateDisplay();
-}
-
-function selectDistance(distance) {
-  if (!selectedDir) {
-    setStatus('Tap a direction first!', 'error');
-    return;
-  }
-
-  commandQueue.push({ dir: selectedDir, dist: distance });
-
-  const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#74c0fc">[QUEUE] Added ' + distance + 'm ' + dirLabels[selectedDir] + '</span><br>';
-  serialDiv.scrollTop = serialDiv.scrollHeight;
-
-  selectedDir = null;
-  selectedDist = null;
-  updateDisplay();
-}
-
-function executeQueue() {
-  if (commandQueue.length === 0) {
-    setStatus('No commands queued!', 'error');
-    return;
-  }
-
-  const commands = [...commandQueue];
-  commandQueue = [];
-
-  const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#51cf66">[GO] Executing ' + commands.length + ' command(s)...</span><br>';
-  serialDiv.scrollTop = serialDiv.scrollHeight;
-
-  setStatus('EXECUTING ' + commands.length + ' commands...', 'moving');
-
-  let currentIndex = 0;
-
-  function executeNext() {
-    if (currentIndex >= commands.length) {
-      setStatus('Completed ' + commands.length + ' commands', 'idle');
-      selectedDir = null;
-      selectedDist = null;
-      updateDisplay();
-      return;
-    }
-
-    const cmd = commands[currentIndex];
-    setStatus('Moving ' + (currentIndex + 1) + '/' + commands.length + ': ' + cmd.dist + 'm ' + dirLabels[cmd.dir], 'moving');
-
-    ws.send(JSON.stringify({
-      type: 'move_command',
-      distance: cmd.dist,
-      direction: cmd.dir
-    }));
-
-    serialDiv.innerHTML += '<span style="color:#51cf66">[MOVE] ' + cmd.dist + 'm ' + dirLabels[cmd.dir] + '</span><br>';
-    serialDiv.scrollTop = serialDiv.scrollHeight;
-
-    const movePixels = cmd.dist * PIXELS_PER_METER;
-    const headingRad = robotHeading * Math.PI / 180;
-
-    if (cmd.dir === 'F') {
-      gridOffsetX += Math.sin(headingRad) * movePixels;
-      gridOffsetY -= Math.cos(headingRad) * movePixels;
-    } else if (cmd.dir === 'B') {
-      gridOffsetX -= Math.sin(headingRad) * movePixels;
-      gridOffsetY += Math.cos(headingRad) * movePixels;
-    } else if (cmd.dir === 'L') {
-      robotHeading -= 90;
-    } else if (cmd.dir === 'R') {
-      robotHeading += 90;
-    }
-    updateRadarRobot();
-
-    let totalTime;
-    if (cmd.dir === 'L' || cmd.dir === 'R') {
-      totalTime = 90 * 100 + 500;
-    } else {
-      totalTime = cmd.dist * 100 * 200 + 500;
-    }
-
-    currentIndex++;
-    setTimeout(executeNext, totalTime);
-  }
-
-  executeNext();
-  updateDisplay();
-}
-
-function emergencyStop() {
-  ws.send(JSON.stringify({ type: 'emergency_stop' }));
-  selectedDir = null;
-  selectedDist = null;
-  commandQueue = [];
-  updateDisplay();
-  setStatus('STOPPED', 'error');
-
-  const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#ff6b6b">[STOP] Emergency stop sent - queue cleared</span><br>';
-  serialDiv.scrollTop = serialDiv.scrollHeight;
-}
-
-function clearQueue() {
-  selectedDir = null;
-  selectedDist = null;
-  commandQueue = [];
-  gridOffsetX = 0;
-  gridOffsetY = 0;
-  robotHeading = 0;
-  updateRadarRobot();
-  updateDisplay();
-  setStatus('Cleared. Tap direction to start.', 'idle');
-
-  const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#74c0fc">[CLEAR] Queue cleared, radar reset</span><br>';
-  serialDiv.scrollTop = serialDiv.scrollHeight;
-}
-
-document.getElementById('dirF').onclick = () => selectDirection('F');
-document.getElementById('dirR').onclick = () => selectDirection('R');
-document.getElementById('dirB').onclick = () => selectDirection('B');
-document.getElementById('dirL').onclick = () => selectDirection('L');
-
-document.querySelectorAll('.dist-btn').forEach(btn => {
-  btn.onclick = function() {
-    selectDistance(parseFloat(this.dataset.dist));
-  };
-});
-
-updateDisplay();
-updateRadarRobot();
-
-function reset() {
-  ws.send(JSON.stringify({type:'command', data:'reset'}));
-  document.getElementById('serial').innerHTML = '[RESET]<br>';
-  clearQueue();
-  robotHeading = 0;
-  updateRadarRobot();
-}
-
-document.getElementById('cmd').onkeypress = function(e) {
-  if(e.key === 'Enter') {
-    ws.send(JSON.stringify({type:'command', data:e.target.value}));
-    e.target.value = '';
-  }
-};
-
-// ============ CODE EDITOR ============
-let currentTab = 'esp32';
-
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.onclick = function() {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    this.classList.add('active');
-    currentTab = this.dataset.tab;
-    document.getElementById('editor').placeholder = '// ' + currentTab.toUpperCase() + ' code...';
-  };
-});
-
-document.getElementById('compileBtn').onclick = () => {
-  const code = document.getElementById('editor').value;
-  if (!code.trim()) {
-    alert('Please enter some code first');
-    return;
-  }
-  ws.send(JSON.stringify({type:'compile', target:currentTab, code:code}));
-  document.getElementById('serial').innerHTML += '[COMPILING ' + currentTab.toUpperCase() + '...]<br>';
-  document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
-};
-
-document.getElementById('flashPrebuiltBtn').onclick = () => {
-  if (!confirm('Flash pre-built Teensy firmware? Robot will reboot.')) return;
-  ws.send(JSON.stringify({type:'flash_prebuilt'}));
-  document.getElementById('serial').innerHTML += '[FLASHING PREBUILT TEENSY...]<br>';
-  document.getElementById('serial').scrollTop = document.getElementById('serial').scrollHeight;
-};
-
-// ============ AUDIO TOGGLE ============
-function toggleMute() {
-  initAudio();
-  isMuted = !isMuted;
-  const btn = document.getElementById("speakerBtn");
-  if (isMuted) {
-    btn.innerHTML = "&#128264;";
-    btn.style.color = "#ff4444";
-    btn.style.opacity = "0.5";
-  } else {
-    btn.innerHTML = "&#128266;";
-    btn.style.color = "#44ff44";
-    btn.style.opacity = "0.7";
-  }
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({type: "audio_mute", muted: isMuted}));
-  }
-}
-
-document.addEventListener('click', function() {
-  initAudio();
-}, { once: true });
-
-function toggleMute2() {
-  initAudio();
-  isMuted2 = !isMuted2;
-  const btn = document.getElementById("speakerBtn2");
-  if (isMuted2) {
-    btn.innerHTML = "&#128264;";
-    btn.style.color = "#ff4444";
-    btn.style.opacity = "0.5";
-  } else {
-    btn.innerHTML = "&#128266;";
-    btn.style.color = "#44ff44";
-    btn.style.opacity = "0.7";
-  }
-}
-
-</script>
+<!-- Load JavaScript files in correct order -->
+<script src="js/telemetry.js"></script>
+<script src="js/websocket.js"></script>
+<script src="js/controls.js"></script>
 </body>
 </html>
