@@ -295,8 +295,10 @@ function startVideoStream(cam) {
     console.log(`[CAM${cam.id}] Starting video only (UDP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
       '-rtsp_transport', 'udp',
-      '-fflags', 'nobuffer',
+      '-fflags', 'nobuffer+discardcorrupt',
       '-flags', 'low_delay',
+      '-analyzeduration', '1000000',  // Analyze for 1 second max
+      '-probesize', '500000',
       '-i', rtspUrl,
       '-map', '0:v',
       '-vf', `scale=${CONFIG.stream.scale}`,
@@ -312,8 +314,10 @@ function startVideoStream(cam) {
     console.log(`[CAM${cam.id}] Starting video+audio (UDP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
       '-rtsp_transport', 'udp',
-      '-fflags', 'nobuffer',
+      '-fflags', 'nobuffer+discardcorrupt',
       '-flags', 'low_delay',
+      '-analyzeduration', '1000000',  // Analyze for 1 second max
+      '-probesize', '500000',
       '-i', rtspUrl,
       // Video output -> stdout
       '-map', '0:v',
@@ -562,36 +566,46 @@ connectToVPS();
 connectToPtzChannel();
 
 // Watchdog - restart dead or stalled streams
-const STALL_TIMEOUT_MS = 10000;  // Restart if no frames for 10 seconds
+// Give more time for initial connection (30s) and stall detection (15s)
+const INITIAL_TIMEOUT_MS = 30000;  // Wait longer for initial connection
+const STALL_TIMEOUT_MS = 15000;    // Restart if no frames for 15 seconds
+let watchdogEnabled = false;
+
+// Delay watchdog startup to let initial connections settle
+setTimeout(() => { watchdogEnabled = true; console.log('[WATCHDOG] Enabled'); }, 20000);
+
 setInterval(() => {
-  if (vpsSocket?.readyState === WebSocket.OPEN) {
-    const now = Date.now();
-    CONFIG.cameras.forEach(cam => {
-      const state = cameraState[cam.id];
+  if (!watchdogEnabled) return;
+  if (vpsSocket?.readyState !== WebSocket.OPEN) return;
 
-      // Restart if no process running
-      if (!state.videoProcess && !state.videoStarting) {
-        console.log(`[WATCHDOG] CAM${cam.id} not running, restarting...`);
-        killExistingFfmpeg(cam.ip);
-        startVideoStream(cam);
-        return;
-      }
+  const now = Date.now();
+  CONFIG.cameras.forEach(cam => {
+    const state = cameraState[cam.id];
 
-      // Restart if process is running but no frames received (camera offline/rebooting)
-      // Also detect if stream never started (lastFrameTime still 0 after timeout)
-      const timeSinceStart = state.videoProcess ? (now - (state.videoProcess.startTime || now)) : 0;
-      const neverReceivedFrames = state.lastFrameTime === 0 && timeSinceStart > STALL_TIMEOUT_MS;
-      const stalled = state.lastFrameTime > 0 && (now - state.lastFrameTime) > STALL_TIMEOUT_MS;
+    // Skip if already starting
+    if (state.videoStarting) return;
 
-      if (state.videoProcess && (neverReceivedFrames || stalled)) {
-        const reason = neverReceivedFrames ? 'never received frames' : `no frames for ${Math.round((now - state.lastFrameTime)/1000)}s`;
-        console.log(`[WATCHDOG] CAM${cam.id} ${reason}, restarting...`);
-        stopVideoStream(cam);
-        killExistingFfmpeg(cam.ip);
-        setTimeout(() => startVideoStream(cam), 1000);
-      }
-    });
-  }
+    // Restart if no process running
+    if (!state.videoProcess) {
+      console.log(`[WATCHDOG] CAM${cam.id} not running, restarting...`);
+      killExistingFfmpeg(cam.ip);
+      setTimeout(() => startVideoStream(cam), 500);
+      return;
+    }
+
+    // Check for stall - but use longer timeout for initial connection
+    const timeSinceStart = now - (state.videoProcess.startTime || now);
+    const timeout = state.lastFrameTime === 0 ? INITIAL_TIMEOUT_MS : STALL_TIMEOUT_MS;
+    const stalled = (now - Math.max(state.lastFrameTime, state.videoProcess.startTime || 0)) > timeout;
+
+    if (stalled) {
+      const reason = state.lastFrameTime === 0 ? 'never received frames' : `no frames for ${Math.round((now - state.lastFrameTime)/1000)}s`;
+      console.log(`[WATCHDOG] CAM${cam.id} ${reason}, restarting...`);
+      stopVideoStream(cam);
+      killExistingFfmpeg(cam.ip);
+      setTimeout(() => startVideoStream(cam), 2000);
+    }
+  });
 }, 5000);  // Check every 5 seconds
 
 // Process cleanup - kill duplicates every 5 seconds
