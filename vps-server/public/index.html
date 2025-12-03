@@ -24,30 +24,11 @@
     <!-- Center: Title -->
     <h1>CEMANI COMMAND CENTER</h1>
 
-    <!-- Right: Quick controls and mini status -->
-    <div class="header-right">
-      <div class="header-controls">
-        <button class="header-btn go" onclick="executeQueue()">GO</button>
-        <button class="header-btn stop" onclick="emergencyStop()">STOP</button>
-        <button class="header-btn clear" onclick="clearQueue()">CLR</button>
-      </div>
-      <div class="header-status-cards">
-        <div class="mini-status-card" id="esp32MiniCard">
-          <span class="mini-icon">&#128225;</span>
-          <span class="mini-label">ESP32</span>
-          <span class="mini-value" id="esp32StatusMini">--</span>
-        </div>
-        <div class="mini-status-card" id="teensyMiniCard">
-          <span class="mini-icon">&#9881;</span>
-          <span class="mini-label">Teensy</span>
-          <span class="mini-value" id="teensyStatusMini">--</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Hidden for JS compatibility -->
     <span id="ip" style="display:none">--</span>
     <span id="version" style="display:none">--</span>
+    <span id="esp32StatusMini" style="display:none">--</span>
+    <span id="teensyStatusMini" style="display:none">--</span>
   </div>
 
   <!-- Left: Cameras stacked -->
@@ -145,33 +126,93 @@
         <button class="exec-btn go" onclick="executeQueue()">GO</button>
         <button class="exec-btn stop" onclick="emergencyStop()">STOP</button>
       </div>
+    </div>
 
-      <!-- MINI RADAR -->
-      <div class="radar-container" id="radarMap">
-        <div class="radar-grid" id="radarGrid"></div>
-        <div class="radar-crosshair"></div>
-        <div class="radar-label" style="top:1px;left:50%;transform:translateX(-50%);">N</div>
-        <div class="radar-label" style="bottom:1px;left:50%;transform:translateX(-50%);">S</div>
-        <div class="radar-label" style="left:3px;top:50%;transform:translateY(-50%);">W</div>
-        <div class="radar-label" style="right:3px;top:50%;transform:translateY(-50%);">E</div>
-        <div class="radar-scale">&#9632; = 0.5m</div>
-        <div class="radar-robot" id="radarRobot">
-          <div class="robot-front"></div>
-          <div class="robot-body">
-            <div class="robot-wheels">
-              <div class="robot-wheel"></div>
-              <div class="robot-wheel"></div>
-            </div>
+    <!-- DRIVE SYSTEM - Robot Top-Down View -->
+    <div class="section-header"><span class="emoji">&#128663;</span> DRIVE SYSTEM</div>
+    <div class="drive-panel">
+      <!-- Battery -->
+      <div class="battery-row">
+        <span class="batt-icon">&#128267;</span>
+        <div class="batt-bar"><div class="batt-fill" id="batteryFill"></div></div>
+        <span class="batt-text"><span id="batteryVoltage">--</span>V <span id="batteryPercent">--</span>%</span>
+      </div>
+
+      <!-- Robot Top-Down Diagram with Temps -->
+      <div class="robot-diagram-with-temps">
+        <!-- Left temps column -->
+        <div class="temps-column left">
+          <div class="wheel-temp" id="tempLF"><span id="motorTempLF">--</span>&deg;F</div>
+          <div class="wheel-temp" id="tempLR"><span id="motorTempLR">--</span>&deg;F</div>
+        </div>
+
+        <!-- Robot body -->
+        <div class="robot-frame-compact">
+          <!-- FWD indicator -->
+          <div class="fwd-arrow">&#9650; FWD</div>
+
+          <!-- Left wheels (ZLAC hubs) -->
+          <div class="zlac-wheel left-front" id="wheelLF">
+            <div class="hub"></div>
+            <div class="tire"></div>
           </div>
+          <div class="zlac-wheel left-rear" id="wheelLR">
+            <div class="hub"></div>
+            <div class="tire"></div>
+          </div>
+
+          <!-- Right wheels (ZLAC hubs) -->
+          <div class="zlac-wheel right-front" id="wheelRF">
+            <div class="hub"></div>
+            <div class="tire"></div>
+          </div>
+          <div class="zlac-wheel right-rear" id="wheelRR">
+            <div class="hub"></div>
+            <div class="tire"></div>
+          </div>
+
+          <!-- Center frame -->
+          <div class="frame-center">
+            <div class="frame-label">CEMANI</div>
+          </div>
+
+          <!-- REAR indicator -->
+          <div class="rear-arrow">&#9660; REAR</div>
+        </div>
+
+        <!-- Right temps column -->
+        <div class="temps-column right">
+          <div class="wheel-temp" id="tempRF"><span id="motorTempRF">--</span>&deg;F</div>
+          <div class="wheel-temp" id="tempRR"><span id="motorTempRR">--</span>&deg;F</div>
+        </div>
+      </div>
+
+      <!-- Speed displays below robot -->
+      <div class="speed-row">
+        <div class="speed-box">
+          <span class="spd-label">L</span>
+          <span class="spd-val" id="velocityL">0.00</span>
+          <span class="spd-unit">MPH</span>
+        </div>
+        <div class="speed-box">
+          <span class="spd-label">R</span>
+          <span class="spd-val" id="velocityR">0.00</span>
+          <span class="spd-unit">MPH</span>
         </div>
       </div>
     </div>
 
-    <div class="serial-section">
-      <div class="section-header"><span class="emoji">&#128187;</span> SERIAL</div>
-      <div class="serial" id="serial"></div>
-      <input type="text" id="cmd" placeholder="Command...">
+    <!-- FUTURE SENSORS -->
+    <div class="section-header"><span class="emoji">&#128301;</span> COMING SOON</div>
+    <div class="future-sensors">
+      <div class="future-chip"><span class="icon">&#129302;</span> OpenArm</div>
+      <div class="future-chip"><span class="icon">&#128752;</span> Jetson</div>
+      <div class="future-chip"><span class="icon">&#128506;</span> GPS</div>
+      <div class="future-chip"><span class="icon">&#128065;</span> LiDAR</div>
+      <div class="future-chip"><span class="icon">&#127793;</span> Solar</div>
+      <div class="future-chip"><span class="icon">&#128266;</span> Sonic</div>
     </div>
+
   </div>
 
   <!-- Right: Status + Telemetry + Code -->
@@ -211,124 +252,48 @@
       </div>
     </div>
 
-    <!-- ROBOT TELEMETRY DIAGRAM -->
-    <div class="section-header"><span class="emoji">&#128663;</span> DRIVE SYSTEM</div>
-    <div class="robot-diagram-panel">
-      <!-- Battery Bar -->
-      <div class="battery-bar" id="batteryBar">
-        <div class="battery-icon">&#128267;</div>
-        <div class="battery-info">
-          <div class="battery-level">
-            <div class="battery-fill" id="batteryFill" style="width:65%"></div>
-          </div>
-          <div class="battery-text"><span id="batteryVoltage">--</span>V &bull; <span id="batteryPercent">--</span>%</div>
-        </div>
+    <!-- POSITION TRACKER -->
+    <div class="section-header"><span class="emoji">&#128506;</span> POSITION TRACKER</div>
+    <div class="position-tracker">
+      <div class="tracker-header">
+        <button class="tracker-reset-btn" onclick="resetOdometry()">RESET</button>
       </div>
-
-      <!-- DRIVER BOARDS SECTION -->
-      <div class="drivers-row">
-        <div class="driver-board left">
-          <div class="driver-board-label">DRIVER 2 (LEFT)</div>
-          <div class="driver-board-temp" id="driver2TempItem">
-            <span class="temp-icon">&#127777;</span>
-            <span class="temp-val" id="driver2Temp">--</span>&deg;F
-          </div>
-        </div>
-        <div class="driver-board right">
-          <div class="driver-board-label">DRIVER 1 (RIGHT)</div>
-          <div class="driver-board-temp" id="driver1TempItem">
-            <span class="temp-icon">&#127777;</span>
-            <span class="temp-val" id="driver1Temp">--</span>&deg;F
-          </div>
-        </div>
+      <div class="tracker-map-container">
+        <canvas id="odomCanvas" class="tracker-canvas"></canvas>
+        <div class="tracker-scale">1 square = 1 ft</div>
       </div>
-
-      <!-- SEPARATOR -->
-      <div class="section-divider">
-        <span class="divider-label">MOTORS</span>
-      </div>
-
-      <!-- WHEELS/MOTORS SECTION -->
-      <div class="robot-topdown">
-        <!-- LEFT WHEELS -->
-        <div class="wheel-side left">
-          <div class="wheel-group">
-            <div class="wheel front">
-              <div class="wheel-visual stopped" id="wheelLF"></div>
-              <div class="wheel-info">
-                <div class="wheel-label">L FRONT</div>
-                <div class="wheel-temp"><span id="motorTempLF">--</span>&deg;F</div>
-              </div>
-            </div>
-            <div class="wheel rear">
-              <div class="wheel-visual stopped" id="wheelLR"></div>
-              <div class="wheel-info">
-                <div class="wheel-label">L REAR</div>
-                <div class="wheel-temp"><span id="motorTempLR">--</span>&deg;F</div>
-              </div>
-            </div>
-          </div>
-          <div class="wheel-speed">
-            <span class="speed-val" id="velocityL">0.00</span>
-            <span class="speed-unit">MPH</span>
-          </div>
+      <div class="tracker-stats">
+        <div class="tracker-stat">
+          <span class="stat-label">TRIP</span>
+          <span class="stat-value"><span id="odomTripDist">0.0</span> ft</span>
         </div>
-
-        <!-- ROBOT BODY -->
-        <div class="robot-body-topdown">
-          <div class="robot-front-indicator">&#9650; FWD</div>
-          <div class="robot-chassis">
-            <div class="chassis-inner">
-              <div class="chassis-label">CEMANI</div>
-            </div>
-          </div>
+        <div class="tracker-stat">
+          <span class="stat-label">HDG</span>
+          <span class="stat-value"><span id="odomHeading">0</span>&deg;</span>
         </div>
-
-        <!-- RIGHT WHEELS -->
-        <div class="wheel-side right">
-          <div class="wheel-group">
-            <div class="wheel front">
-              <div class="wheel-visual stopped" id="wheelRF"></div>
-              <div class="wheel-info">
-                <div class="wheel-label">R FRONT</div>
-                <div class="wheel-temp"><span id="motorTempRF">--</span>&deg;F</div>
-              </div>
-            </div>
-            <div class="wheel rear">
-              <div class="wheel-visual stopped" id="wheelRR"></div>
-              <div class="wheel-info">
-                <div class="wheel-label">R REAR</div>
-                <div class="wheel-temp"><span id="motorTempRR">--</span>&deg;F</div>
-              </div>
-            </div>
-          </div>
-          <div class="wheel-speed">
-            <span class="speed-val" id="velocityR">0.00</span>
-            <span class="speed-unit">MPH</span>
-          </div>
+        <div class="tracker-stat">
+          <span class="stat-label">L TICKS</span>
+          <span class="stat-value" id="encL">0</span>
         </div>
-      </div>
-
-      <!-- Hidden elements for compatibility -->
-      <div style="display:none">
-        <span id="driverTemp"></span>
-        <span id="motorTempAvg"></span>
-        <span id="positionL"></span>
-        <span id="positionR"></span>
-        <span id="torqueL"></span>
-        <span id="torqueR"></span>
+        <div class="tracker-stat">
+          <span class="stat-label">R TICKS</span>
+          <span class="stat-value" id="encR">0</span>
+        </div>
       </div>
     </div>
 
-    <!-- FUTURE SENSORS - Compact -->
-    <div class="section-header"><span class="emoji">&#128301;</span> FUTURE</div>
-    <div class="future-sensors">
-      <div class="future-chip"><span class="icon">&#129302;</span> Arm</div>
-      <div class="future-chip"><span class="icon">&#128752;</span> Jetson</div>
-      <div class="future-chip"><span class="icon">&#128506;</span> GPS</div>
-      <div class="future-chip"><span class="icon">&#128065;</span> LiDAR</div>
-      <div class="future-chip"><span class="icon">&#127793;</span> Solar</div>
-      <div class="future-chip"><span class="icon">&#128266;</span> Sonic</div>
+    <!-- Hidden elements for compatibility -->
+    <div style="display:none">
+      <span id="driverTemp"></span>
+      <span id="driver1Temp"></span>
+      <span id="driver2Temp"></span>
+      <span id="motorTempAvg"></span>
+      <span id="positionL"></span>
+      <span id="positionR"></span>
+      <span id="torqueL"></span>
+      <span id="torqueR"></span>
+      <span id="odomX"></span>
+      <span id="odomY"></span>
     </div>
 
     <!-- CODE EDITOR -->
@@ -343,6 +308,22 @@
       </div>
       <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
       <div class="btn" id="flashPrebuiltBtn" style="background:linear-gradient(135deg,#74c0fc,#4da3f0);margin-top:4px;">FLASH PREBUILT</div>
+    </div>
+
+    <!-- SERIAL MONITOR -->
+    <div class="serial-section">
+      <div class="section-header"><span class="emoji">&#128187;</span> SERIAL MONITOR</div>
+      <div class="serial" id="serial"></div>
+      <input type="text" id="cmd" placeholder="Send command...">
+    </div>
+
+    <!-- XBOX CONTROLLER -->
+    <div class="xbox-section">
+      <div class="xbox-status" id="xboxStatus">
+        <span class="xbox-icon">&#127918;</span>
+        <span class="xbox-label">Xbox Controller</span>
+        <span class="xbox-state" id="xboxState">Disconnected</span>
+      </div>
     </div>
   </div>
 </div>

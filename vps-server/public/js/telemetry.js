@@ -43,33 +43,42 @@ function formatTicks(ticks) {
 }
 
 // Parse TELEM data from serial
-// NEW Format: TELEM,battV,battPct,tempLF,tempLR,tempRF,tempRR,drvTemp1,drvTemp2,velL,velR,torqueL,torqueR,posL,posR
+// Format: TELEM,battV,battPct,tempLF,tempLR,tempRF,tempRR,velL,velR,torqueL,torqueR,posL,posR
+// Example: TELEM,26.08,66,69,68,82,82,0.0,0.0,0.0,0.0,-27827,-4313
 function parseTelemFromSerial(line) {
-  // Trim whitespace and check for TELEM prefix
   var trimmed = line.trim();
   if (!trimmed.startsWith('TELEM,')) return null;
   const parts = trimmed.split(',');
-  if (parts.length < 15) return null;
+  if (parts.length < 13) return null;
+
+  const tempLF = parseInt(parts[3]);
+  const tempLR = parseInt(parts[4]);
+  const tempRF = parseInt(parts[5]);
+  const tempRR = parseInt(parts[6]);
+
   return {
     batteryV: parseFloat(parts[1]),
     batteryPct: parseInt(parts[2]),
-    // All 4 motor temps
-    motorTempLF_F: parseInt(parts[3]),
-    motorTempLR_F: parseInt(parts[4]),
-    motorTempRF_F: parseInt(parts[5]),
-    motorTempRR_F: parseInt(parts[6]),
+    // All 4 motor temps (already in Fahrenheit from Teensy)
+    motorTempLF_F: tempLF,
+    motorTempLR_F: tempLR,
+    motorTempRF_F: tempRF,
+    motorTempRR_F: tempRR,
     // Legacy L/R averages
-    motorTempL_F: Math.round((parseInt(parts[3]) + parseInt(parts[4])) / 2),
-    motorTempR_F: Math.round((parseInt(parts[5]) + parseInt(parts[6])) / 2),
-    // Driver board temps
-    driverTemp1_F: parseInt(parts[7]),
-    driverTemp2_F: parseInt(parts[8]),
-    velL: parseFloat(parts[9]),
-    velR: parseFloat(parts[10]),
-    torqueL: parseFloat(parts[11]),
-    torqueR: parseFloat(parts[12]),
-    posL: parseInt(parts[13]),
-    posR: parseInt(parts[14])
+    motorTempL_F: Math.round((tempLF + tempLR) / 2),
+    motorTempR_F: Math.round((tempRF + tempRR) / 2),
+    // Driver board temps - use motor averages as proxy
+    driverTemp1_F: Math.round((tempRF + tempRR) / 2),
+    driverTemp2_F: Math.round((tempLF + tempLR) / 2),
+    // Velocities
+    velL: parseFloat(parts[7]),
+    velR: parseFloat(parts[8]),
+    // Torque
+    torqueL: parseFloat(parts[9]),
+    torqueR: parseFloat(parts[10]),
+    // Encoder positions
+    posL: parseInt(parts[11]),
+    posR: parseInt(parts[12])
   };
 }
 
@@ -212,24 +221,23 @@ function updateDriverTelemetry(data) {
     document.getElementById('torqueR').textContent = data.torqueR.toFixed(1);
   }
 
-  // Position (encoder counts) - show near wheels and in position tracker
+  // Position (encoder counts) - show in position tracker
   if (data.posL !== undefined) {
     const el = document.getElementById('positionL');
     if (el) el.textContent = data.posL.toLocaleString();
-    // Update encoder displays (both in position tracker and near wheels)
     const encL = document.getElementById('encL');
-    if (encL) encL.textContent = data.posL.toLocaleString();
-    const encLDisplay = document.getElementById('encLDisplay');
-    if (encLDisplay) encLDisplay.textContent = formatTicks(data.posL);
+    if (encL) encL.textContent = formatTicks(data.posL);
   }
   if (data.posR !== undefined) {
     const el = document.getElementById('positionR');
     if (el) el.textContent = data.posR.toLocaleString();
-    // Update encoder displays (both in position tracker and near wheels)
     const encR = document.getElementById('encR');
-    if (encR) encR.textContent = data.posR.toLocaleString();
-    const encRDisplay = document.getElementById('encRDisplay');
-    if (encRDisplay) encRDisplay.textContent = formatTicks(data.posR);
+    if (encR) encR.textContent = formatTicks(data.posR);
+  }
+
+  // Calculate odometry from encoder positions
+  if (data.posL !== undefined && data.posR !== undefined) {
+    updateOdometryFromEncoders(data.posL, data.posR);
   }
 
   // Odometry display (in feet)
@@ -446,23 +454,107 @@ function drawOdometryMap(data) {
   }
 }
 
-// Reset odometry (send to server)
-function resetOdometry() {
-  // Send reset command to server
-  if (window.ws && window.ws.readyState === WebSocket.OPEN) {
-    window.ws.send(JSON.stringify({ type: 'reset_odometry' }));
+// ============ ODOMETRY FROM ENCODERS ============
+// Wheel specs: 203mm diameter, 16384 ticks/rev (ZLAC8015D)
+const WHEEL_DIAMETER_MM = 203;
+const WHEEL_CIRCUMFERENCE_MM = Math.PI * WHEEL_DIAMETER_MM;  // ~637.7mm
+const TICKS_PER_REV = 16384;
+const MM_PER_TICK = WHEEL_CIRCUMFERENCE_MM / TICKS_PER_REV;  // ~0.0389mm/tick
+const WHEEL_BASE_MM = 600;  // Distance between wheels in mm
+
+// Odometry state
+let odomState = {
+  lastPosL: null,
+  lastPosR: null,
+  x: 0,           // mm
+  y: 0,           // mm
+  heading: 0,     // radians
+  totalDistance: 0, // mm
+  trail: [{x: 0, y: 0}]
+};
+
+function updateOdometryFromEncoders(posL, posR) {
+  // First reading - just store positions
+  if (odomState.lastPosL === null) {
+    odomState.lastPosL = posL;
+    odomState.lastPosR = posR;
+    drawOdometryMap({
+      odomX: 0, odomY: 0, odomHeading: 0,
+      odomTrail: odomState.trail
+    });
+    return;
   }
-  // Also clear local display
+
+  // Calculate delta ticks
+  const deltaL = posL - odomState.lastPosL;
+  const deltaR = posR - odomState.lastPosR;
+  odomState.lastPosL = posL;
+  odomState.lastPosR = posR;
+
+  // Skip tiny movements (noise)
+  if (Math.abs(deltaL) < 5 && Math.abs(deltaR) < 5) return;
+
+  // Convert to mm
+  const distL = deltaL * MM_PER_TICK;
+  const distR = deltaR * MM_PER_TICK;
+
+  // Differential drive kinematics
+  const distCenter = (distL + distR) / 2;
+  const deltaTheta = (distR - distL) / WHEEL_BASE_MM;
+
+  // Update position
+  odomState.heading += deltaTheta;
+  odomState.x += distCenter * Math.cos(odomState.heading);
+  odomState.y += distCenter * Math.sin(odomState.heading);
+  odomState.totalDistance += Math.abs(distCenter);
+
+  // Add to trail (every ~50mm)
+  const lastTrail = odomState.trail[odomState.trail.length - 1];
+  const trailDist = Math.sqrt(Math.pow(odomState.x - lastTrail.x, 2) + Math.pow(odomState.y - lastTrail.y, 2));
+  if (trailDist > 50) {
+    odomState.trail.push({x: odomState.x, y: odomState.y});
+    // Keep trail to reasonable size
+    if (odomState.trail.length > 500) odomState.trail.shift();
+  }
+
+  // Update display
+  const tripDist = document.getElementById('odomTripDist');
+  if (tripDist) tripDist.textContent = mmToFt(odomState.totalDistance).toFixed(1);
+  const headingEl = document.getElementById('odomHeading');
+  if (headingEl) headingEl.textContent = Math.round(odomState.heading * 180 / Math.PI);
+
+  // Draw map
+  drawOdometryMap({
+    odomX: odomState.x,
+    odomY: odomState.y,
+    odomHeading: odomState.heading,
+    odomTrail: odomState.trail
+  });
+}
+
+// Reset odometry
+function resetOdometry() {
+  odomState = {
+    lastPosL: null,
+    lastPosR: null,
+    x: 0, y: 0, heading: 0, totalDistance: 0,
+    trail: [{x: 0, y: 0}]
+  };
+  // Update display
   const tripDist = document.getElementById('odomTripDist');
   if (tripDist) tripDist.textContent = '0.0';
   const heading = document.getElementById('odomHeading');
   if (heading) heading.textContent = '0';
-  const xEl = document.getElementById('odomX');
-  if (xEl) xEl.textContent = '0.0 ft';
-  const yEl = document.getElementById('odomY');
-  if (yEl) yEl.textContent = '0.0 ft';
   // Redraw empty map
   if (odomCtx) {
-    drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [] });
+    drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [{x:0, y:0}] });
   }
 }
+
+// Initialize canvas on page load
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    initOdomCanvas();
+    drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [{x:0, y:0}] });
+  }, 100);
+});
