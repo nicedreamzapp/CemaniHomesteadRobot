@@ -8,21 +8,23 @@
 <body>
 <div class="container">
   <div class="header glass">
-    <!-- Left: Status indicator and info chips -->
+    <!-- Left: Status indicator (bigger) -->
     <div class="header-left">
-      <div class="status-indicator" id="statusIndicator">
+      <div class="status-indicator-large" id="statusIndicator">
         <span class="status-dot offline" id="statusDot"></span>
-        <span class="status-text" id="status">OFFLINE</span>
-      </div>
-      <div class="header-info">
-        <span class="info-chip"><span class="chip-label">WiFi</span><span class="chip-value" id="wifi">--</span></span>
-        <span class="info-chip"><span class="chip-label">Signal</span><span class="chip-value" id="rssi">--</span></span>
-        <span class="info-chip"><span class="chip-label">Up</span><span class="chip-value" id="uptime">--</span></span>
+        <span class="status-text-large" id="status">OFFLINE</span>
       </div>
     </div>
 
     <!-- Center: Title -->
     <h1>CEMANI COMMAND CENTER</h1>
+
+    <!-- Right: WiFi info -->
+    <div class="header-right">
+      <span class="info-chip"><span class="chip-label">WiFi</span><span class="chip-value" id="wifi">--</span></span>
+      <span class="info-chip"><span class="chip-label">Signal</span><span class="chip-value" id="rssi">--</span></span>
+      <span class="info-chip"><span class="chip-label">Up</span><span class="chip-value" id="uptime">--</span></span>
+    </div>
 
     <!-- Hidden for JS compatibility -->
     <span id="ip" style="display:none">--</span>

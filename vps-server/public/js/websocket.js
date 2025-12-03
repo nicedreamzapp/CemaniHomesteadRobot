@@ -131,19 +131,15 @@ function updateCamStatus(camId, connected, streaming) {
   if (streaming) {
     el.textContent = 'LIVE';
     el.className = 'cam-status-badge live';
-    txt.textContent = 'Live';
-    card.className = 'status-card';
-  } else if (connected) {
-    el.textContent = 'READY';
-    el.className = 'cam-status-badge';
-    el.style.background = 'rgba(245,159,0,0.9)';
-    txt.textContent = 'Ready';
-    card.className = 'status-card warning';
+    el.style.background = '';  // Use CSS default (green)
+    if (txt) txt.textContent = 'Live';
+    if (card) card.className = 'status-card';
   } else {
     el.textContent = 'OFFLINE';
     el.className = 'cam-status-badge';
-    txt.textContent = 'Offline';
-    card.className = 'status-card offline';
+    el.style.background = '';  // Use CSS default (red)
+    if (txt) txt.textContent = 'Offline';
+    if (card) card.className = 'status-card offline';
   }
 }
 

@@ -75,6 +75,29 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   letter-spacing: 1px;
 }
 .status-text.online { color: #51cf66; }
+
+/* Large status indicator for header */
+.status-indicator-large {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: linear-gradient(145deg, #1a2535, #0d1520);
+  border-radius: 25px;
+  box-shadow:
+    3px 3px 6px rgba(0, 0, 0, 0.4),
+    -2px -2px 4px rgba(60, 80, 100, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.status-text-large {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ff6b6b;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.status-text-large.online { color: #51cf66; }
+
 .header-info {
   display: flex;
   gap: 6px;
@@ -252,11 +275,14 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
 }
 .cam-video {
   width: 100%;
+  aspect-ratio: 16/9;
   display: block;
+  background: #0a0a0a;
 }
 .cam-video video, .cam-video img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: contain;
   display: block;
   border-radius: 0 0 8px 8px;
 }
@@ -289,7 +315,7 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
 /* Camera status badge - very subtle/transparent */
 .cam-status-badge {
   position: absolute;
-  top: 8px;
+  bottom: 8px;
   left: 8px;
   font-size: 9px;
   padding: 3px 8px;

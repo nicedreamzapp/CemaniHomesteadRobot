@@ -295,27 +295,49 @@ function drawOdometryMap(data) {
   ctx.fillStyle = 'rgba(0, 10, 20, 0.95)';
   ctx.fillRect(0, 0, w, h);
 
-  // Draw grid (1 meter squares)
-  const scale = 20;  // pixels per meter (5cm = 1px)
+  // Draw grid (1 foot squares = 304.8mm)
+  // pixels per foot - start with reasonable default
+  const ftPerSquare = 1;  // 1 foot per grid square
+  const mmPerSquare = ftPerSquare * 304.8;
+
+  // Base scale: how many pixels per foot
+  let pixelsPerFt = 15;  // Default scale
+
+  // Auto-scale based on max distance traveled
+  let maxDistMm = 1000;  // Start at ~3ft view
+  if (data.odomTrail && data.odomTrail.length > 0) {
+    data.odomTrail.forEach(p => {
+      maxDistMm = Math.max(maxDistMm, Math.abs(p.x), Math.abs(p.y));
+    });
+    if (data.odomX) maxDistMm = Math.max(maxDistMm, Math.abs(data.odomX));
+    if (data.odomY) maxDistMm = Math.max(maxDistMm, Math.abs(data.odomY));
+  }
+  // Scale to fit with padding
+  const maxDistFt = maxDistMm * FT_PER_MM;
+  const viewRadiusFt = Math.max(3, maxDistFt * 1.3);  // At least 3ft radius
+  pixelsPerFt = Math.min(w, h) / (viewRadiusFt * 2);
+
+  const gridSpacing = pixelsPerFt * ftPerSquare;  // pixels per grid line
+
   ctx.strokeStyle = 'rgba(0, 255, 136, 0.15)';
   ctx.lineWidth = 0.5;
 
   // Vertical lines
-  for (let x = cx % scale; x < w; x += scale) {
+  for (let x = cx % gridSpacing; x < w; x += gridSpacing) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, h);
     ctx.stroke();
   }
   // Horizontal lines
-  for (let y = cy % scale; y < h; y += scale) {
+  for (let y = cy % gridSpacing; y < h; y += gridSpacing) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(w, y);
     ctx.stroke();
   }
 
-  // Draw crosshairs at center
+  // Draw crosshairs at center (start position)
   ctx.strokeStyle = 'rgba(0, 255, 136, 0.3)';
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
@@ -327,22 +349,21 @@ function drawOdometryMap(data) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Scale text (in feet - 1m ≈ 3.3ft)
+  // Scale indicator
   ctx.fillStyle = 'rgba(0, 255, 136, 0.5)';
   ctx.font = '8px sans-serif';
-  ctx.fillText('3ft', cx + scale + 2, cy - 2);
+  ctx.textAlign = 'right';
+  ctx.fillText('1 square = 1 ft', w - 4, h - 4);
+  ctx.textAlign = 'left';
 
-  // Auto-scale based on max distance
-  let autoScale = scale;
-  let maxDist = 2000;  // Start at 2m view
-  if (data.odomTrail && data.odomTrail.length > 0) {
-    data.odomTrail.forEach(p => {
-      maxDist = Math.max(maxDist, Math.abs(p.x), Math.abs(p.y));
-    });
-    if (data.odomX) maxDist = Math.max(maxDist, Math.abs(data.odomX));
-    if (data.odomY) maxDist = Math.max(maxDist, Math.abs(data.odomY));
-    // Fit to view with padding
-    autoScale = Math.min(w, h) / (maxDist * 2.5 / 1000);
+  // Convert mm to screen pixels (Y is flipped: up on screen = positive Y in world)
+  function mmToScreen(xMm, yMm) {
+    const xFt = xMm * FT_PER_MM;
+    const yFt = yMm * FT_PER_MM;
+    return {
+      x: cx + xFt * pixelsPerFt,
+      y: cy - yFt * pixelsPerFt  // Flip Y so forward (positive Y) goes UP
+    };
   }
 
   // Draw start marker (red dot)
@@ -360,23 +381,21 @@ function drawOdometryMap(data) {
     ctx.beginPath();
 
     // Start from first trail point (should be origin)
-    const first = data.odomTrail[0];
-    ctx.moveTo(cx + (first.x / 1000) * autoScale, cy - (first.y / 1000) * autoScale);
+    const first = mmToScreen(data.odomTrail[0].x, data.odomTrail[0].y);
+    ctx.moveTo(first.x, first.y);
 
     // Draw through all trail points
     data.odomTrail.forEach((p, i) => {
       if (i > 0) {
-        const screenX = cx + (p.x / 1000) * autoScale;
-        const screenY = cy - (p.y / 1000) * autoScale;
-        ctx.lineTo(screenX, screenY);
+        const screen = mmToScreen(p.x, p.y);
+        ctx.lineTo(screen.x, screen.y);
       }
     });
 
     // Connect trail to current position (if different from last trail point)
     if (data.odomX !== undefined && data.odomY !== undefined) {
-      const currentX = cx + (data.odomX / 1000) * autoScale;
-      const currentY = cy - (data.odomY / 1000) * autoScale;
-      ctx.lineTo(currentX, currentY);
+      const current = mmToScreen(data.odomX, data.odomY);
+      ctx.lineTo(current.x, current.y);
     }
 
     ctx.stroke();
@@ -384,12 +403,14 @@ function drawOdometryMap(data) {
 
   // Draw current position - robot with clear front/rear
   if (data.odomX !== undefined && data.odomY !== undefined) {
-    const posX = cx + (data.odomX / 1000) * autoScale;
-    const posY = cy - (data.odomY / 1000) * autoScale;
+    const pos = mmToScreen(data.odomX, data.odomY);
+    const posX = pos.x;
+    const posY = pos.y;
     // Heading: positive = turning right (clockwise when viewed from above)
-    // Canvas rotation: positive = counterclockwise
-    // So we negate heading for correct visual rotation
-    const heading = -(data.odomHeading || 0);
+    // Canvas rotation: positive = clockwise
+    // Robot starts facing UP (north), heading 0 = up
+    // When heading increases (turn right), robot rotates clockwise
+    const heading = -(data.odomHeading || 0);  // Negate for canvas coords
 
     ctx.save();
     ctx.translate(posX, posY);
@@ -461,6 +482,7 @@ const WHEEL_CIRCUMFERENCE_MM = Math.PI * WHEEL_DIAMETER_MM;  // ~637.7mm
 const TICKS_PER_REV = 16384;
 const MM_PER_TICK = WHEEL_CIRCUMFERENCE_MM / TICKS_PER_REV;  // ~0.0389mm/tick
 const WHEEL_BASE_MM = 600;  // Distance between wheels in mm
+const FT_PER_MM = 1 / 304.8;  // 1 foot = 304.8mm
 
 // Odometry state
 let odomState = {
@@ -494,18 +516,29 @@ function updateOdometryFromEncoders(posL, posR) {
   // Skip tiny movements (noise)
   if (Math.abs(deltaL) < 5 && Math.abs(deltaR) < 5) return;
 
-  // Convert to mm
+  // Convert to mm (positive = forward)
   const distL = deltaL * MM_PER_TICK;
   const distR = deltaR * MM_PER_TICK;
 
   // Differential drive kinematics
+  // Average distance traveled by center of robot
   const distCenter = (distL + distR) / 2;
+  // Change in heading (positive = turning right/clockwise)
   const deltaTheta = (distR - distL) / WHEEL_BASE_MM;
 
-  // Update position
-  odomState.heading += deltaTheta;
-  odomState.x += distCenter * Math.cos(odomState.heading);
-  odomState.y += distCenter * Math.sin(odomState.heading);
+  // Update heading first (mid-arc approximation)
+  const halfTheta = deltaTheta / 2;
+  odomState.heading += halfTheta;
+
+  // Update position in the direction robot is facing
+  // heading 0 = facing UP (positive Y), so:
+  // x += dist * sin(heading)  (right is positive X)
+  // y += dist * cos(heading)  (forward/up is positive Y)
+  odomState.x += distCenter * Math.sin(odomState.heading);
+  odomState.y += distCenter * Math.cos(odomState.heading);
+
+  // Complete heading update
+  odomState.heading += halfTheta;
   odomState.totalDistance += Math.abs(distCenter);
 
   // Add to trail (every ~50mm)
