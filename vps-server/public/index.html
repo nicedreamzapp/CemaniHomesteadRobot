@@ -144,47 +144,59 @@
       <div class="driver-temps-row">
         <div class="driver-temp-box">
           <span class="driver-icon">&#9881;</span>
-          <span class="driver-name">Driver 2 (L)</span>
+          <span class="driver-name">Driver 2 Left</span>
           <span class="driver-temp-val" id="driver2Temp">--</span><span class="temp-unit">&deg;F</span>
         </div>
         <div class="driver-temp-box">
           <span class="driver-icon">&#9881;</span>
-          <span class="driver-name">Driver 1 (R)</span>
+          <span class="driver-name">Driver 1 Right</span>
           <span class="driver-temp-val" id="driver1Temp">--</span><span class="temp-unit">&deg;F</span>
         </div>
       </div>
 
-      <!-- Robot Top-Down View - EV Style -->
-      <div class="ev-robot-view">
-        <!-- Left Front Wheel with Temp -->
-        <div class="ev-wheel-group lf">
-          <div class="ev-wheel" id="wheelLF"></div>
-          <div class="ev-wheel-temp"><span id="motorTempLF">--</span>&deg;</div>
+      <!-- Robot Top-Down View - Tank Style with Side Wheels -->
+      <div class="tank-robot-view">
+        <!-- Direction Arrows (left side, outside wheels) -->
+        <div class="tank-arrows left">
+          <div class="tank-arrow" id="arrowLF"></div>
+          <div class="tank-arrow" id="arrowLR"></div>
         </div>
 
-        <!-- Left Rear Wheel with Temp -->
-        <div class="ev-wheel-group lr">
-          <div class="ev-wheel" id="wheelLR"></div>
-          <div class="ev-wheel-temp"><span id="motorTempLR">--</span>&deg;</div>
+        <!-- Left Track/Wheels (2 wheels stacked vertically) -->
+        <div class="tank-track left">
+          <div class="tank-wheel-box">
+            <div class="tank-wheel" id="wheelLF"></div>
+            <div class="tank-wheel-temp"><span id="motorTempLF">--</span>&deg;</div>
+          </div>
+          <div class="tank-wheel-box">
+            <div class="tank-wheel" id="wheelLR"></div>
+            <div class="tank-wheel-temp"><span id="motorTempLR">--</span>&deg;</div>
+          </div>
         </div>
 
-        <!-- Robot Body -->
-        <div class="ev-robot-body">
-          <div class="ev-fwd-indicator">&#9650;</div>
-          <div class="ev-robot-label">CEMANI</div>
-          <div class="ev-rear-indicator">&#9660;</div>
+        <!-- Robot Body/Chassis (center) -->
+        <div class="tank-body">
+          <div class="tank-fwd">&#9650; FWD</div>
+          <div class="tank-label">CEMANI</div>
+          <div class="tank-rear">REAR &#9660;</div>
         </div>
 
-        <!-- Right Front Wheel with Temp -->
-        <div class="ev-wheel-group rf">
-          <div class="ev-wheel" id="wheelRF"></div>
-          <div class="ev-wheel-temp"><span id="motorTempRF">--</span>&deg;</div>
+        <!-- Right Track/Wheels (2 wheels stacked vertically) -->
+        <div class="tank-track right">
+          <div class="tank-wheel-box">
+            <div class="tank-wheel" id="wheelRF"></div>
+            <div class="tank-wheel-temp"><span id="motorTempRF">--</span>&deg;</div>
+          </div>
+          <div class="tank-wheel-box">
+            <div class="tank-wheel" id="wheelRR"></div>
+            <div class="tank-wheel-temp"><span id="motorTempRR">--</span>&deg;</div>
+          </div>
         </div>
 
-        <!-- Right Rear Wheel with Temp -->
-        <div class="ev-wheel-group rr">
-          <div class="ev-wheel" id="wheelRR"></div>
-          <div class="ev-wheel-temp"><span id="motorTempRR">--</span>&deg;</div>
+        <!-- Direction Arrows (right side, outside wheels) -->
+        <div class="tank-arrows right">
+          <div class="tank-arrow" id="arrowRF"></div>
+          <div class="tank-arrow" id="arrowRR"></div>
         </div>
       </div>
 

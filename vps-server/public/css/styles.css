@@ -1309,75 +1309,86 @@ input[type="text"] {
   color: #51cf66;
 }
 
-/* EV Robot Top-Down View */
-.ev-robot-view {
-  position: relative;
-  width: 180px;
-  height: 130px;
+/* ===== TANK ROBOT TOP-DOWN VIEW ===== */
+/* Layout: [Arrows] [Left Wheels] [Body] [Right Wheels] [Arrows] */
+.tank-robot-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 0;
   margin: 0 auto;
 }
 
-/* Robot Body - Green EV Style */
-.ev-robot-body {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 50px;
-  height: 90px;
-  background: linear-gradient(180deg, #1a5a3a 0%, #0d3d25 50%, #1a5a3a 100%);
-  border: 2px solid #00ff88;
-  border-radius: 8px;
-  box-shadow:
-    0 0 15px rgba(0, 255, 136, 0.3),
-    inset 0 2px 0 rgba(255, 255, 255, 0.1),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.3);
+/* Direction Arrows Column */
+.tank-arrows {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 8px;
+  width: 16px;
+}
+.tank-arrow {
+  height: 28px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 4px 0;
-}
-.ev-fwd-indicator {
-  font-size: 12px;
-  color: #00ff88;
-  text-shadow: 0 0 8px rgba(0, 255, 136, 0.8);
-  animation: fwdPulse 2s infinite;
-}
-.ev-rear-indicator {
+  justify-content: center;
   font-size: 10px;
-  color: #ff6b6b;
-  opacity: 0.7;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
-.ev-robot-label {
-  font-size: 7px;
-  font-weight: bold;
+/* Arrow states - reuse existing classes */
+.tank-arrow.arrow-forward {
+  opacity: 1;
   color: #00ff88;
-  letter-spacing: 1px;
-  text-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
+  text-shadow: 0 0 8px #00ff88;
 }
-@keyframes fwdPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+.tank-arrow.arrow-forward::before {
+  content: '▲';
+  animation: externalArrowUp 0.35s ease-in-out infinite;
+}
+.tank-arrow.arrow-forward::after {
+  content: '▲';
+  animation: externalArrowUp 0.35s ease-in-out infinite 0.15s;
+  opacity: 0.5;
+}
+.tank-arrow.arrow-backward {
+  opacity: 1;
+  color: #ff6b6b;
+  text-shadow: 0 0 8px #ff6b6b;
+}
+.tank-arrow.arrow-backward::before {
+  content: '▼';
+  animation: externalArrowDown 0.35s ease-in-out infinite;
+}
+.tank-arrow.arrow-backward::after {
+  content: '▼';
+  animation: externalArrowDown 0.35s ease-in-out infinite 0.15s;
+  opacity: 0.5;
+}
+.tank-arrow.arrow-stopped {
+  opacity: 0.4;
+  color: #666;
+}
+.tank-arrow.arrow-stopped::before {
+  content: '—';
 }
 
-/* Wheel Groups - Positioned at corners */
-.ev-wheel-group {
-  position: absolute;
+/* Track (column of 2 wheels along the length) */
+.tank-track {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tank-wheel-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
 }
-.ev-wheel-group.lf { left: 10px; top: 8px; }
-.ev-wheel-group.lr { left: 10px; bottom: 8px; }
-.ev-wheel-group.rf { right: 10px; top: 8px; }
-.ev-wheel-group.rr { right: 10px; bottom: 8px; }
-
-/* Wheels - 3D Embossed Look */
-.ev-wheel {
+.tank-wheel {
   width: 20px;
-  height: 36px;
+  height: 28px;
   background: linear-gradient(90deg, #222 0%, #444 30%, #333 50%, #444 70%, #222 100%);
   border-radius: 4px;
   box-shadow:
@@ -1386,18 +1397,179 @@ input[type="text"] {
     inset 0 0 8px rgba(0, 0, 0, 0.5);
   border: 1px solid #555;
   transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
 }
+/* Tread pattern */
+.tank-wheel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent 3px,
+    rgba(0,0,0,0.3) 3px, rgba(0,0,0,0.3) 4px
+  );
+}
+/* Wheel states */
+.tank-wheel.spinning-forward {
+  box-shadow:
+    3px 3px 6px rgba(0, 0, 0, 0.6),
+    0 0 15px rgba(0, 255, 136, 0.7),
+    inset 0 0 10px rgba(0, 255, 136, 0.3);
+  border-color: #00ff88;
+  border-width: 2px;
+}
+.tank-wheel.spinning-forward::before {
+  animation: treadScrollUp 0.2s linear infinite;
+}
+.tank-wheel.spinning-backward {
+  box-shadow:
+    3px 3px 6px rgba(0, 0, 0, 0.6),
+    0 0 15px rgba(255, 107, 107, 0.7),
+    inset 0 0 10px rgba(255, 107, 107, 0.3);
+  border-color: #ff6b6b;
+  border-width: 2px;
+}
+.tank-wheel.spinning-backward::before {
+  animation: treadScrollDown 0.2s linear infinite;
+}
+.tank-wheel.stopped {
+  opacity: 0.7;
+}
+.tank-wheel-temp {
+  font-size: 8px;
+  font-weight: bold;
+  color: #ffd43b;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+/* Robot Body/Chassis - Rectangular (longer than wide) */
+.tank-body {
+  width: 50px;
+  height: 100px;
+  background: linear-gradient(180deg, #1a5a3a 0%, #0d3d25 50%, #1a5a3a 100%);
+  border: 2px solid #00ff88;
+  border-radius: 6px;
+  box-shadow:
+    0 0 15px rgba(0, 255, 136, 0.3),
+    inset 0 2px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 4px;
+}
+.tank-fwd {
+  font-size: 9px;
+  font-weight: bold;
+  color: #00ff88;
+  text-shadow: 0 0 8px rgba(0, 255, 136, 0.8);
+  animation: fwdPulse 2s infinite;
+}
+.tank-rear {
+  font-size: 8px;
+  color: #ff6b6b;
+  opacity: 0.7;
+}
+.tank-label {
+  font-size: 8px;
+  font-weight: bold;
+  color: #00ff88;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
+}
+
+/* Legacy EV styles (keep for compatibility) */
+.ev-robot-view { display: none; }
+@keyframes fwdPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Wheel Groups - Positioned closer to body */
+.ev-wheel-group {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.ev-wheel-group.lf { left: 40px; top: 8px; }
+.ev-wheel-group.lr { left: 40px; bottom: 8px; }
+.ev-wheel-group.rf { right: 40px; top: 8px; }
+.ev-wheel-group.rr { right: 40px; bottom: 8px; }
+
+/* Wheels - 3D Embossed Look with Animation */
+.ev-wheel {
+  width: 18px;
+  height: 32px;
+  background: linear-gradient(90deg, #222 0%, #444 30%, #333 50%, #444 70%, #222 100%);
+  border-radius: 4px;
+  box-shadow:
+    3px 3px 6px rgba(0, 0, 0, 0.6),
+    -1px -1px 3px rgba(100, 100, 100, 0.2),
+    inset 0 0 8px rgba(0, 0, 0, 0.5);
+  border: 1px solid #555;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+/* Tread pattern */
+.ev-wheel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 3px,
+    rgba(0,0,0,0.3) 3px,
+    rgba(0,0,0,0.3) 4px
+  );
+}
+/* Forward spinning - green glow */
 .ev-wheel.spinning-forward {
   box-shadow:
     3px 3px 6px rgba(0, 0, 0, 0.6),
-    0 0 10px rgba(0, 255, 136, 0.4);
+    0 0 15px rgba(0, 255, 136, 0.7),
+    inset 0 0 10px rgba(0, 255, 136, 0.3);
   border-color: #00ff88;
+  border-width: 2px;
 }
+.ev-wheel.spinning-forward::before {
+  animation: treadScrollUp 0.2s linear infinite;
+}
+/* Backward spinning - red glow */
 .ev-wheel.spinning-backward {
   box-shadow:
     3px 3px 6px rgba(0, 0, 0, 0.6),
-    0 0 10px rgba(255, 107, 107, 0.4);
+    0 0 15px rgba(255, 107, 107, 0.7),
+    inset 0 0 10px rgba(255, 107, 107, 0.3);
   border-color: #ff6b6b;
+  border-width: 2px;
+}
+.ev-wheel.spinning-backward::before {
+  animation: treadScrollDown 0.2s linear infinite;
+}
+/* Stopped wheel - dim, no animation */
+.ev-wheel.stopped {
+  opacity: 0.7;
+}
+/* Tread scroll animations */
+@keyframes treadScrollUp {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 -8px; }
+}
+@keyframes treadScrollDown {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 8px; }
 }
 
 /* Wheel Temps - Right next to wheels */
@@ -1410,6 +1582,90 @@ input[type="text"] {
   border-radius: 3px;
   white-space: nowrap;
 }
+
+/* Wheel Row - contains wheel and direction arrow */
+.ev-wheel-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Direction arrows NEXT TO wheels */
+.ev-wheel-arrow {
+  width: 14px;
+  height: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* Forward spinning - show up arrows */
+.ev-wheel-arrow.arrow-forward {
+  opacity: 1;
+  color: #00ff88;
+  text-shadow: 0 0 8px #00ff88;
+}
+.ev-wheel-arrow.arrow-forward::before {
+  content: '▲';
+  animation: externalArrowUp 0.35s ease-in-out infinite;
+}
+.ev-wheel-arrow.arrow-forward::after {
+  content: '▲';
+  animation: externalArrowUp 0.35s ease-in-out infinite 0.15s;
+  opacity: 0.5;
+}
+
+/* Backward spinning - show down arrows */
+.ev-wheel-arrow.arrow-backward {
+  opacity: 1;
+  color: #ff6b6b;
+  text-shadow: 0 0 8px #ff6b6b;
+}
+.ev-wheel-arrow.arrow-backward::before {
+  content: '▼';
+  animation: externalArrowDown 0.35s ease-in-out infinite;
+}
+.ev-wheel-arrow.arrow-backward::after {
+  content: '▼';
+  animation: externalArrowDown 0.35s ease-in-out infinite 0.15s;
+  opacity: 0.5;
+}
+
+/* Stopped - show dash */
+.ev-wheel-arrow.arrow-stopped {
+  opacity: 0.4;
+  color: #666;
+}
+.ev-wheel-arrow.arrow-stopped::before {
+  content: '—';
+}
+
+/* External arrow animations */
+@keyframes externalArrowUp {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 0.6;
+  }
+}
+@keyframes externalArrowDown {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(4px);
+    opacity: 0.6;
+  }
+}
+
 .robot-frame-compact {
   width: 100px;
   height: 140px;

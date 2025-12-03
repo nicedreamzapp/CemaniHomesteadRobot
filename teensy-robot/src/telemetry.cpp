@@ -152,11 +152,25 @@ void sendTelemetryToESP32() {
   int motorTempL_F = (motorTempLF_F + motorTempLR_F) / 2;
   int motorTempR_F = (motorTempRF_F + motorTempRR_F) / 2;
 
-  // Driver temps - use motor temp averages since register 0x20B0 may not be available
-  // Driver 1 (RIGHT) = average of RF and RR motor temps
-  // Driver 2 (LEFT) = average of LF and LR motor temps
-  int driverTemp1_F = (motorTempRF_F + motorTempRR_F) / 2;
-  int driverTemp2_F = (motorTempLF_F + motorTempLR_F) / 2;
+  // Driver temps from register 0x20B0 (unit: 0.1°C)
+  // If 0x20B0 returns valid data, use it. Otherwise fall back to motor temp average.
+  int driverTemp1_F, driverTemp2_F;
+  if (telemetry_driverTemp1 > 0 && telemetry_driverTemp1 < 1500) {
+    // Valid driver temp reading (0.1°C units, convert to F)
+    float driverTemp1_C = telemetry_driverTemp1 * 0.1f;
+    driverTemp1_F = (int)celsiusToFahrenheit(driverTemp1_C);
+  } else {
+    // Fallback to motor temp average
+    driverTemp1_F = (motorTempRF_F + motorTempRR_F) / 2;
+  }
+  if (telemetry_driverTemp2 > 0 && telemetry_driverTemp2 < 1500) {
+    // Valid driver temp reading (0.1°C units, convert to F)
+    float driverTemp2_C = telemetry_driverTemp2 * 0.1f;
+    driverTemp2_F = (int)celsiusToFahrenheit(driverTemp2_C);
+  } else {
+    // Fallback to motor temp average
+    driverTemp2_F = (motorTempLF_F + motorTempLR_F) / 2;
+  }
 
   // Velocities (0.1 RPM per unit)
   float velL = telemetry_velocityL * 0.1f;
@@ -187,7 +201,10 @@ void sendTelemetryToESP32() {
   // Also print to USB Serial for debugging
   Serial.println("===== DRIVER TELEMETRY =====");
   Serial.printf("Battery: %.2fV (%d%%)\n", batteryV, batteryPercent);
+  Serial.printf("Motor Temp RAW: D1=0x%04X D2=0x%04X\n", telemetry_motorTemp1, telemetry_motorTemp2);
   Serial.printf("Motor Temp LF:%d LR:%d RF:%d RR:%d °F\n", motorTempLF_F, motorTempLR_F, motorTempRF_F, motorTempRR_F);
+  Serial.printf("Driver Temp RAW: D1=%u (0x%04X) D2=%u (0x%04X)\n",
+    telemetry_driverTemp1, telemetry_driverTemp1, telemetry_driverTemp2, telemetry_driverTemp2);
   Serial.printf("Driver Temp 1: %d°F  2: %d°F\n", driverTemp1_F, driverTemp2_F);
   Serial.printf("Velocity L: %.1f RPM  R: %.1f RPM\n", velL, velR);
   Serial.printf("Torque L: %.1fA  R: %.1fA\n", torqueL, torqueR);

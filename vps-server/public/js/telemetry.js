@@ -177,6 +177,8 @@ function updateDriverTelemetry(data) {
     // Animate left wheels with direction arrows
     const wheelLF = document.getElementById('wheelLF');
     const wheelLR = document.getElementById('wheelLR');
+    const arrowLF = document.getElementById('arrowLF');
+    const arrowLR = document.getElementById('arrowLR');
     const isSpinning = Math.abs(data.velL) > 0.5;
     const direction = data.velL > 0 ? 'forward' : (data.velL < 0 ? 'backward' : 'stopped');
 
@@ -191,6 +193,14 @@ function updateDriverTelemetry(data) {
         wheel.dataset.direction = direction;
       }
     });
+
+    // Update direction arrows next to wheels
+    [arrowLF, arrowLR].forEach(arrow => {
+      if (arrow) {
+        arrow.classList.remove('arrow-forward', 'arrow-backward', 'arrow-stopped');
+        arrow.classList.add('arrow-' + direction);
+      }
+    });
   }
   if (data.velR !== undefined) {
     const mphR = rpmToMph(data.velR);
@@ -199,6 +209,8 @@ function updateDriverTelemetry(data) {
     // Animate right wheels with direction arrows
     const wheelRF = document.getElementById('wheelRF');
     const wheelRR = document.getElementById('wheelRR');
+    const arrowRF = document.getElementById('arrowRF');
+    const arrowRR = document.getElementById('arrowRR');
     const isSpinning = Math.abs(data.velR) > 0.5;
     const direction = data.velR > 0 ? 'forward' : (data.velR < 0 ? 'backward' : 'stopped');
 
@@ -211,6 +223,14 @@ function updateDriverTelemetry(data) {
           wheel.classList.add('stopped');
         }
         wheel.dataset.direction = direction;
+      }
+    });
+
+    // Update direction arrows next to wheels
+    [arrowRF, arrowRR].forEach(arrow => {
+      if (arrow) {
+        arrow.classList.remove('arrow-forward', 'arrow-backward', 'arrow-stopped');
+        arrow.classList.add('arrow-' + direction);
       }
     });
   }
