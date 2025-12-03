@@ -7,7 +7,8 @@ let gridOffsetY = 0;
 let robotHeading = 0;
 
 const dirLabels = { F: 'FWD', B: 'BACK', L: 'LEFT', R: 'RIGHT' };
-const PIXELS_PER_METER = 40;
+const PIXELS_PER_FOOT = 13;  // Scaled for display
+const FEET_TO_METERS = 0.3048;
 
 function updateDisplay() {
   document.getElementById('currentDir').textContent = selectedDir ? dirLabels[selectedDir] : '--';
@@ -42,7 +43,7 @@ function updateDisplay() {
   if (commandQueue.length > 0) {
     setStatus(commandQueue.length + ' command(s) queued - Press GO', 'idle');
   } else if (selectedDir && selectedDist) {
-    setStatus(selectedDist + 'm ' + dirLabels[selectedDir] + ' - Tap again to add, or GO', 'idle');
+    setStatus(selectedDist + 'ft ' + dirLabels[selectedDir] + ' - Tap again to add, or GO', 'idle');
   } else if (selectedDir) {
     setStatus('Direction: ' + dirLabels[selectedDir] + ' - Now tap distance', 'idle');
   } else {
@@ -61,7 +62,7 @@ function updateQueueDisplay() {
 
   let html = '';
   commandQueue.forEach((cmd, i) => {
-    html += '<span class="cmd-chip">' + cmd.dist + 'm ' + (dirLabels[cmd.dir] || cmd.dir) +
+    html += '<span class="cmd-chip">' + cmd.dist + 'ft ' + (dirLabels[cmd.dir] || cmd.dir) +
             ' <span class="remove" onclick="removeFromQueue(' + i + ')">&#215;</span></span>';
   });
   queueDiv.innerHTML = html;
@@ -99,7 +100,7 @@ function selectDistance(distance) {
   commandQueue.push({ dir: selectedDir, dist: distance });
 
   const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#74c0fc">[QUEUE] Added ' + distance + 'm ' + dirLabels[selectedDir] + '</span><br>';
+  serialDiv.innerHTML += '<span style="color:#74c0fc">[QUEUE] Added ' + distance + 'ft ' + dirLabels[selectedDir] + '</span><br>';
   serialDiv.scrollTop = serialDiv.scrollHeight;
 
   selectedDir = null;
@@ -134,18 +135,20 @@ function executeQueue() {
     }
 
     const cmd = commands[currentIndex];
-    setStatus('Moving ' + (currentIndex + 1) + '/' + commands.length + ': ' + cmd.dist + 'm ' + dirLabels[cmd.dir], 'moving');
+    setStatus('Moving ' + (currentIndex + 1) + '/' + commands.length + ': ' + cmd.dist + 'ft ' + dirLabels[cmd.dir], 'moving');
 
+    // Convert feet to meters for the robot command
+    const distanceMeters = cmd.dist * FEET_TO_METERS;
     ws.send(JSON.stringify({
       type: 'move_command',
-      distance: cmd.dist,
+      distance: distanceMeters,
       direction: cmd.dir
     }));
 
-    serialDiv.innerHTML += '<span style="color:#51cf66">[MOVE] ' + cmd.dist + 'm ' + dirLabels[cmd.dir] + '</span><br>';
+    serialDiv.innerHTML += '<span style="color:#51cf66">[MOVE] ' + cmd.dist + 'ft ' + dirLabels[cmd.dir] + '</span><br>';
     serialDiv.scrollTop = serialDiv.scrollHeight;
 
-    const movePixels = cmd.dist * PIXELS_PER_METER;
+    const movePixels = cmd.dist * PIXELS_PER_FOOT;
     const headingRad = robotHeading * Math.PI / 180;
 
     if (cmd.dir === 'F') {

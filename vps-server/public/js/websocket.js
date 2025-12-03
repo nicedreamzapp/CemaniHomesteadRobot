@@ -286,8 +286,21 @@ ws.onmessage = function(e) {
   }
 
   if(d.type === 'status') {
+    // Update header status indicator
     document.getElementById('status').textContent = d.connected ? 'ONLINE' : 'OFFLINE';
-    document.getElementById('status').className = 'status ' + (d.connected ? 'online' : '');
+    document.getElementById('status').className = 'status-text ' + (d.connected ? 'online' : '');
+
+    // Update status dot
+    const statusDot = document.getElementById('statusDot');
+    if (statusDot) {
+      statusDot.className = 'status-dot ' + (d.connected ? 'online' : 'offline');
+    }
+
+    // Update mini status cards in header
+    const esp32Mini = document.getElementById('esp32StatusMini');
+    const teensyMini = document.getElementById('teensyStatusMini');
+    if (esp32Mini) esp32Mini.textContent = d.connected ? 'OK' : '--';
+    if (teensyMini) teensyMini.textContent = d.teensyConnected ? 'OK' : '--';
 
     // Update ESP32 status card
     document.getElementById('esp32Status').textContent = d.connected ? 'Online' : 'Offline';
@@ -355,7 +368,20 @@ ws.onmessage = function(e) {
 
 ws.onclose = () => {
   document.getElementById('status').textContent = 'DISCONNECTED';
-  document.getElementById('status').className = 'status';
+  document.getElementById('status').className = 'status-text';
+
+  // Update status dot
+  const statusDot = document.getElementById('statusDot');
+  if (statusDot) {
+    statusDot.className = 'status-dot offline';
+  }
+
+  // Reset mini status cards
+  const esp32Mini = document.getElementById('esp32StatusMini');
+  const teensyMini = document.getElementById('teensyStatusMini');
+  if (esp32Mini) esp32Mini.textContent = '--';
+  if (teensyMini) teensyMini.textContent = '--';
+
   updateCam1Status(false, false);
 };
 

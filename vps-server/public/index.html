@@ -8,22 +8,43 @@
 <body>
 <div class="container">
   <div class="header glass">
-    <h1>CEMANI COMMAND CENTER</h1>
-    <div class="status" id="status">OFFLINE</div>
-    <div class="info">
-      <div class="info-item">
-        <span class="info-label">WiFi</span>
-        <span class="info-value" id="wifi">--</span>
+    <!-- Left: Status indicator and info chips -->
+    <div class="header-left">
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot offline" id="statusDot"></span>
+        <span class="status-text" id="status">OFFLINE</span>
       </div>
-      <div class="info-item">
-        <span class="info-label">Signal</span>
-        <span class="info-value" id="rssi">--</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Up</span>
-        <span class="info-value" id="uptime">--</span>
+      <div class="header-info">
+        <span class="info-chip"><span class="chip-label">WiFi</span><span class="chip-value" id="wifi">--</span></span>
+        <span class="info-chip"><span class="chip-label">Signal</span><span class="chip-value" id="rssi">--</span></span>
+        <span class="info-chip"><span class="chip-label">Up</span><span class="chip-value" id="uptime">--</span></span>
       </div>
     </div>
+
+    <!-- Center: Title -->
+    <h1>CEMANI COMMAND CENTER</h1>
+
+    <!-- Right: Quick controls and mini status -->
+    <div class="header-right">
+      <div class="header-controls">
+        <button class="header-btn go" onclick="executeQueue()">GO</button>
+        <button class="header-btn stop" onclick="emergencyStop()">STOP</button>
+        <button class="header-btn clear" onclick="clearQueue()">CLR</button>
+      </div>
+      <div class="header-status-cards">
+        <div class="mini-status-card" id="esp32MiniCard">
+          <span class="mini-icon">&#128225;</span>
+          <span class="mini-label">ESP32</span>
+          <span class="mini-value" id="esp32StatusMini">--</span>
+        </div>
+        <div class="mini-status-card" id="teensyMiniCard">
+          <span class="mini-icon">&#9881;</span>
+          <span class="mini-label">Teensy</span>
+          <span class="mini-value" id="teensyStatusMini">--</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Hidden for JS compatibility -->
     <span id="ip" style="display:none">--</span>
     <span id="version" style="display:none">--</span>
@@ -31,45 +52,51 @@
 
   <!-- Left: Cameras stacked -->
   <div class="cameras-column glass">
-    <!-- CAM 1 -->
-    <div class="cam-container" id="cam1-container">
-      <div class="cam-video">
-        <div id="cam1-video" style="width:100%;height:100%;background:#000;"></div>
-      </div>
-      <div class="cam-overlay">
-        <div class="cam-status-badge" id="cam1-status">OFFLINE</div>
-        <div class="ptz-overlay">
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz="up">&#9650;</div>
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz="left">&#9664;</div>
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz="right">&#9654;</div>
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz="down">&#9660;</div>
-          <div class="ptz-btn empty"></div>
+    <!-- FRONT CAM -->
+    <div class="cam-wrapper">
+      <div class="cam-label-centered">&#9650; FRONT CAM</div>
+      <div class="cam-container" id="cam1-container">
+        <div class="cam-video">
+          <div id="cam1-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+        </div>
+        <div class="cam-overlay">
+          <div class="cam-status-badge" id="cam1-status">OFFLINE</div>
+          <div class="ptz-overlay">
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="up">&#9650;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="left">&#9664;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="right">&#9654;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="down">&#9660;</div>
+            <div class="ptz-btn empty"></div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- CAM 2 -->
-    <div class="cam-container" id="cam2-container">
-      <div class="cam-video">
-        <div id="cam2-video" style="width:100%;height:100%;background:#000;"></div>
-      </div>
-      <div class="cam-overlay">
-        <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
-        <div class="speaker-btn" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">&#128266;</div>
-        <div class="ptz-overlay">
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz2="up">&#9650;</div>
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz2="left">&#9664;</div>
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz2="right">&#9654;</div>
-          <div class="ptz-btn empty"></div>
-          <div class="ptz-btn" data-ptz2="down">&#9660;</div>
-          <div class="ptz-btn empty"></div>
+    <!-- REAR CAM -->
+    <div class="cam-wrapper">
+      <div class="cam-label-centered">&#9660; REAR CAM</div>
+      <div class="cam-container" id="cam2-container">
+        <div class="cam-video">
+          <div id="cam2-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+        </div>
+        <div class="cam-overlay">
+          <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
+          <div class="speaker-btn" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">&#128266;</div>
+          <div class="ptz-overlay">
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="up">&#9650;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="left">&#9664;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="right">&#9654;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="down">&#9660;</div>
+            <div class="ptz-btn empty"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -95,10 +122,10 @@
 
       <!-- DISTANCE -->
       <div class="dist-row">
-        <div class="dist-btn" data-dist="0.1">0.1m</div>
-        <div class="dist-btn" data-dist="0.5">0.5m</div>
-        <div class="dist-btn" data-dist="1">1m</div>
-        <div class="dist-btn" data-dist="2">2m</div>
+        <div class="dist-btn" data-dist="0.5">0.5ft</div>
+        <div class="dist-btn" data-dist="1">1ft</div>
+        <div class="dist-btn" data-dist="3">3ft</div>
+        <div class="dist-btn" data-dist="10">10ft</div>
       </div>
 
       <!-- COMMAND QUEUE -->
