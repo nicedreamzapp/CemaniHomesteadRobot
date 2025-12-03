@@ -351,12 +351,7 @@ function drawOdometryMap(data) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Scale indicator
-  ctx.fillStyle = 'rgba(0, 255, 136, 0.5)';
-  ctx.font = '8px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('1 square = 1 ft', w - 4, h - 4);
-  ctx.textAlign = 'left';
+  // Scale indicator removed from canvas - shown in HTML tracker-scale div instead
 
   // Convert mm to screen pixels (Y is flipped: up on screen = positive Y in world)
   function mmToScreen(xMm, yMm) {

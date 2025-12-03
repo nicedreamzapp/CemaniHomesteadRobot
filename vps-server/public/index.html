@@ -130,74 +130,73 @@
       </div>
     </div>
 
-    <!-- DRIVE SYSTEM - Robot Top-Down View -->
-    <div class="section-header"><span class="emoji">&#128663;</span> DRIVE SYSTEM</div>
+    <!-- DRIVE SYSTEM - EV Dashboard Style -->
+    <div class="section-header"><span class="emoji">&#128664;</span> DRIVE SYSTEM</div>
     <div class="drive-panel">
-      <!-- Battery -->
+      <!-- Battery Bar -->
       <div class="battery-row">
         <span class="batt-icon">&#128267;</span>
-        <div class="batt-bar"><div class="batt-fill" id="batteryFill"></div></div>
+        <div class="batt-bar" id="batteryBar"><div class="batt-fill" id="batteryFill"></div></div>
         <span class="batt-text"><span id="batteryVoltage">--</span>V <span id="batteryPercent">--</span>%</span>
       </div>
 
-      <!-- Robot Top-Down Diagram with Temps -->
-      <div class="robot-diagram-with-temps">
-        <!-- Left temps column -->
-        <div class="temps-column left">
-          <div class="wheel-temp" id="tempLF"><span id="motorTempLF">--</span>&deg;F</div>
-          <div class="wheel-temp" id="tempLR"><span id="motorTempLR">--</span>&deg;F</div>
+      <!-- Driver Temps Row - Above Robot -->
+      <div class="driver-temps-row">
+        <div class="driver-temp-box">
+          <span class="driver-icon">&#9881;</span>
+          <span class="driver-name">Driver 2 (L)</span>
+          <span class="driver-temp-val" id="driver2Temp">--</span><span class="temp-unit">&deg;F</span>
         </div>
-
-        <!-- Robot body -->
-        <div class="robot-frame-compact">
-          <!-- FWD indicator -->
-          <div class="fwd-arrow">&#9650; FWD</div>
-
-          <!-- Left wheels (ZLAC hubs) -->
-          <div class="zlac-wheel left-front" id="wheelLF">
-            <div class="hub"></div>
-            <div class="tire"></div>
-          </div>
-          <div class="zlac-wheel left-rear" id="wheelLR">
-            <div class="hub"></div>
-            <div class="tire"></div>
-          </div>
-
-          <!-- Right wheels (ZLAC hubs) -->
-          <div class="zlac-wheel right-front" id="wheelRF">
-            <div class="hub"></div>
-            <div class="tire"></div>
-          </div>
-          <div class="zlac-wheel right-rear" id="wheelRR">
-            <div class="hub"></div>
-            <div class="tire"></div>
-          </div>
-
-          <!-- Center frame -->
-          <div class="frame-center">
-            <div class="frame-label">CEMANI</div>
-          </div>
-
-          <!-- REAR indicator -->
-          <div class="rear-arrow">&#9660; REAR</div>
-        </div>
-
-        <!-- Right temps column -->
-        <div class="temps-column right">
-          <div class="wheel-temp" id="tempRF"><span id="motorTempRF">--</span>&deg;F</div>
-          <div class="wheel-temp" id="tempRR"><span id="motorTempRR">--</span>&deg;F</div>
+        <div class="driver-temp-box">
+          <span class="driver-icon">&#9881;</span>
+          <span class="driver-name">Driver 1 (R)</span>
+          <span class="driver-temp-val" id="driver1Temp">--</span><span class="temp-unit">&deg;F</span>
         </div>
       </div>
 
-      <!-- Speed displays below robot -->
+      <!-- Robot Top-Down View - EV Style -->
+      <div class="ev-robot-view">
+        <!-- Left Front Wheel with Temp -->
+        <div class="ev-wheel-group lf">
+          <div class="ev-wheel" id="wheelLF"></div>
+          <div class="ev-wheel-temp"><span id="motorTempLF">--</span>&deg;</div>
+        </div>
+
+        <!-- Left Rear Wheel with Temp -->
+        <div class="ev-wheel-group lr">
+          <div class="ev-wheel" id="wheelLR"></div>
+          <div class="ev-wheel-temp"><span id="motorTempLR">--</span>&deg;</div>
+        </div>
+
+        <!-- Robot Body -->
+        <div class="ev-robot-body">
+          <div class="ev-fwd-indicator">&#9650;</div>
+          <div class="ev-robot-label">CEMANI</div>
+          <div class="ev-rear-indicator">&#9660;</div>
+        </div>
+
+        <!-- Right Front Wheel with Temp -->
+        <div class="ev-wheel-group rf">
+          <div class="ev-wheel" id="wheelRF"></div>
+          <div class="ev-wheel-temp"><span id="motorTempRF">--</span>&deg;</div>
+        </div>
+
+        <!-- Right Rear Wheel with Temp -->
+        <div class="ev-wheel-group rr">
+          <div class="ev-wheel" id="wheelRR"></div>
+          <div class="ev-wheel-temp"><span id="motorTempRR">--</span>&deg;</div>
+        </div>
+      </div>
+
+      <!-- Speed Displays -->
       <div class="speed-row">
         <div class="speed-box">
-          <span class="spd-label">L</span>
+          <span class="spd-label">&#9664; L</span>
           <span class="spd-val" id="velocityL">0.00</span>
           <span class="spd-unit">MPH</span>
         </div>
         <div class="speed-box">
-          <span class="spd-label">R</span>
+          <span class="spd-label">R &#9654;</span>
           <span class="spd-val" id="velocityR">0.00</span>
           <span class="spd-unit">MPH</span>
         </div>
@@ -287,8 +286,6 @@
     <!-- Hidden elements for compatibility -->
     <div style="display:none">
       <span id="driverTemp"></span>
-      <span id="driver1Temp"></span>
-      <span id="driver2Temp"></span>
       <span id="motorTempAvg"></span>
       <span id="positionL"></span>
       <span id="positionR"></span>

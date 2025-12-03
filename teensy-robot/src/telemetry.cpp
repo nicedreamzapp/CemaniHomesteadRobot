@@ -110,21 +110,21 @@ void readDriverTelemetry() {
 }
 
 // LiFePO4 voltage to percentage lookup table (8S pack)
-// Corrected based on actual LiFePO4 discharge curve
+// Tuned based on user feedback for actual pack behavior
 // Full: 3.65V/cell (29.2V), Empty: 2.5V/cell (20V)
-// Nominal/flat region: 3.2-3.3V/cell (25.6-26.4V) = ~20-80%
 int lifepo4Percent(float voltage) {
-  // 8S LiFePO4 voltage points
+  // 8S LiFePO4 voltage points - user says 26.1V should be ~93%
   if (voltage >= 28.8) return 100;  // 3.60V/cell - Fully charged
-  if (voltage >= 28.0) return 98;   // 3.50V/cell - Just off charger
-  if (voltage >= 27.2) return 95;   // 3.40V/cell - Very full
-  if (voltage >= 26.8) return 92;   // 3.35V/cell
-  if (voltage >= 26.4) return 88;   // 3.30V/cell - Top of flat region
-  if (voltage >= 26.0) return 80;   // 3.25V/cell - Upper flat region
-  if (voltage >= 25.6) return 65;   // 3.20V/cell - Middle flat region
-  if (voltage >= 25.2) return 45;   // 3.15V/cell - Lower flat region
-  if (voltage >= 24.8) return 25;   // 3.10V/cell - Getting low
-  if (voltage >= 24.0) return 15;   // 3.00V/cell - Low
+  if (voltage >= 27.5) return 98;   // 3.44V/cell - Just off charger
+  if (voltage >= 27.0) return 96;   // 3.38V/cell
+  if (voltage >= 26.5) return 95;   // 3.31V/cell
+  if (voltage >= 26.0) return 93;   // 3.25V/cell - Still very full
+  if (voltage >= 25.6) return 85;   // 3.20V/cell - Good charge
+  if (voltage >= 25.2) return 70;   // 3.15V/cell - Moderate
+  if (voltage >= 24.8) return 50;   // 3.10V/cell - Half
+  if (voltage >= 24.4) return 30;   // 3.05V/cell - Getting low
+  if (voltage >= 24.0) return 20;   // 3.00V/cell - Low
+  if (voltage >= 23.2) return 10;   // 2.90V/cell - Very low
   if (voltage >= 22.4) return 5;    // 2.80V/cell - Critical
   return 0;  // Below 22.4V - Empty/damaged
 }
@@ -152,11 +152,11 @@ void sendTelemetryToESP32() {
   int motorTempL_F = (motorTempLF_F + motorTempLR_F) / 2;
   int motorTempR_F = (motorTempRF_F + motorTempRR_F) / 2;
 
-  // Driver temps (0.1C per unit)
-  float driverTemp1_C = telemetry_driverTemp1 * 0.1f;
-  float driverTemp2_C = telemetry_driverTemp2 * 0.1f;
-  int driverTemp1_F = (int)celsiusToFahrenheit(driverTemp1_C);
-  int driverTemp2_F = (int)celsiusToFahrenheit(driverTemp2_C);
+  // Driver temps - use motor temp averages since register 0x20B0 may not be available
+  // Driver 1 (RIGHT) = average of RF and RR motor temps
+  // Driver 2 (LEFT) = average of LF and LR motor temps
+  int driverTemp1_F = (motorTempRF_F + motorTempRR_F) / 2;
+  int driverTemp2_F = (motorTempLF_F + motorTempLR_F) / 2;
 
   // Velocities (0.1 RPM per unit)
   float velL = telemetry_velocityL * 0.1f;
