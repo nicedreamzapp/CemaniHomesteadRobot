@@ -26,7 +26,7 @@ float applyJoystickCurve(float input) {
   return sign * input * input;
 }
 
-void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpeed) {
+void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpeed, bool turboActive) {
   // SAFETY: Hard clamp inputs first
   lx = constrain(lx, -511, 511);
   ly = constrain(ly, -511, 511);
@@ -56,19 +56,17 @@ void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpe
     rightPower /= maxPower;
   }
 
-  int16_t maxRpm = isTurning ? MAX_TURN_RPM : MAX_SPEED_RPM;
+  // Turbo only works for forward/backward, not turning
+  int16_t forwardBackMax = (turboActive && !isTurning) ? TURBO_SPEED_RPM : MAX_SPEED_RPM;
+  int16_t maxRpm = isTurning ? MAX_TURN_RPM : forwardBackMax;
 
   leftSpeed = (int16_t)(leftPower * maxRpm);
   rightSpeed = (int16_t)(rightPower * maxRpm);
 
-  // SAFETY: Final hard clamp
-  leftSpeed = constrain(leftSpeed, -MAX_SPEED_RPM, MAX_SPEED_RPM);
-  rightSpeed = constrain(rightSpeed, -MAX_SPEED_RPM, MAX_SPEED_RPM);
-
-  // Debug: Log turn commands to diagnose left/right asymmetry
-  if (isTurning && (abs(leftSpeed) > 2 || abs(rightSpeed) > 2)) {
-    Serial.printf("[TURN-DBG] LX:%ld x:%.2f L:%d R:%d\n", lx, x, leftSpeed, rightSpeed);
-  }
+  // SAFETY: Final hard clamp (use turbo max if turbo active, otherwise normal max)
+  int16_t clampMax = turboActive ? TURBO_SPEED_RPM : MAX_SPEED_RPM;
+  leftSpeed = constrain(leftSpeed, -clampMax, clampMax);
+  rightSpeed = constrain(rightSpeed, -clampMax, clampMax);
 }
 
 int16_t rampSpeed(int16_t current, int16_t target) {

@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.15"
+#define TEENSY_VERSION "3.16"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -19,8 +19,10 @@
 #define ENCODER_COUNTS_PER_REV 4096    // 1024 lines * 4 (quadrature)
 
 // SAFETY: Max speeds - keep LOW to prevent crashes!
-#define MAX_SPEED_RPM 75         // Max speed for forward/backward
-#define MAX_TURN_RPM 50          // Turn speed - same responsiveness as fwd/back
+#define MAX_SPEED_RPM 75         // Normal max speed for forward/backward
+#define TURBO_SPEED_RPM 200      // Turbo mode (~4.8 mph) - requires right trigger
+#define MAX_TURN_RPM 30          // Turn speed - smooth turning
+#define TURBO_TRIGGER_THRESHOLD 100  // Trigger value to activate turbo (0-1023)
 
 // Software acceleration (RPM change per update cycle)
 #define ACCEL_RATE_NORMAL 4      // Fast ramp for responsive feel

@@ -15,6 +15,7 @@ bool emergencyStop = false;
 bool motorsEnabled = false;
 int16_t lastLeftSpeed = 0;
 int16_t lastRightSpeed = 0;
+int16_t rightTriggerValue = 0;  // Right trigger for turbo mode (0-1023)
 
 static uint32_t lastMotorUpdate = 0;
 static uint32_t lastComm = 0;
@@ -37,10 +38,12 @@ void setup() {
   Serial.println("Motors: 4 hub motors (2 per driver)");
   Serial.println("----------------------------------------");
   Serial.printf("  Normal: %d RPM, %dms accel\n", MAX_SPEED_RPM, DRIVER_ACCEL_NORMAL);
-  Serial.printf("  Turn:   %d RPM, %dms accel\n", MAX_TURN_RPM, DRIVER_ACCEL_TURN);
+  Serial.printf("  Turbo:  %d RPM (hold RT)\n", TURBO_SPEED_RPM);
+  Serial.printf("  Turn:   %d RPM\n", MAX_TURN_RPM);
   Serial.println("----------------------------------------");
   Serial.println("Controls:");
   Serial.println("  Left Stick  = Tank drive");
+  Serial.println("  Right Trig  = TURBO (fwd/back only)");
   Serial.println("  A Button    = Emergency Stop");
   Serial.println("----------------------------------------");
   Serial.println("OTA: Embedded FlasherX - wireless updates");
@@ -117,6 +120,18 @@ void loop() {
 
           if (strcmp(name, "LX") == 0) currentLX = val;
           else if (strcmp(name, "LY") == 0) currentLY = val;
+          else if (strcmp(name, "RT") == 0) {
+            rightTriggerValue = val;
+            // Log turbo activation
+            static bool wasTurbo = false;
+            bool isTurbo = (val >= TURBO_TRIGGER_THRESHOLD);
+            if (isTurbo && !wasTurbo) {
+              Serial.println("[TURBO] Activated!");
+            } else if (!isTurbo && wasTurbo) {
+              Serial.println("[TURBO] Deactivated");
+            }
+            wasTurbo = isTurbo;
+          }
         }
       }
       // Button presses
@@ -190,7 +205,9 @@ void loop() {
     if (now - lastMotorUpdate >= MOTOR_UPDATE_INTERVAL) {
       lastMotorUpdate = now;
 
-      calculateTankSpeeds(currentLX, currentLY, targetLeftSpeed, targetRightSpeed);
+      // Check if turbo mode is active (right trigger held)
+      bool turboActive = (rightTriggerValue >= TURBO_TRIGGER_THRESHOLD);
+      calculateTankSpeeds(currentLX, currentLY, targetLeftSpeed, targetRightSpeed, turboActive);
 
       // No more mode switching - same fast response for turning and driving
       int16_t newLeft = rampSpeed(lastLeftSpeed, targetLeftSpeed);
