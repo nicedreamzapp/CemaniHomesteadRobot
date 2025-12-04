@@ -274,29 +274,24 @@ document.getElementById('flashPrebuiltBtn').onclick = () => {
 
 // ============ XBOX CONTROLLER DETECTION ============
 // Track ROBOT's Xbox controller status (from ESP32), NOT browser's local gamepad
-let robotXboxConnected = false;
-let localGamepadConnected = false;
+// Using var instead of let to avoid temporal dead zone issues when called from websocket.js
+var robotXboxConnected = false;
+var localGamepadConnected = false;
 
 function updateXboxStatus(connected) {
   // This is called when ROBOT reports controller status from ESP32
-  console.log('[XBOX] updateXboxStatus called with:', connected);
   robotXboxConnected = connected;
   const statusEl = document.getElementById('xboxStatus');
   const stateEl = document.getElementById('xboxState');
-  console.log('[XBOX] Elements found:', !!statusEl, !!stateEl);
 
   if (statusEl && stateEl) {
     if (connected) {
       statusEl.classList.add('connected');
       stateEl.textContent = 'Connected';
-      console.log('[XBOX] SET TO CONNECTED');
     } else {
       statusEl.classList.remove('connected');
       stateEl.textContent = 'Disconnected';
-      console.log('[XBOX] SET TO DISCONNECTED');
     }
-  } else {
-    console.log('[XBOX] ERROR: Elements not found!');
   }
 }
 

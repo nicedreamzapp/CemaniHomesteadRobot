@@ -583,23 +583,24 @@ wss.on("connection", (ws, req) => {
         }
         if(ptzData) {
           console.log("[PTZ] ptzData ready:", JSON.stringify(ptzData));
-          if(cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
-            cameraSocket.send(JSON.stringify(ptzData));
-            console.log("[PTZ] Forwarded to camera relay:", ptzData.action, "cam", ptzData.camera);
+          // Use ptzRelaySocket (priority PTZ channel) instead of cameraSocket
+          if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+            ptzRelaySocket.send(JSON.stringify(ptzData));
+            console.log("[PTZ] Forwarded to PTZ relay:", ptzData.action, "cam", ptzData.camera);
           } else {
-            console.log("[PTZ] ERROR: cameraSocket not ready! socket:", !!cameraSocket, "state:", cameraSocket ? cameraSocket.readyState : "null");
+            console.log("[PTZ] ERROR: ptzRelaySocket not ready! socket:", !!ptzRelaySocket, "state:", ptzRelaySocket ? ptzRelaySocket.readyState : "null");
           }
         }
       }
 
-      // Forward PTZ commands to camera relay
+      // Forward PTZ commands to PTZ relay (priority channel)
       if(data.type === "cam_ptz") {
         console.log("[PTZ] Received:", data.action, "from", ws.isRobot ? "ESP32" : "browser");
-        if(cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
-          cameraSocket.send(JSON.stringify(data));
-          console.log("[PTZ] Forwarded to camera relay");
+        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+          ptzRelaySocket.send(JSON.stringify(data));
+          console.log("[PTZ] Forwarded to PTZ relay");
         } else {
-          console.log("[PTZ] ERROR: Camera relay not connected!");
+          console.log("[PTZ] ERROR: PTZ relay not connected!");
         }
       }
 

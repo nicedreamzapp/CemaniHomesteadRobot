@@ -152,19 +152,14 @@ const PTZ_SPEED = 1.0;
 let ptzMoving = { 1: false, 2: false };
 
 function sendPtz(data) {
-  console.log('[PTZ] sendPtz called:', JSON.stringify(data));
-  const serialDiv = document.getElementById('serial');
-  if (serialDiv) {
-    serialDiv.innerHTML += '<span style="color:#00ff88">[PTZ] Sending: ' + data.action + ' cam' + data.camera + '</span><br>';
-    serialDiv.scrollTop = serialDiv.scrollHeight;
-  }
   if (ptzWs && ptzWs.readyState === WebSocket.OPEN) {
     ptzWs.send(JSON.stringify(data));
-    console.log('[PTZ] Sent via ptzWs');
     return true;
   }
-  ws.send(JSON.stringify(data));
-  console.log('[PTZ] Sent via main ws');
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+    return false;
+  }
   return false;
 }
 
@@ -358,7 +353,6 @@ ws.onmessage = function(e) {
     if(!d.connected) {
       updateXboxStatus(false);
     } else if(d.controller) {
-      console.log('[WS] Controller status:', d.controller);
       updateXboxStatus(d.controller === 'connected');
     }
   }
