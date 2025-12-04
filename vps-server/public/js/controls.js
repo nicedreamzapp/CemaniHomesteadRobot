@@ -319,3 +319,100 @@ window.addEventListener('gamepaddisconnected', (e) => {
 
 // Poll for gamepads (some browsers need this)
 setInterval(checkGamepads, 1000);
+
+// ============ XBOX CONTROLLER PTZ CONTROL ============
+// D-pad controls camera pan/tilt, Y button switches between cam1 and cam2
+let activePtzCamera = 1;  // Start with camera 1
+let lastDpadState = { up: false, down: false, left: false, right: false };
+let lastYButton = false;
+
+function updateActiveCameraIndicator() {
+  // Update UI to show which camera is being controlled
+  const cam1Card = document.getElementById('cam1Card');
+  const cam2Card = document.getElementById('cam2Card');
+  const cam1Label = document.querySelector('#cam1Card .cam-label');
+  const cam2Label = document.querySelector('#cam2Card .cam-label');
+
+  if (cam1Card && cam2Card) {
+    if (activePtzCamera === 1) {
+      cam1Card.style.boxShadow = '0 0 10px 2px #00ff88';
+      cam2Card.style.boxShadow = '';
+    } else {
+      cam1Card.style.boxShadow = '';
+      cam2Card.style.boxShadow = '0 0 10px 2px #00ff88';
+    }
+  }
+
+  // Log camera switch to serial
+  const serialDiv = document.getElementById('serial');
+  if (serialDiv) {
+    serialDiv.innerHTML += '<span style="color:#ffd43b">[GAMEPAD] PTZ control: Camera ' + activePtzCamera + '</span><br>';
+    serialDiv.scrollTop = serialDiv.scrollHeight;
+  }
+}
+
+function pollGamepadForPtz() {
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+
+  for (const gp of gamepads) {
+    if (!gp || !gp.connected) continue;
+
+    // Xbox controller button mapping:
+    // D-pad: buttons 12 (up), 13 (down), 14 (left), 15 (right)
+    // Y button: button 3
+    const dpadUp = gp.buttons[12] && gp.buttons[12].pressed;
+    const dpadDown = gp.buttons[13] && gp.buttons[13].pressed;
+    const dpadLeft = gp.buttons[14] && gp.buttons[14].pressed;
+    const dpadRight = gp.buttons[15] && gp.buttons[15].pressed;
+    const yButton = gp.buttons[3] && gp.buttons[3].pressed;
+
+    // Y button toggles between cameras (on press, not hold)
+    if (yButton && !lastYButton) {
+      activePtzCamera = activePtzCamera === 1 ? 2 : 1;
+      updateActiveCameraIndicator();
+    }
+    lastYButton = yButton;
+
+    // Handle D-pad PTZ control
+    // Check for state changes to send move/stop commands
+
+    // UP
+    if (dpadUp && !lastDpadState.up) {
+      ptzMove(activePtzCamera, 0, 1.0);  // Tilt up
+    } else if (!dpadUp && lastDpadState.up) {
+      ptzStop(activePtzCamera);
+    }
+
+    // DOWN
+    if (dpadDown && !lastDpadState.down) {
+      ptzMove(activePtzCamera, 0, -1.0);  // Tilt down
+    } else if (!dpadDown && lastDpadState.down) {
+      ptzStop(activePtzCamera);
+    }
+
+    // LEFT
+    if (dpadLeft && !lastDpadState.left) {
+      ptzMove(activePtzCamera, -1.0, 0);  // Pan left
+    } else if (!dpadLeft && lastDpadState.left) {
+      ptzStop(activePtzCamera);
+    }
+
+    // RIGHT
+    if (dpadRight && !lastDpadState.right) {
+      ptzMove(activePtzCamera, 1.0, 0);  // Pan right
+    } else if (!dpadRight && lastDpadState.right) {
+      ptzStop(activePtzCamera);
+    }
+
+    // Update last state
+    lastDpadState.up = dpadUp;
+    lastDpadState.down = dpadDown;
+    lastDpadState.left = dpadLeft;
+    lastDpadState.right = dpadRight;
+
+    break;  // Only use first connected gamepad
+  }
+}
+
+// Poll gamepad at 60fps for responsive PTZ control
+setInterval(pollGamepadForPtz, 16);
