@@ -1382,9 +1382,9 @@ input[type="text"] {
 }
 .tank-wheel-box {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 .tank-wheel {
   width: 20px;
@@ -1438,12 +1438,20 @@ input[type="text"] {
   opacity: 0.7;
 }
 .tank-wheel-temp {
-  font-size: 8px;
+  font-size: 12px;
   font-weight: bold;
   color: #ffd43b;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 1px 3px;
-  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+/* Position temps on outside of wheels */
+.tank-track.left .tank-wheel-box {
+  flex-direction: row-reverse;
+}
+.tank-track.right .tank-wheel-box {
+  flex-direction: row;
 }
 
 /* Robot Body/Chassis - Rectangular (longer than wide) */

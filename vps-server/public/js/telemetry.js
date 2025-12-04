@@ -391,17 +391,16 @@ function drawOdometryMap(data) {
 
   // Draw trail - connect all points including current position
   if (data.odomTrail && data.odomTrail.length >= 1) {
-    ctx.strokeStyle = '#74c0fc';
-    ctx.lineWidth = 2;
+    // Draw thick glow/shadow first for visibility
+    ctx.strokeStyle = 'rgba(0, 200, 255, 0.5)';
+    ctx.lineWidth = 6;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
 
-    // Start from first trail point (should be origin)
     const first = mmToScreen(data.odomTrail[0].x, data.odomTrail[0].y);
     ctx.moveTo(first.x, first.y);
 
-    // Draw through all trail points
     data.odomTrail.forEach((p, i) => {
       if (i > 0) {
         const screen = mmToScreen(p.x, p.y);
@@ -409,7 +408,25 @@ function drawOdometryMap(data) {
       }
     });
 
-    // Connect trail to current position (if different from last trail point)
+    if (data.odomX !== undefined && data.odomY !== undefined) {
+      const current = mmToScreen(data.odomX, data.odomY);
+      ctx.lineTo(current.x, current.y);
+    }
+    ctx.stroke();
+
+    // Draw bright main trail on top
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+
+    data.odomTrail.forEach((p, i) => {
+      if (i > 0) {
+        const screen = mmToScreen(p.x, p.y);
+        ctx.lineTo(screen.x, screen.y);
+      }
+    });
+
     if (data.odomX !== undefined && data.odomY !== undefined) {
       const current = mmToScreen(data.odomX, data.odomY);
       ctx.lineTo(current.x, current.y);
@@ -509,14 +526,36 @@ let odomState = {
   y: 0,           // mm
   heading: 0,     // radians
   totalDistance: 0, // mm
-  trail: [{x: 0, y: 0}]
+  trail: [{x: 0, y: 0}],
+  lastDraw: 0
+};
+
+// Make resetOdometry available globally
+window.resetOdometry = function() {
+  odomState = {
+    lastPosL: null,
+    lastPosR: null,
+    x: 0, y: 0, heading: 0, totalDistance: 0,
+    trail: [{x: 0, y: 0}],
+    lastDraw: 0
+  };
+  const tripDist = document.getElementById('odomTripDist');
+  if (tripDist) tripDist.textContent = '0.0';
+  const headingEl = document.getElementById('odomHeading');
+  if (headingEl) headingEl.textContent = '0';
+  drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [{x: 0, y: 0}] });
+  console.log('[ODOM] Reset');
 };
 
 function updateOdometryFromEncoders(posL, posR) {
+  // Log every call to verify data is coming in
+  console.log('[ODOM] posL=' + posL + ' posR=' + posR);
+
   // First reading - just store positions
   if (odomState.lastPosL === null) {
     odomState.lastPosL = posL;
     odomState.lastPosR = posR;
+    console.log('[ODOM] First reading, initialized');
     drawOdometryMap({
       odomX: 0, odomY: 0, odomHeading: 0,
       odomTrail: odomState.trail
@@ -531,7 +570,11 @@ function updateOdometryFromEncoders(posL, posR) {
   odomState.lastPosR = posR;
 
   // Skip tiny movements (noise)
-  if (Math.abs(deltaL) < 5 && Math.abs(deltaR) < 5) return;
+  if (Math.abs(deltaL) < 3 && Math.abs(deltaR) < 3) {
+    return;
+  }
+
+  console.log('[ODOM] deltaL=' + deltaL + ' deltaR=' + deltaR);
 
   // Convert to mm (positive = forward)
   const distL = deltaL * MM_PER_TICK;
@@ -558,22 +601,25 @@ function updateOdometryFromEncoders(posL, posR) {
   odomState.heading += halfTheta;
   odomState.totalDistance += Math.abs(distCenter);
 
-  // Add to trail (every ~50mm)
+  // Add to trail more frequently for smoother line (every ~20mm or ~0.8 inches)
   const lastTrail = odomState.trail[odomState.trail.length - 1];
   const trailDist = Math.sqrt(Math.pow(odomState.x - lastTrail.x, 2) + Math.pow(odomState.y - lastTrail.y, 2));
-  if (trailDist > 50) {
+  if (trailDist > 20) {
     odomState.trail.push({x: odomState.x, y: odomState.y});
     // Keep trail to reasonable size
-    if (odomState.trail.length > 500) odomState.trail.shift();
+    if (odomState.trail.length > 1000) odomState.trail.shift();
   }
 
+  console.log('[ODOM] x=' + odomState.x.toFixed(1) + ' y=' + odomState.y.toFixed(1) +
+              ' heading=' + (odomState.heading * 180 / Math.PI).toFixed(1) + '° trail=' + odomState.trail.length);
+
   // Update display
-  const tripDist = document.getElementById('odomTripDist');
-  if (tripDist) tripDist.textContent = mmToFt(odomState.totalDistance).toFixed(1);
+  const tripDistEl = document.getElementById('odomTripDist');
+  if (tripDistEl) tripDistEl.textContent = mmToFt(odomState.totalDistance).toFixed(1);
   const headingEl = document.getElementById('odomHeading');
   if (headingEl) headingEl.textContent = Math.round(odomState.heading * 180 / Math.PI);
 
-  // Draw map
+  // Always draw map when we have movement
   drawOdometryMap({
     odomX: odomState.x,
     odomY: odomState.y,
