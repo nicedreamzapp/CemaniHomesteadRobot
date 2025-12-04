@@ -64,6 +64,11 @@ void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpe
   // SAFETY: Final hard clamp
   leftSpeed = constrain(leftSpeed, -MAX_SPEED_RPM, MAX_SPEED_RPM);
   rightSpeed = constrain(rightSpeed, -MAX_SPEED_RPM, MAX_SPEED_RPM);
+
+  // Debug: Log turn commands to diagnose left/right asymmetry
+  if (isTurning && (abs(leftSpeed) > 2 || abs(rightSpeed) > 2)) {
+    Serial.printf("[TURN-DBG] LX:%ld x:%.2f L:%d R:%d\n", lx, x, leftSpeed, rightSpeed);
+  }
 }
 
 int16_t rampSpeed(int16_t current, int16_t target) {

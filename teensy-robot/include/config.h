@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.9"
+#define TEENSY_VERSION "3.15"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -19,16 +19,16 @@
 #define ENCODER_COUNTS_PER_REV 4096    // 1024 lines * 4 (quadrature)
 
 // SAFETY: Max speeds - keep LOW to prevent crashes!
-#define MAX_SPEED_RPM 75         // Half speed for forward/backward
-#define MAX_TURN_RPM 5           // Match web UI turn speed - super smooth
+#define MAX_SPEED_RPM 75         // Max speed for forward/backward
+#define MAX_TURN_RPM 50          // Turn speed - same responsiveness as fwd/back
 
 // Software acceleration (RPM change per update cycle)
-#define ACCEL_RATE_NORMAL 3      // Slower ramp up
-#define ACCEL_RATE_TURN 1        // Keep slow turn ramp
+#define ACCEL_RATE_NORMAL 4      // Fast ramp for responsive feel
+#define ACCEL_RATE_TURN 4        // Same as normal - no slow turn mode
 
 // Hardware acceleration (ms to reach target - higher = slower)
-#define DRIVER_ACCEL_NORMAL 500  // More gradual
-#define DRIVER_ACCEL_TURN 1500   // Keep slow for turns
+#define DRIVER_ACCEL_NORMAL 400  // Fast hardware accel
+#define DRIVER_ACCEL_TURN 400    // Same as normal - no slow turn mode
 
 #define TORQUE_NORMAL 1000       // Original value
 #define TORQUE_TURN 150          // Keep low for turns

@@ -33,8 +33,34 @@ float celsiusToFahrenheit(float celsius) {
 void readDriverTelemetry() {
   int32_t val;
 
-  // Read one register per cycle to minimize interference with motor commands
-  // Cases 0-8: voltage, motorTemp1, motorTemp2, drvTemp1, drvTemp2, velL, velR, posL, posR
+  // ALWAYS read velocities first for real-time wheel animation
+  // This ensures wheel direction indicators update immediately
+  // Add delay between reads to avoid Modbus bus contention
+
+  delay(10);  // Pre-delay to ensure bus is idle
+
+  val = readModbusRegister(2, 0x20AB);  // LEFT velocity (Driver 2)
+  if (val >= 0) {
+    telemetry_velocityL = (int16_t)val;
+    if (INVERT_DRIVER_2) {
+      telemetry_velocityL = -telemetry_velocityL;
+    }
+  }
+
+  delay(15);  // Longer delay between Modbus reads for bus stability
+
+  val = readModbusRegister(1, 0x20AB);  // RIGHT velocity (Driver 1)
+  if (val >= 0) {
+    telemetry_velocityR = (int16_t)val;
+    if (INVERT_DRIVER_1) {
+      telemetry_velocityR = -telemetry_velocityR;
+    }
+  }
+
+  delay(10);  // Post-delay before any switch case reads
+
+  // Then read one other register per cycle (slower data like temps)
+  // Cases 0-6: voltage, motorTemp1, motorTemp2, drvTemp1, drvTemp2, posL, posR
   switch (telemReadIndex) {
     case 0:
       // Bus voltage from driver 1 (register 0x20A1) - battery voltage
@@ -48,7 +74,6 @@ void readDriverTelemetry() {
       break;
     case 2:
       // Motor temperature from driver 2 (LEFT side) (register 0x20A4)
-      // Separate read cycle to avoid back-to-back Modbus interference
       val = readModbusRegister(2, 0x20A4);
       if (val >= 0) telemetry_motorTemp2 = (uint16_t)val;
       break;
@@ -63,23 +88,6 @@ void readDriverTelemetry() {
       if (val >= 0) telemetry_driverTemp2 = (uint16_t)val;
       break;
     case 5:
-      // Actual velocity from Driver 2 (LEFT side)
-      val = readModbusRegister(2, 0x20AB);
-      if (val >= 0) {
-        telemetry_velocityL = (int16_t)val;
-      }
-      break;
-    case 6:
-      // Actual velocity from Driver 1 (RIGHT side)
-      val = readModbusRegister(1, 0x20AB);
-      if (val >= 0) {
-        telemetry_velocityR = (int16_t)val;
-        if (INVERT_DRIVER_1) {
-          telemetry_velocityR = -telemetry_velocityR;
-        }
-      }
-      break;
-    case 7:
       // Position LEFT high word (Driver 2) - register 0x20A7
       val = readModbusRegister(2, REG_POS_L_HIGH);
       if (val >= 0) posL_high = (int16_t)val;
@@ -91,7 +99,7 @@ void readDriverTelemetry() {
         telemetry_positionL = ((int32_t)posL_high << 16) | (uint16_t)posL_low;
       }
       break;
-    case 8:
+    case 6:
       // Position RIGHT high word (Driver 1) - register 0x20A7
       val = readModbusRegister(1, REG_POS_L_HIGH);  // Each driver reads its own "left" motor
       if (val >= 0) posR_high = (int16_t)val;
@@ -109,7 +117,7 @@ void readDriverTelemetry() {
       break;
   }
 
-  telemReadIndex = (telemReadIndex + 1) % 9;
+  telemReadIndex = (telemReadIndex + 1) % 7;  // 7 cases now (0-6)
 }
 
 // LiFePO4 voltage to percentage lookup table (8S pack)

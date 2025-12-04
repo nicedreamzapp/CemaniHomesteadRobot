@@ -19,7 +19,6 @@ int16_t lastRightSpeed = 0;
 static uint32_t lastMotorUpdate = 0;
 static uint32_t lastComm = 0;
 static uint32_t lastTelemetryUpdate = 0;
-static bool lastTurnState = false;
 static bool watchdogTriggered = false;  // Tracks if watchdog stopped motors
 
 // ===== SETUP =====
@@ -193,18 +192,7 @@ void loop() {
 
       calculateTankSpeeds(currentLX, currentLY, targetLeftSpeed, targetRightSpeed);
 
-      // Switch accel settings when turn state changes
-      if (isTurning != lastTurnState) {
-        if (isTurning) {
-          Serial.println("[TURN MODE] Slow speed + slow accel");
-          setAccelTimes(DRIVER_ACCEL_TURN, DRIVER_ACCEL_TURN);
-        } else {
-          Serial.println("[NORMAL MODE] Full speed + fast accel");
-          setAccelTimes(DRIVER_ACCEL_NORMAL, DRIVER_ACCEL_NORMAL / 2);
-        }
-        lastTurnState = isTurning;
-      }
-
+      // No more mode switching - same fast response for turning and driving
       int16_t newLeft = rampSpeed(lastLeftSpeed, targetLeftSpeed);
       int16_t newRight = rampSpeed(lastRightSpeed, targetRightSpeed);
 
