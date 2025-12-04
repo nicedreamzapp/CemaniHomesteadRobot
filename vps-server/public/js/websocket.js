@@ -368,6 +368,11 @@ ws.onmessage = function(e) {
   if(d.type === 'telemetry' || d.type === 'driver_status' || d.type === 'teensy_telemetry') {
     updateDriverTelemetry(d);
   }
+
+  // Check for Xbox controller status in ESP32 telemetry
+  if(d.type === 'telemetry' && d.controller) {
+    updateXboxStatus(d.controller === 'connected');
+  }
 };
 
 ws.onclose = () => {
