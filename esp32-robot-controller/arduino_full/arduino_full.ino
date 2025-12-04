@@ -40,9 +40,10 @@ uint16_t pbtn = 0;
 int8_t pdpad = -2;
 int activePtzCamera = 1;  // 1 or 2, Y button toggles
 
-#define AXIS_DZ       8
+#define AXIS_DZ       15    // Deadzone for raw axis values (increased for noise)
 #define AXIS_CHANGE   8
 #define TRIG_CHANGE   4
+#define JOYSTICK_SEND_DZ  50  // Must exceed this to send joystick commands (was 40)
 
 void webSocketEvent(WStype_t type, uint8_t* payload, size_t length);
 void onConnectedGamepad(GamepadPtr gp);
@@ -267,11 +268,24 @@ void handleGamepad() {
     }
   }
 
-  // Increased deadzone from 10 to 40 to filter Xbox controller drift
-  // Xbox controllers commonly drift 15-30 units even when centered
-  if (wsConnected && (abs(lx) > 40 || abs(ly) > 40)) {
-    String msg = "{\"type\":\"joystick\",\"lx\":" + String(lx) + ",\"ly\":" + String(ly) + "}";
-    webSocket.sendTXT(msg);
+  // Track if we were moving (to send explicit STOP when returning to center)
+  static bool wasMoving = false;
+
+  // Check if joystick is outside deadzone
+  bool isMoving = (abs(lx) > JOYSTICK_SEND_DZ || abs(ly) > JOYSTICK_SEND_DZ);
+
+  if (wsConnected) {
+    if (isMoving) {
+      // Send movement command
+      String msg = "{\"type\":\"joystick\",\"lx\":" + String(lx) + ",\"ly\":" + String(ly) + "}";
+      webSocket.sendTXT(msg);
+      wasMoving = true;
+    } else if (wasMoving) {
+      // Joystick returned to center - send explicit STOP (0,0)
+      webSocket.sendTXT("{\"type\":\"joystick\",\"lx\":0,\"ly\":0}");
+      wasMoving = false;
+      Serial.println("[GAMEPAD] Joystick centered - sent STOP");
+    }
   }
 }
 

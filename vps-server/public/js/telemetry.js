@@ -518,6 +518,10 @@ const MM_PER_TICK = WHEEL_CIRCUMFERENCE_MM / TICKS_PER_REV;  // ~0.0389mm/tick
 const WHEEL_BASE_MM = 600;  // Distance between wheels in mm
 const FT_PER_MM = 1 / 304.8;  // 1 foot = 304.8mm
 
+// Noise filtering thresholds
+const ENCODER_NOISE_TICKS = 10;  // Ignore changes smaller than this (was 3)
+const MAX_DELTA_PER_UPDATE = 5000;  // Reject jumps larger than this (encoder error)
+
 // Odometry state
 let odomState = {
   lastPosL: null,
@@ -527,35 +531,35 @@ let odomState = {
   heading: 0,     // radians
   totalDistance: 0, // mm
   trail: [{x: 0, y: 0}],
-  lastDraw: 0
+  lastDraw: 0,
+  initialized: false  // Track if we've received first valid reading
 };
 
 // Make resetOdometry available globally
 window.resetOdometry = function() {
   odomState = {
-    lastPosL: null,
+    lastPosL: null,  // Will be set from next encoder reading
     lastPosR: null,
     x: 0, y: 0, heading: 0, totalDistance: 0,
     trail: [{x: 0, y: 0}],
-    lastDraw: 0
+    lastDraw: 0,
+    initialized: false  // Force re-initialization from current encoder position
   };
   const tripDist = document.getElementById('odomTripDist');
   if (tripDist) tripDist.textContent = '0.0';
   const headingEl = document.getElementById('odomHeading');
   if (headingEl) headingEl.textContent = '0';
   drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [{x: 0, y: 0}] });
-  console.log('[ODOM] Reset');
+  console.log('[ODOM] Reset - will re-baseline on next encoder reading');
 };
 
 function updateOdometryFromEncoders(posL, posR) {
-  // Log every call to verify data is coming in
-  console.log('[ODOM] posL=' + posL + ' posR=' + posR);
-
-  // First reading - just store positions
-  if (odomState.lastPosL === null) {
+  // First reading - just store positions as baseline (robot starts at 0,0)
+  if (odomState.lastPosL === null || !odomState.initialized) {
     odomState.lastPosL = posL;
     odomState.lastPosR = posR;
-    console.log('[ODOM] First reading, initialized');
+    odomState.initialized = true;
+    console.log('[ODOM] Baseline set: posL=' + posL + ' posR=' + posR);
     drawOdometryMap({
       odomX: 0, odomY: 0, odomHeading: 0,
       odomTrail: odomState.trail
@@ -566,15 +570,22 @@ function updateOdometryFromEncoders(posL, posR) {
   // Calculate delta ticks
   const deltaL = posL - odomState.lastPosL;
   const deltaR = posR - odomState.lastPosR;
-  odomState.lastPosL = posL;
-  odomState.lastPosR = posR;
 
-  // Skip tiny movements (noise)
-  if (Math.abs(deltaL) < 3 && Math.abs(deltaR) < 3) {
+  // Reject impossibly large jumps (encoder read error or overflow)
+  if (Math.abs(deltaL) > MAX_DELTA_PER_UPDATE || Math.abs(deltaR) > MAX_DELTA_PER_UPDATE) {
+    console.log('[ODOM] Rejected large jump: deltaL=' + deltaL + ' deltaR=' + deltaR);
+    odomState.lastPosL = posL;
+    odomState.lastPosR = posR;
     return;
   }
 
-  console.log('[ODOM] deltaL=' + deltaL + ' deltaR=' + deltaR);
+  odomState.lastPosL = posL;
+  odomState.lastPosR = posR;
+
+  // Skip tiny movements (noise) - increased threshold
+  if (Math.abs(deltaL) < ENCODER_NOISE_TICKS && Math.abs(deltaR) < ENCODER_NOISE_TICKS) {
+    return;
+  }
 
   // Convert to mm (positive = forward)
   const distL = deltaL * MM_PER_TICK;
@@ -610,9 +621,6 @@ function updateOdometryFromEncoders(posL, posR) {
     if (odomState.trail.length > 1000) odomState.trail.shift();
   }
 
-  console.log('[ODOM] x=' + odomState.x.toFixed(1) + ' y=' + odomState.y.toFixed(1) +
-              ' heading=' + (odomState.heading * 180 / Math.PI).toFixed(1) + '° trail=' + odomState.trail.length);
-
   // Update display
   const tripDistEl = document.getElementById('odomTripDist');
   if (tripDistEl) tripDistEl.textContent = mmToFt(odomState.totalDistance).toFixed(1);
@@ -626,25 +634,6 @@ function updateOdometryFromEncoders(posL, posR) {
     odomHeading: odomState.heading,
     odomTrail: odomState.trail
   });
-}
-
-// Reset odometry
-function resetOdometry() {
-  odomState = {
-    lastPosL: null,
-    lastPosR: null,
-    x: 0, y: 0, heading: 0, totalDistance: 0,
-    trail: [{x: 0, y: 0}]
-  };
-  // Update display
-  const tripDist = document.getElementById('odomTripDist');
-  if (tripDist) tripDist.textContent = '0.0';
-  const heading = document.getElementById('odomHeading');
-  if (heading) heading.textContent = '0';
-  // Redraw empty map
-  if (odomCtx) {
-    drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [{x:0, y:0}] });
-  }
 }
 
 // Initialize canvas on page load

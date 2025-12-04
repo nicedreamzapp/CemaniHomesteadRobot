@@ -202,14 +202,27 @@ void loop() {
       int16_t newLeft = rampSpeed(lastLeftSpeed, targetLeftSpeed);
       int16_t newRight = rampSpeed(lastRightSpeed, targetRightSpeed);
 
-      if (abs(newLeft - lastLeftSpeed) > 2 || abs(newRight - lastRightSpeed) > 2) {
+      // Always send 0 when target is 0 to ensure motors stop
+      // Otherwise only send if change > 2 to reduce noise
+      bool shouldStop = (targetLeftSpeed == 0 && targetRightSpeed == 0 && (lastLeftSpeed != 0 || lastRightSpeed != 0));
+      bool significantChange = (abs(newLeft - lastLeftSpeed) > 2 || abs(newRight - lastRightSpeed) > 2);
+
+      if (shouldStop || significantChange) {
+        // Force to exactly 0 when stopping
+        if (shouldStop) {
+          newLeft = 0;
+          newRight = 0;
+        }
+
         setDriverSpeed(1, newLeft);
         setDriverSpeed(2, newRight);
 
         lastLeftSpeed = newLeft;
         lastRightSpeed = newRight;
 
-        if (abs(newLeft) > 5 || abs(newRight) > 5) {
+        if (shouldStop) {
+          Serial.println("[MOTOR] Joystick centered - motors STOPPED");
+        } else if (abs(newLeft) > 5 || abs(newRight) > 5) {
           Serial.printf("L:%+4d  R:%+4d RPM  %s\n", newLeft, newRight, isTurning ? "[TURN]" : "");
         }
       }
