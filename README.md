@@ -792,59 +792,6 @@ Raspberry Pi **cannot** run MoveIt2 smoothly. Jetson handles it with ease.
 
 ---
 
-## 🦾 Future Additions Summary
-
-| Component | Specs | Purpose | Status |
-|-----------|-------|---------|--------|
-| **Jetson Orin Nano Super** | 8GB, 67 TOPS | AI brain + camera relay | Purchased |
-| **2x OpenArm 0.1** | 3-5kg lift each | Bilateral manipulation | Planned |
-| **Train Body** | Cardboard/3D printed | Kid transport mode | Planned |
-| **Outdoor WiFi AP** | Ubiquiti or TP-Link | 1-acre coverage | Planned |
-| **ESP32 High-Gain Antenna** | 9dBi external | Extended robot range | Planned |
-
----
-
-## 🤖 The Vision: Dual-Armed Autonomy
-
-### Why Two Arms?
-OpenArm 0.1 provides **bilateral manipulation** - the ability to coordinate two arms like a human:
-- One arm stabilizes a container while the other scoops
-- Both arms work together to pack boxes efficiently  
-- Coordinate lifting and placing objects
-- Handle larger items that need two-point grip
-
-### Planned Tasks
-
-**Daily Chicken Care:**
-1. Robot navigates to feed storage at scheduled time
-2. Uses object detection to locate chicken feed container
-3. One arm opens/stabilizes lid, other arm scoops feed
-4. Distributes feed to multiple feeding stations
-5. Chickens learn to gather when they see/hear the robot
-
-**Package Handling:**
-1. Vision system identifies box on shelf
-2. Retrieves box with coordinated arm movement
-3. Places in packing area
-4. Fills with items from stockroom
-5. Closes and labels for shipping
-
-**Laundry Assistance:**
-1. Detects dryer completion signal
-2. Opens dryer door with one arm
-3. Retrieves clothing with other arm
-4. Places in basket for transport
-5. Delivers to folding area
-
-**Predator Patrol:**
-- Autonomous perimeter patrol on schedule
-- Computer vision detects animals (raccoons, foxes, coyotes)
-- Approaches with lights/sounds to scare them away
-- Arms can wave/gesture to appear larger
-- Logs encounters for analysis
-
----
-
 ## 💻 Software Architecture
 
 ### Current Stack (Platform Control + Web Interface)
