@@ -328,20 +328,20 @@
       <input type="text" id="cmd" placeholder="Send command...">
     </div>
 
-    <!-- XBOX CONTROLLER -->
+    <!-- XBOX CONTROLLER - status updated by websocket.js from robot telemetry -->
     <div class="xbox-section">
       <div class="xbox-status" id="xboxStatus">
         <span class="xbox-icon">&#127918;</span>
         <span class="xbox-label">Xbox Controller</span>
-        <span class="xbox-state" id="xboxState">Disconnected</span>
+        <span class="xbox-state" id="xboxState">--</span>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Load JavaScript files in correct order -->
+<!-- Load JavaScript files in correct order: controls defines updateXboxStatus, websocket calls it -->
 <script src="js/telemetry.js"></script>
-<script src="js/websocket.js"></script>
 <script src="js/controls.js"></script>
+<script src="js/websocket.js"></script>
 </body>
 </html>

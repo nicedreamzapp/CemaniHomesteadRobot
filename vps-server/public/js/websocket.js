@@ -152,11 +152,19 @@ const PTZ_SPEED = 1.0;
 let ptzMoving = { 1: false, 2: false };
 
 function sendPtz(data) {
+  console.log('[PTZ] sendPtz called:', JSON.stringify(data));
+  const serialDiv = document.getElementById('serial');
+  if (serialDiv) {
+    serialDiv.innerHTML += '<span style="color:#00ff88">[PTZ] Sending: ' + data.action + ' cam' + data.camera + '</span><br>';
+    serialDiv.scrollTop = serialDiv.scrollHeight;
+  }
   if (ptzWs && ptzWs.readyState === WebSocket.OPEN) {
     ptzWs.send(JSON.stringify(data));
+    console.log('[PTZ] Sent via ptzWs');
     return true;
   }
   ws.send(JSON.stringify(data));
+  console.log('[PTZ] Sent via main ws');
   return false;
 }
 
@@ -344,6 +352,15 @@ ws.onmessage = function(e) {
       updateCam1Status(d.camera.connected, d.camera.streaming);
       if(d.camera.streaming && !cam1Active) initCam1();
     }
+
+    // Check for Xbox controller status from ESP32
+    // If robot is disconnected, controller is also disconnected
+    if(!d.connected) {
+      updateXboxStatus(false);
+    } else if(d.controller) {
+      console.log('[WS] Controller status:', d.controller);
+      updateXboxStatus(d.controller === 'connected');
+    }
   }
 
   if(d.type === 'camera_status') {
@@ -367,11 +384,6 @@ ws.onmessage = function(e) {
   // Driver telemetry
   if(d.type === 'telemetry' || d.type === 'driver_status' || d.type === 'teensy_telemetry') {
     updateDriverTelemetry(d);
-  }
-
-  // Check for Xbox controller status in ESP32 telemetry
-  if(d.type === 'telemetry' && d.controller) {
-    updateXboxStatus(d.controller === 'connected');
   }
 };
 

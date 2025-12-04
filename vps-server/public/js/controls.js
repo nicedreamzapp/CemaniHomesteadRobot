@@ -1,4 +1,5 @@
 // ============ NAVIGATION CONTROL ============
+console.log('[CONTROLS.JS] LOADED - Version 2024-12-04');
 let selectedDir = null;
 let selectedDist = null;
 let commandQueue = [];
@@ -272,53 +273,65 @@ document.getElementById('flashPrebuiltBtn').onclick = () => {
 };
 
 // ============ XBOX CONTROLLER DETECTION ============
-let xboxControllerConnected = false;
+// Track ROBOT's Xbox controller status (from ESP32), NOT browser's local gamepad
+let robotXboxConnected = false;
+let localGamepadConnected = false;
 
 function updateXboxStatus(connected) {
-  xboxControllerConnected = connected;
+  // This is called when ROBOT reports controller status from ESP32
+  console.log('[XBOX] updateXboxStatus called with:', connected);
+  robotXboxConnected = connected;
   const statusEl = document.getElementById('xboxStatus');
   const stateEl = document.getElementById('xboxState');
-  
+  console.log('[XBOX] Elements found:', !!statusEl, !!stateEl);
+
   if (statusEl && stateEl) {
     if (connected) {
       statusEl.classList.add('connected');
       stateEl.textContent = 'Connected';
+      console.log('[XBOX] SET TO CONNECTED');
     } else {
       statusEl.classList.remove('connected');
       stateEl.textContent = 'Disconnected';
+      console.log('[XBOX] SET TO DISCONNECTED');
     }
+  } else {
+    console.log('[XBOX] ERROR: Elements not found!');
   }
 }
 
-function checkGamepads() {
+function checkLocalGamepads() {
+  // Check for LOCAL browser gamepad (used for browser-side PTZ control)
+  // This does NOT affect the Xbox status display - that shows ROBOT's controller
   const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
   let found = false;
-  
+
   for (const gp of gamepads) {
     if (gp && gp.connected) {
       found = true;
       break;
     }
   }
-  
-  if (found !== xboxControllerConnected) {
-    updateXboxStatus(found);
+
+  if (found !== localGamepadConnected) {
+    localGamepadConnected = found;
+    console.log('[GAMEPAD] Local browser gamepad:', found ? 'connected' : 'disconnected');
   }
 }
 
-// Listen for gamepad events
+// Listen for local browser gamepad events (for browser-side PTZ control)
 window.addEventListener('gamepadconnected', (e) => {
-  console.log('[GAMEPAD] Connected:', e.gamepad.id);
-  updateXboxStatus(true);
+  console.log('[GAMEPAD] Local gamepad connected:', e.gamepad.id);
+  localGamepadConnected = true;
 });
 
 window.addEventListener('gamepaddisconnected', (e) => {
-  console.log('[GAMEPAD] Disconnected:', e.gamepad.id);
-  checkGamepads(); // Check if any are still connected
+  console.log('[GAMEPAD] Local gamepad disconnected:', e.gamepad.id);
+  checkLocalGamepads(); // Check if any are still connected
 });
 
-// Poll for gamepads (some browsers need this)
-setInterval(checkGamepads, 1000);
+// Poll for local gamepads (some browsers need this for PTZ control)
+setInterval(checkLocalGamepads, 1000);
 
 // ============ XBOX CONTROLLER PTZ CONTROL ============
 // D-pad controls camera pan/tilt, Y button switches between cam1 and cam2
@@ -357,6 +370,46 @@ function pollGamepadForPtz() {
   for (const gp of gamepads) {
     if (!gp || !gp.connected) continue;
 
+    // Debug: log pressed buttons once (not every frame)
+    for (let i = 0; i < gp.buttons.length; i++) {
+      if (gp.buttons[i] && gp.buttons[i].pressed) {
+        if (!window._lastBtn || window._lastBtn !== i) {
+          window._lastBtn = i;
+          console.log('[GAMEPAD] Button ' + i + ' pressed');
+          const serialDiv = document.getElementById('serial');
+          if (serialDiv) {
+            serialDiv.innerHTML += '<span style="color:#ff9900">[GAMEPAD] Button ' + i + ' pressed</span><br>';
+            serialDiv.scrollTop = serialDiv.scrollHeight;
+          }
+        }
+      }
+    }
+    // Clear last button when nothing pressed
+    let anyPressed = false;
+    for (let i = 0; i < gp.buttons.length; i++) {
+      if (gp.buttons[i] && gp.buttons[i].pressed) anyPressed = true;
+    }
+    if (!anyPressed) window._lastBtn = null;
+
+    // Also check axes (some controllers report D-pad as axes 6 and 7)
+    // Axis 6 = horizontal D-pad, Axis 7 = vertical D-pad
+    if (gp.axes.length > 7) {
+      const axisH = gp.axes[6];  // -1 = left, 1 = right
+      const axisV = gp.axes[7];  // -1 = up, 1 = down
+      if (Math.abs(axisH) > 0.5 || Math.abs(axisV) > 0.5) {
+        if (!window._lastAxis) {
+          window._lastAxis = true;
+          const serialDiv = document.getElementById('serial');
+          if (serialDiv) {
+            serialDiv.innerHTML += '<span style="color:#ff00ff">[GAMEPAD] D-pad via axes: H=' + axisH.toFixed(1) + ' V=' + axisV.toFixed(1) + '</span><br>';
+            serialDiv.scrollTop = serialDiv.scrollHeight;
+          }
+        }
+      } else {
+        window._lastAxis = false;
+      }
+    }
+
     // Xbox controller button mapping:
     // D-pad: buttons 12 (up), 13 (down), 14 (left), 15 (right)
     // Y button: button 3
@@ -378,30 +431,58 @@ function pollGamepadForPtz() {
 
     // UP
     if (dpadUp && !lastDpadState.up) {
-      ptzMove(activePtzCamera, 0, 1.0);  // Tilt up
+      console.log('[DPAD] UP pressed - calling ptzMove for cam', activePtzCamera);
+      const serialDiv = document.getElementById('serial');
+      if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[DPAD] UP - cam' + activePtzCamera + '</span><br>';
+      if (typeof ptzMove === 'function') {
+        ptzMove(activePtzCamera, 0, 1.0);  // Tilt up
+      } else {
+        console.error('[DPAD] ptzMove is not defined!');
+      }
     } else if (!dpadUp && lastDpadState.up) {
-      ptzStop(activePtzCamera);
+      if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
     }
 
     // DOWN
     if (dpadDown && !lastDpadState.down) {
-      ptzMove(activePtzCamera, 0, -1.0);  // Tilt down
+      console.log('[DPAD] DOWN pressed - calling ptzMove for cam', activePtzCamera);
+      const serialDiv = document.getElementById('serial');
+      if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[DPAD] DOWN - cam' + activePtzCamera + '</span><br>';
+      if (typeof ptzMove === 'function') {
+        ptzMove(activePtzCamera, 0, -1.0);  // Tilt down
+      } else {
+        console.error('[DPAD] ptzMove is not defined!');
+      }
     } else if (!dpadDown && lastDpadState.down) {
-      ptzStop(activePtzCamera);
+      if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
     }
 
     // LEFT
     if (dpadLeft && !lastDpadState.left) {
-      ptzMove(activePtzCamera, -1.0, 0);  // Pan left
+      console.log('[DPAD] LEFT pressed - calling ptzMove for cam', activePtzCamera);
+      const serialDiv = document.getElementById('serial');
+      if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[DPAD] LEFT - cam' + activePtzCamera + '</span><br>';
+      if (typeof ptzMove === 'function') {
+        ptzMove(activePtzCamera, -1.0, 0);  // Pan left
+      } else {
+        console.error('[DPAD] ptzMove is not defined!');
+      }
     } else if (!dpadLeft && lastDpadState.left) {
-      ptzStop(activePtzCamera);
+      if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
     }
 
     // RIGHT
     if (dpadRight && !lastDpadState.right) {
-      ptzMove(activePtzCamera, 1.0, 0);  // Pan right
+      console.log('[DPAD] RIGHT pressed - calling ptzMove for cam', activePtzCamera);
+      const serialDiv = document.getElementById('serial');
+      if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[DPAD] RIGHT - cam' + activePtzCamera + '</span><br>';
+      if (typeof ptzMove === 'function') {
+        ptzMove(activePtzCamera, 1.0, 0);  // Pan right
+      } else {
+        console.error('[DPAD] ptzMove is not defined!');
+      }
     } else if (!dpadRight && lastDpadState.right) {
-      ptzStop(activePtzCamera);
+      if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
     }
 
     // Update last state
@@ -409,6 +490,65 @@ function pollGamepadForPtz() {
     lastDpadState.down = dpadDown;
     lastDpadState.left = dpadLeft;
     lastDpadState.right = dpadRight;
+
+    // ALSO support axis-based D-pad (axes 6 and 7) for some controllers
+    if (gp.axes.length > 7) {
+      const axisH = gp.axes[6];  // -1 = left, 1 = right
+      const axisV = gp.axes[7];  // -1 = up, 1 = down
+
+      // Track axis D-pad state
+      if (!window._axisDpad) window._axisDpad = { up: false, down: false, left: false, right: false };
+
+      const axisUp = axisV < -0.5;
+      const axisDown = axisV > 0.5;
+      const axisLeft = axisH < -0.5;
+      const axisRight = axisH > 0.5;
+
+      // Axis UP
+      if (axisUp && !window._axisDpad.up) {
+        console.log('[AXIS-DPAD] UP pressed');
+        const serialDiv = document.getElementById('serial');
+        if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[AXIS-DPAD] UP - cam' + activePtzCamera + '</span><br>';
+        if (typeof ptzMove === 'function') ptzMove(activePtzCamera, 0, 1.0);
+      } else if (!axisUp && window._axisDpad.up) {
+        if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
+      }
+
+      // Axis DOWN
+      if (axisDown && !window._axisDpad.down) {
+        console.log('[AXIS-DPAD] DOWN pressed');
+        const serialDiv = document.getElementById('serial');
+        if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[AXIS-DPAD] DOWN - cam' + activePtzCamera + '</span><br>';
+        if (typeof ptzMove === 'function') ptzMove(activePtzCamera, 0, -1.0);
+      } else if (!axisDown && window._axisDpad.down) {
+        if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
+      }
+
+      // Axis LEFT
+      if (axisLeft && !window._axisDpad.left) {
+        console.log('[AXIS-DPAD] LEFT pressed');
+        const serialDiv = document.getElementById('serial');
+        if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[AXIS-DPAD] LEFT - cam' + activePtzCamera + '</span><br>';
+        if (typeof ptzMove === 'function') ptzMove(activePtzCamera, -1.0, 0);
+      } else if (!axisLeft && window._axisDpad.left) {
+        if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
+      }
+
+      // Axis RIGHT
+      if (axisRight && !window._axisDpad.right) {
+        console.log('[AXIS-DPAD] RIGHT pressed');
+        const serialDiv = document.getElementById('serial');
+        if (serialDiv) serialDiv.innerHTML += '<span style="color:#ffd43b">[AXIS-DPAD] RIGHT - cam' + activePtzCamera + '</span><br>';
+        if (typeof ptzMove === 'function') ptzMove(activePtzCamera, 1.0, 0);
+      } else if (!axisRight && window._axisDpad.right) {
+        if (typeof ptzStop === 'function') ptzStop(activePtzCamera);
+      }
+
+      window._axisDpad.up = axisUp;
+      window._axisDpad.down = axisDown;
+      window._axisDpad.left = axisLeft;
+      window._axisDpad.right = axisRight;
+    }
 
     break;  // Only use first connected gamepad
   }

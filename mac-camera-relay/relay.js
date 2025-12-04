@@ -164,15 +164,27 @@ function connectToVPS() {
   });
 
   vpsSocket.on('message', async (data, isBinary) => {
-    // Ignore binary (old audio packets)
+    // Ignore binary (video frames)
     if (isBinary || Buffer.isBuffer(data)) return;
 
+    const str = data.toString();
+    // Log all text messages that might be PTZ
+    if (str.includes('ptz') || str.includes('cam')) {
+      console.log('[VPS-MSG] Received:', str.substring(0, 200));
+    }
+
     try {
-      const msg = JSON.parse(data.toString());
+      const msg = JSON.parse(str);
 
       if (msg.type === 'cam_ptz') {
+        console.log('[PTZ] Executing PTZ:', JSON.stringify(msg));
         const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
-        if (cam) await handlePTZ(cam, msg);
+        if (cam) {
+          console.log('[PTZ] Found camera:', cam.id, cam.ip);
+          await handlePTZ(cam, msg);
+        } else {
+          console.log('[PTZ] ERROR: Camera not found for id:', msg.camera);
+        }
       }
 
       if (msg.type === 'cam_setting') {

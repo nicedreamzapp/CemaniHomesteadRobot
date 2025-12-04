@@ -9,9 +9,9 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Disable caching for HTML files
+// Disable caching for HTML and JS files
 app.use((req, res, next) => {
-  if (req.path.endsWith('.html') || req.path === '/') {
+  if (req.path.endsWith('.html') || req.path === '/' || req.path.endsWith('.js')) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -30,6 +30,7 @@ let robotStatus = {
   rssi: 0,
   ip: "unknown",
   uptime: 0,
+  controller: "none",
   lastSeen: null
 };
 
@@ -112,6 +113,7 @@ ptzWss.on('connection', (ws, req) => {
     ws.isAlive = true; ws.missedPings = 0;
     try {
       const data = JSON.parse(msg.toString());
+      console.log('[PTZ-WS] Received:', data.type);
 
       // Mac relay announcing itself on PTZ channel
       if (data.type === 'ptz_relay_hello') {
@@ -293,6 +295,11 @@ wss.on("connection", (ws, req) => {
     }
 
     try {
+      // Log raw message if it looks like a PTZ command (for debugging)
+      const msgStr = msg.toString();
+      if (msgStr.includes('ptz') || msgStr.includes('PTZ')) {
+        console.log("[RAW PTZ]", msgStr.substring(0, 150));
+      }
       const data = JSON.parse(msg);
       console.log("[MSG]", data.type, JSON.stringify(data).substring(0, 100));
 
@@ -322,8 +329,14 @@ wss.on("connection", (ws, req) => {
         robotStatus.rssi = data.rssi || 0;
         robotStatus.ip = data.ip || robotStatus.ip;
         robotStatus.uptime = data.uptime || 0;
+        robotStatus.controller = data.controller || "none";
         robotStatus.lastSeen = Date.now();
-        broadcast({type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected});
+        if (data.controller) {
+          console.log("[CONTROLLER] Status:", data.controller, "-> robotStatus.controller:", robotStatus.controller);
+        }
+        const statusMsg = {type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected};
+        console.log("[BROADCAST] controller in status:", statusMsg.controller);
+        broadcast(statusMsg);
       }
 
       if(data.type === "serial" && ws.isRobot) {
@@ -547,6 +560,38 @@ wss.on("connection", (ws, req) => {
       }
 
       // ============ CAMERA PTZ COMMANDS (from browser or ESP32) ============
+      // Handle ptz_cmd from ESP32 (simpler format to avoid JSON issues)
+      if(data.type === "ptz_cmd" && data.cmd) {
+        console.log("[PTZ] Received ptz_cmd:", data.cmd);
+        const parts = data.cmd.split(",");
+        let ptzData = null;
+        if(parts[0] === "PTZ_MOVE" && parts.length >= 4) {
+          ptzData = {
+            type: "cam_ptz",
+            camera: parseInt(parts[1]),
+            action: "move",
+            pan: parseInt(parts[2]),
+            tilt: parseInt(parts[3]),
+            zoom: 0
+          };
+        } else if(parts[0] === "PTZ_STOP" && parts.length >= 2) {
+          ptzData = {
+            type: "cam_ptz",
+            camera: parseInt(parts[1]),
+            action: "stop"
+          };
+        }
+        if(ptzData) {
+          console.log("[PTZ] ptzData ready:", JSON.stringify(ptzData));
+          if(cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
+            cameraSocket.send(JSON.stringify(ptzData));
+            console.log("[PTZ] Forwarded to camera relay:", ptzData.action, "cam", ptzData.camera);
+          } else {
+            console.log("[PTZ] ERROR: cameraSocket not ready! socket:", !!cameraSocket, "state:", cameraSocket ? cameraSocket.readyState : "null");
+          }
+        }
+      }
+
       // Forward PTZ commands to camera relay
       if(data.type === "cam_ptz") {
         console.log("[PTZ] Received:", data.action, "from", ws.isRobot ? "ESP32" : "browser");
@@ -575,7 +620,13 @@ wss.on("connection", (ws, req) => {
       }
 
     } catch (err) {
-      console.error("[WS] Error:", err.message);
+      const rawMsg = typeof msg === 'string' ? msg : msg.toString();
+      // Log failed PTZ messages in detail
+      if (rawMsg.includes('ptz') || rawMsg.includes('PTZ') || rawMsg.includes('DPAD')) {
+        console.error("[WS] PTZ Parse Error:", err.message, "RAW:", rawMsg.substring(0, 200));
+      } else {
+        console.error("[WS] Error:", err.message);
+      }
     }
   });
 
@@ -591,8 +642,9 @@ wss.on("connection", (ws, req) => {
       robotStatus.ip = "unknown";
       robotStatus.version = "unknown";
       robotStatus.uptime = 0;
+      robotStatus.controller = "none";  // Xbox controller also disconnects with robot
       broadcast({type:"status", ...robotStatus, camera: cameraStatus});
-      console.log("[ROBOT] ESP32 disconnected");
+      console.log("[ROBOT] ESP32 disconnected - controller status cleared");
     } else if (ws.isRobot) {
       console.log("[ROBOT] Old ESP32 socket closed (replaced by newer connection)");
     }

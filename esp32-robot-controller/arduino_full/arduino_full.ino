@@ -1,8 +1,9 @@
 /*
- * Cemani Robot Controller v3.0.9
+ * Cemani Robot Controller v3.1.0
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket (SSL)
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.1.0 - Fix D-pad PTZ: use Arduino String for websocket (was corrupting with char*)
  * v3.0.9 - Xbox D-pad controls camera PTZ, Y button toggles camera 1/2
  * v3.0.8 - More tolerant heartbeat to stop online/offline bouncing
  *
@@ -239,27 +240,30 @@ void handleGamepad() {
   if (dpad != pdpad) {
     pdpad = dpad;
     teensySerial.printf("DPAD,%d,%lu\n", (int)dpad, (unsigned long)ms);
+    Serial.printf("[DPAD] Value: %d, wsConnected: %d\n", (int)dpad, wsConnected ? 1 : 0);
 
     // Send D-pad as camera PTZ commands via WebSocket
     // D-pad values: 0=none, 1=up, 2=down, 4=right, 8=left (can be combined)
-    if (wsConnected) {
-      float pan = 0, tilt = 0;
-      if (dpad & 0x01) tilt = 1.0;   // Up
-      if (dpad & 0x02) tilt = -1.0;  // Down
-      if (dpad & 0x04) pan = 1.0;    // Right
-      if (dpad & 0x08) pan = -1.0;   // Left
+    if (wsConnected && dpad != 0) {
+      int pan = 0, tilt = 0;
+      if (dpad & 0x01) tilt = 1;   // Up
+      if (dpad & 0x02) tilt = -1;  // Down
+      if (dpad & 0x04) pan = 1;    // Right
+      if (dpad & 0x08) pan = -1;   // Left
 
-      if (pan != 0 || tilt != 0) {
-        // Send move command with active camera
-        String msg = "{\"type\":\"cam_ptz\",\"camera\":" + String(activePtzCamera) + ",\"action\":\"move\",\"pan\":" + String(pan, 1) + ",\"tilt\":" + String(tilt, 1) + ",\"zoom\":0}";
-        webSocket.sendTXT(msg);
-        Serial.printf("[PTZ] Cam%d move pan=%.1f tilt=%.1f\n", activePtzCamera, pan, tilt);
-      } else {
-        // D-pad released - send stop
-        String msg = "{\"type\":\"cam_ptz\",\"camera\":" + String(activePtzCamera) + ",\"action\":\"stop\"}";
-        webSocket.sendTXT(msg);
-        Serial.printf("[PTZ] Cam%d stop\n", activePtzCamera);
-      }
+      // Use Arduino String (not char*) for websocket - matches telemetry which works
+      String ptzMsg = "{\"type\":\"ptz_cmd\",\"cmd\":\"PTZ_MOVE," +
+                      String(activePtzCamera) + "," + String(pan) + "," + String(tilt) + "\"}";
+      Serial.println("[PTZ] Sending: " + ptzMsg);
+      webSocket.sendTXT(ptzMsg);
+      // Also log to VPS
+      webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"[DPAD] PTZ MOVE cam" + String(activePtzCamera) + " pan=" + String(pan) + " tilt=" + String(tilt) + "\"}");
+    } else if (wsConnected && dpad == 0) {
+      // D-pad released - send stop using Arduino String
+      String ptzMsg = "{\"type\":\"ptz_cmd\",\"cmd\":\"PTZ_STOP," + String(activePtzCamera) + "\"}";
+      Serial.println("[PTZ] Sending: " + ptzMsg);
+      webSocket.sendTXT(ptzMsg);
+      webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"[DPAD] PTZ STOP cam" + String(activePtzCamera) + "\"}");
     }
   }
 
@@ -291,7 +295,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.0.9\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.1.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
