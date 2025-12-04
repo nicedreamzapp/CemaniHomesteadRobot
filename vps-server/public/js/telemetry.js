@@ -537,20 +537,33 @@ let odomState = {
 
 // Make resetOdometry available globally
 window.resetOdometry = function() {
+  // Completely reset state
   odomState = {
     lastPosL: null,  // Will be set from next encoder reading
     lastPosR: null,
-    x: 0, y: 0, heading: 0, totalDistance: 0,
-    trail: [{x: 0, y: 0}],
+    x: 0,
+    y: 0,
+    heading: 0,
+    totalDistance: 0,
+    trail: [],  // Empty trail - will add origin point after baseline set
     lastDraw: 0,
     initialized: false  // Force re-initialization from current encoder position
   };
+
+  // Update UI
   const tripDist = document.getElementById('odomTripDist');
   if (tripDist) tripDist.textContent = '0.0';
   const headingEl = document.getElementById('odomHeading');
   if (headingEl) headingEl.textContent = '0';
-  drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [{x: 0, y: 0}] });
-  console.log('[ODOM] Reset - will re-baseline on next encoder reading');
+
+  // Force complete canvas redraw with empty trail
+  if (odomCtx && odomCanvas) {
+    const w = odomCanvas.width / 2;
+    const h = odomCanvas.height / 2;
+    odomCtx.clearRect(0, 0, w, h);
+  }
+  drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [] });
+  console.log('[ODOM] Reset complete - trail cleared, waiting for new baseline');
 };
 
 function updateOdometryFromEncoders(posL, posR) {
@@ -559,6 +572,7 @@ function updateOdometryFromEncoders(posL, posR) {
     odomState.lastPosL = posL;
     odomState.lastPosR = posR;
     odomState.initialized = true;
+    odomState.trail = [{x: 0, y: 0}];  // Start trail at origin
     console.log('[ODOM] Baseline set: posL=' + posL + ' posR=' + posR);
     drawOdometryMap({
       odomX: 0, odomY: 0, odomHeading: 0,

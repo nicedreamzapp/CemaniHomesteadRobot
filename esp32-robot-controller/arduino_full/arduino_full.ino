@@ -1,8 +1,9 @@
 /*
- * Cemani Robot Controller v3.1.0
+ * Cemani Robot Controller v3.2.0
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket (SSL)
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.2.0 - Keepalive heartbeat to Teensy for watchdog safety
  * v3.1.0 - Fix D-pad PTZ: use Arduino String for websocket (was corrupting with char*)
  * v3.0.9 - Xbox D-pad controls camera PTZ, Y button toggles camera 1/2
  * v3.0.8 - More tolerant heartbeat to stop online/offline bouncing
@@ -29,10 +30,12 @@ bool wsConnected = false;
 unsigned long lastWiFiCheck = 0;
 unsigned long lastHeartbeat = 0;
 unsigned long lastWiFiConnected = 0;
+unsigned long lastTeensyKeepalive = 0;
 int wifiDropCount = 0;
 const unsigned long WIFI_CHECK_INTERVAL = 2000;   // Check WiFi more often (was 10s)
 const unsigned long HEARTBEAT_INTERVAL = 10000;   // Send telemetry every 10s (was 15s)
 const unsigned long WIFI_RECONNECT_TIMEOUT = 3000; // Force reconnect if down >3s
+const unsigned long TEENSY_KEEPALIVE_INTERVAL = 1000; // Send keepalive to Teensy every 1s
 
 int16_t plx = 0, ply = 0, prx = 0, pry = 0;
 int16_t plt = 0, prt = 0;
@@ -60,7 +63,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.0.9");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.2.0");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -146,6 +149,13 @@ void loop() {
   if (now - lastHeartbeat > HEARTBEAT_INTERVAL) {
     sendTelemetry();
     lastHeartbeat = now;
+  }
+
+  // Send keepalive to Teensy to prevent watchdog timeout
+  // This ensures Teensy knows ESP32 is alive even when no Xbox input
+  if (now - lastTeensyKeepalive > TEENSY_KEEPALIVE_INTERVAL) {
+    teensySerial.println("KEEPALIVE");
+    lastTeensyKeepalive = now;
   }
 
   handleGamepad();
@@ -309,7 +319,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.1.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.2.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +

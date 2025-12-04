@@ -20,6 +20,7 @@ static uint32_t lastMotorUpdate = 0;
 static uint32_t lastComm = 0;
 static uint32_t lastTelemetryUpdate = 0;
 static bool lastTurnState = false;
+static bool watchdogTriggered = false;  // Tracks if watchdog stopped motors
 
 // ===== SETUP =====
 void setup() {
@@ -171,6 +172,11 @@ void loop() {
         emergencyStop = false;
         Serial1.println("RESUMED");
       }
+      // Keepalive from ESP32 - just resets the watchdog timer (lastComm already updated)
+      else if (strcmp(buf, "KEEPALIVE") == 0) {
+        // Keepalive received - watchdog timer reset by lastComm = now above
+        // Don't print anything to avoid spamming serial output
+      }
     } else {
       buf[n++] = c;
     }
@@ -235,6 +241,39 @@ void loop() {
     currentLX = 0;
     currentLY = 0;
     Serial.println("[TIMEOUT] No Xbox data - joystick zeroed");
+  }
+
+  // ===== SAFETY: Watchdog - auto-stop if no communication =====
+  // This is the CRITICAL safety feature - motors MUST stop if we lose contact
+  uint32_t timeSinceComm = now - lastComm;
+  if (timeSinceComm > WATCHDOG_TIMEOUT_MS && !watchdogTriggered && motorsEnabled) {
+    // First threshold - zero the motors gracefully
+    if (lastLeftSpeed != 0 || lastRightSpeed != 0) {
+      Serial.println("[WATCHDOG] No commands for 2s - zeroing motors");
+      setDriverSpeed(1, 0);
+      setDriverSpeed(2, 0);
+      lastLeftSpeed = 0;
+      lastRightSpeed = 0;
+      currentLX = 0;
+      currentLY = 0;
+      Serial1.println("WATCHDOG,ZERO");
+    }
+
+    // Second threshold - full emergency stop
+    if (timeSinceComm > WATCHDOG_STOP_TIMEOUT) {
+      Serial.println("[WATCHDOG] No commands for 5s - EMERGENCY STOP!");
+      emergencyStopMotors();
+      discreteMoveActive = false;
+      discreteMovePhase = 0;
+      watchdogTriggered = true;
+      Serial1.println("WATCHDOG,ESTOP");
+    }
+  }
+
+  // Reset watchdog flag when we receive new data
+  if (timeSinceComm < 500 && watchdogTriggered) {
+    watchdogTriggered = false;
+    Serial.println("[WATCHDOG] Communication restored");
   }
 
   // ===== TELEMETRY UPDATE =====

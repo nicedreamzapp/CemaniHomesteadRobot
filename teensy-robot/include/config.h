@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.8"
+#define TEENSY_VERSION "3.9"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -73,6 +73,11 @@
 
 // Telemetry update interval
 #define TELEMETRY_INTERVAL  1000   // Read telemetry every 1 second
+
+// ===== SAFETY WATCHDOG =====
+// Auto-stop motors if no commands received within timeout
+#define WATCHDOG_TIMEOUT_MS     2000   // Stop motors if no data for 2 seconds
+#define WATCHDOG_STOP_TIMEOUT   5000   // Full E-STOP if no data for 5 seconds
 
 // ===== DISCRETE MOVEMENT CONSTANTS =====
 #define TURN_MS_PER_DEGREE 100     // ms per degree of rotation
