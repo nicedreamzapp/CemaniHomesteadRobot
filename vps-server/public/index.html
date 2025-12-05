@@ -3,7 +3,8 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
-<link rel="stylesheet" href="css/styles.css">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/styles.css?v=5">
 </head>
 <body>
 <div class="container">
@@ -123,6 +124,33 @@
         </div>
       </div>
     </div>
+
+    <!-- SERIAL + COMING SOON row -->
+    <div class="serial-coming-row">
+      <div class="serial-section cam-serial">
+        <div class="section-header"><span class="emoji">&#128187;</span> SERIAL</div>
+        <div class="serial" id="serial"></div>
+        <input type="text" id="cmd" placeholder="Send command...">
+      </div>
+      <div class="coming-soon-cams">
+        <div class="section-header"><span class="emoji">&#128301;</span> COMING SOON</div>
+        <div class="future-sensors horizontal">
+          <div class="future-chip"><span class="icon">&#129302;</span> OpenArm</div>
+          <div class="future-chip"><span class="icon">&#128752;</span> Jetson</div>
+          <div class="future-chip"><span class="icon">&#128506;</span> GPS</div>
+          <div class="future-chip"><span class="icon">&#128065;</span> LiDAR</div>
+          <div class="future-chip"><span class="icon">&#127793;</span> Solar</div>
+          <div class="future-chip"><span class="icon">&#128266;</span> Sonic</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHT CAM - Spanning 2 columns, compact inline layout -->
+  <div class="light-cam-wide glass">
+    <div class="light-cam-container large">
+      <div id="cam3-video" class="light-cam-video"></div>
+    </div>
   </div>
 
   <!-- Middle: Drive System (merged with Robot Control) -->
@@ -228,30 +256,19 @@
       </div>
     </div>
 
-    <!-- FUTURE SENSORS -->
-    <div class="section-header"><span class="emoji">&#128301;</span> COMING SOON</div>
-    <div class="future-sensors">
-      <div class="future-chip"><span class="icon">&#129302;</span> OpenArm</div>
-      <div class="future-chip"><span class="icon">&#128752;</span> Jetson</div>
-      <div class="future-chip"><span class="icon">&#128506;</span> GPS</div>
-      <div class="future-chip"><span class="icon">&#128065;</span> LiDAR</div>
-      <div class="future-chip"><span class="icon">&#127793;</span> Solar</div>
-      <div class="future-chip"><span class="icon">&#128266;</span> Sonic</div>
+    <!-- XBOX CONTROLLER - status updated by websocket.js from robot telemetry -->
+    <div class="xbox-section">
+      <div class="xbox-status" id="xboxStatus">
+        <span class="xbox-icon">&#127918;</span>
+        <span class="xbox-label">Xbox Controller</span>
+        <span class="xbox-state" id="xboxState">--</span>
+      </div>
     </div>
 
   </div>
 
-  <!-- Right: Status + Telemetry + Code -->
+  <!-- Right: Position Tracker + Code -->
   <div class="sidebar glass">
-    <!-- LIGHT CAM - Round Camera Feed -->
-    <div class="section-header"><span class="emoji">&#128161;</span> LIGHT CAM</div>
-    <div class="light-cam-section">
-      <div class="light-cam-container">
-        <div id="cam3-video" class="light-cam-video"></div>
-        <div class="light-cam-status" id="cam3-status">OFFLINE</div>
-      </div>
-    </div>
-
     <!-- POSITION TRACKER -->
     <div class="section-header"><span class="emoji">&#128506;</span> POSITION TRACKER</div>
     <div class="position-tracker">
@@ -308,21 +325,6 @@
       <div class="btn" id="flashPrebuiltBtn" style="background:linear-gradient(135deg,#74c0fc,#4da3f0);margin-top:4px;">FLASH PREBUILT</div>
     </div>
 
-    <!-- SERIAL MONITOR -->
-    <div class="serial-section">
-      <div class="section-header"><span class="emoji">&#128187;</span> SERIAL MONITOR</div>
-      <div class="serial" id="serial"></div>
-      <input type="text" id="cmd" placeholder="Send command...">
-    </div>
-
-    <!-- XBOX CONTROLLER - status updated by websocket.js from robot telemetry -->
-    <div class="xbox-section">
-      <div class="xbox-status" id="xboxStatus">
-        <span class="xbox-icon">&#127918;</span>
-        <span class="xbox-label">Xbox Controller</span>
-        <span class="xbox-state" id="xboxState">--</span>
-      </div>
-    </div>
   </div>
 </div>
 

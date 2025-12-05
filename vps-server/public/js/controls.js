@@ -208,11 +208,21 @@ function emergencyStop() {
   selectedDist = null;
   commandQueue = [];
   updateDisplay();
-  setStatus('STOPPED', 'error');
+}
 
-  const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#ff6b6b">[STOP] Emergency stop sent - queue cleared</span><br>';
-  serialDiv.scrollTop = serialDiv.scrollHeight;
+// ============ LIGHT TOGGLE ============
+let lightOn = false;
+function toggleLight() {
+  lightOn = !lightOn;
+  const btn = document.getElementById('lightToggleBtn');
+  if (btn) {
+    btn.classList.toggle('on', lightOn);
+  }
+  // Send light command to server
+  if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'light_toggle', state: lightOn }));
+  }
+  console.log('[LIGHT] Toggled:', lightOn ? 'ON' : 'OFF');
 }
 
 function clearQueue() {
@@ -308,7 +318,7 @@ function updateXboxStatus(connected) {
   const chipEl = document.getElementById('xboxChip');
 
   if (stateEl) {
-    stateEl.textContent = connected ? 'OK' : '--';
+    stateEl.textContent = connected ? '✓ Connected' : 'Offline';
   }
   if (statusEl) {
     if (connected) {

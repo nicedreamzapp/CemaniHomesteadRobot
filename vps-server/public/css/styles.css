@@ -17,14 +17,52 @@ body {
 }
 .container {
   display: grid;
-  grid-template-columns: 1fr 280px 340px;
-  grid-template-rows: 70px 1fr;
-  gap: 15px;
-  padding: 15px;
+  grid-template-columns: minmax(300px, 1fr) minmax(280px, 320px) minmax(260px, 300px);
+  grid-template-rows: 50px minmax(0, 1fr) minmax(200px, 280px);
+  grid-template-areas:
+    "header header header"
+    "cams middle sidebar"
+    "cams lightcam lightcam";
+  gap: 8px;
+  padding: 8px;
   height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+.cameras-column {
+  grid-area: cams;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.middle-column {
+  grid-area: middle;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+}
+.sidebar {
+  grid-area: sidebar;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+}
+.light-cam-wide {
+  grid-area: lightcam;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  padding: 8px;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.light-cam-wide .section-header {
+  display: none;
 }
 .header {
-  grid-column: 1 / -1;
+  grid-area: header;
   padding: 15px 20px;
   display: flex;
   justify-content: space-between;
@@ -319,23 +357,19 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
 .cameras-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 2px;
+  padding: 0;
 }
 
-/* Camera wrapper - 3D embossed frame */
+/* Camera wrapper - 3D embossed frame - flex to fill available space */
 .cam-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  background: linear-gradient(145deg, #1a2535, #0d1520);
-  border-radius: 14px;
-  padding: 3px;
-  box-shadow:
-    8px 8px 20px rgba(0, 0, 0, 0.6),
-    -4px -4px 12px rgba(60, 80, 100, 0.1),
-    inset 0 2px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.3);
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
 }
 /* Camera labels - 3D embossed centered */
 .cam-label-centered {
@@ -356,11 +390,14 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
 
 /* Camera containers - 3D inset video screen */
 .cam-container {
+  flex: 1;
+  min-height: 0;
   background: #000;
   border-radius: 0 0 10px 10px;
   border: none;
   overflow: hidden;
   position: relative;
+  display: flex;
   box-shadow:
     inset 4px 4px 10px rgba(0, 0, 0, 0.8),
     inset -2px -2px 6px rgba(40, 60, 80, 0.2),
@@ -368,13 +405,17 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
 }
 .cam-video {
   width: 100%;
-  aspect-ratio: 16/9;
-  display: block;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #0a0a0a;
 }
 .cam-video video, .cam-video img {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   display: block;
   border-radius: 0 0 8px 8px;
@@ -477,8 +518,8 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
 .middle-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 4px;
+  padding: 0;
 }
 
 .robot-controls {
@@ -993,7 +1034,8 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   border: 2px solid rgba(0, 255, 136, 0.4);
   border-radius: 10px;
   padding: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 .tracker-header {
   display: flex;
@@ -1107,6 +1149,11 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   padding: 8px;
   min-height: 100px;
 }
+.serial-section.cam-serial {
+  margin-top: 0;
+  min-height: 0;
+  height: 100%;
+}
 .serial {
   flex: 1;
   background: #0a0a0a;
@@ -1134,8 +1181,8 @@ input[type="text"] {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 4px;
+  padding: 0;
   overflow-y: auto;
 }
 
@@ -1168,20 +1215,63 @@ input[type="text"] {
   border-radius: 50%;
 }
 .light-cam-status {
-  position: absolute;
-  bottom: -5px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 8px;
-  font-weight: bold;
-  padding: 2px 8px;
-  background: rgba(255, 100, 100, 0.3);
-  color: #ff6b6b;
-  border-radius: 8px;
+  display: none;
 }
 .light-cam-status.live {
-  background: rgba(81, 207, 102, 0.3);
-  color: #51cf66;
+  background: rgba(80, 200, 100, 0.15);
+  color: rgba(150, 255, 150, 0.6);
+  border-color: rgba(81, 207, 102, 0.2);
+}
+/* Hide the light toggle button until we decode the light control */
+.light-toggle-btn {
+  display: none;
+}
+/* Large Light Cam variant - compact inline layout */
+.light-cam-section.large {
+  padding: 0;
+  margin: 0;
+}
+.light-cam-section.large.top {
+  padding: 0;
+}
+.light-cam-container.large {
+  width: auto;
+  height: 100%;
+  max-height: 100%;
+  aspect-ratio: 16/9;
+  flex-shrink: 0;
+}
+.light-cam-container.large .light-cam-video {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+}
+.light-cam-container.large .light-cam-video video,
+.light-cam-container.large .light-cam-video img {
+  border-radius: 12px;
+}
+.light-toggle-btn {
+  position: static;
+  background: linear-gradient(145deg, #3a3a1a, #2a2a10);
+  border: 2px solid #ffc107;
+  color: #ffc107;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.light-toggle-btn:hover {
+  background: linear-gradient(145deg, #4a4a2a, #3a3a20);
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.5);
+}
+.light-toggle-btn.on {
+  background: linear-gradient(145deg, #ffc107, #e6ac00);
+  color: #1a1a0a;
+  box-shadow: 0 0 20px rgba(255, 193, 7, 0.7);
 }
 
 /* TWO-COLUMN STATUS GRID */
@@ -2457,6 +2547,57 @@ input[type="text"] {
   grid-template-columns: 1fr 1fr 1fr;
   gap: 6px;
 }
+.future-sensors.horizontal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+/* Serial + Coming Soon side by side - equal columns */
+.serial-coming-row {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: 4px;
+  width: 100%;
+  flex-shrink: 0;
+  min-height: 90px;
+  max-height: 100px;
+}
+.serial-coming-row > .serial-section,
+.serial-coming-row > .serial-section.cam-serial {
+  flex: 1 1 48% !important;
+  width: 48% !important;
+  max-width: 48% !important;
+  min-width: 0 !important;
+}
+.serial-coming-row > .coming-soon-cams {
+  flex: 1 1 48% !important;
+  width: 48% !important;
+  max-width: 48% !important;
+  min-width: 0 !important;
+  padding: 4px;
+  background: linear-gradient(145deg, rgba(40, 60, 90, 0.3), rgba(20, 40, 70, 0.3));
+  border-radius: 8px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 4px;
+}
+.coming-soon-cams .section-header {
+  margin-bottom: 0;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.coming-soon-cams .future-sensors.horizontal {
+  display: contents;
+}
+.coming-soon-cams .future-chip {
+  font-size: 9px;
+  padding: 3px 5px;
+}
 .future-chip {
   background: linear-gradient(145deg, rgba(60, 80, 100, 0.4), rgba(40, 60, 80, 0.4));
   border: 1px solid rgba(116, 192, 252, 0.3);
@@ -2472,7 +2613,7 @@ input[type="text"] {
 .future-chip .icon { font-size: 14px; }
 
 /* CODE EDITOR - 3D Embossed */
-.code-section { margin-top: 6px; }
+.code-section { margin-top: 6px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .tabs { display: flex; gap: 4px; margin-bottom: 6px; }
 .tab {
   padding: 6px 12px;
@@ -2504,9 +2645,15 @@ input[type="text"] {
     0 0 10px rgba(0, 255, 136, 0.3);
   text-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
 }
+.editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
 .editor textarea {
   width: 100%;
-  height: 80px;
+  min-height: 60px;
+  flex: 1;
   background: #0a0a0a;
   color: #51cf66;
   border: 2px solid rgba(0, 255, 136, 0.4);
@@ -2549,107 +2696,156 @@ input[type="text"] {
 
 /* RESPONSIVE */
 
-/* Large screens - cameras side by side, fill available space */
+/* Large screens 1600px+ */
 @media (min-width: 1600px) {
   .container {
-    grid-template-columns: 1fr 340px 400px;
-    grid-template-rows: 60px 1fr;
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
+    grid-template-columns: minmax(400px, 1fr) 400px 380px;
+  }
+}
+
+/* Extra large screens 1920px+ */
+@media (min-width: 1920px) {
+  .container {
+    grid-template-columns: minmax(500px, 1fr) 440px 420px;
+    gap: 12px;
+    padding: 12px;
+  }
+}
+
+/* Ultra wide / 4K screens 2400px+ */
+@media (min-width: 2400px) {
+  .container {
+    grid-template-columns: minmax(600px, 1fr) 520px 500px;
+    gap: 15px;
+    padding: 15px;
+  }
+}
+
+/* Tablet landscape 1024px-1279px */
+@media (max-width: 1279px) {
+  .container {
+    grid-template-columns: minmax(280px, 1fr) 260px 240px;
+    grid-template-rows: 50px auto 1fr;
+    gap: 6px;
+    padding: 6px;
+  }
+}
+
+/* Tablet portrait 768px-1023px - allow scrolling */
+@media (max-width: 1023px) {
+  .container {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "header header"
+      "cams cams"
+      "middle sidebar"
+      "lightcam lightcam";
+    gap: 10px;
+    padding: 10px;
+    height: auto;
+    min-height: 100vh;
+    max-height: none;
+    overflow: visible;
   }
   .cameras-column {
     flex-direction: row;
-    gap: 12px;
-    align-items: stretch;
+    gap: 10px;
   }
   .cam-wrapper {
+    transform: scale(1);
+    margin-bottom: 0;
     flex: 1;
-    display: flex;
-    flex-direction: column;
   }
-  .cam-container {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .cam-video {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .cam-video video, .cam-video img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-  .middle-column {
-    overflow-y: auto;
-  }
-  .sidebar {
-    overflow-y: auto;
-  }
+  .header-devices { display: none; }
 }
 
-/* Extra large screens - even more space for cameras */
-@media (min-width: 1920px) {
-  .container {
-    grid-template-columns: 1fr 360px 420px;
-  }
-  .cam-label-centered {
-    font-size: 13px;
-    padding: 8px 16px;
-  }
-}
-
-/* Ultra wide / 4K screens */
-@media (min-width: 2400px) {
-  .container {
-    grid-template-columns: 1fr 400px 480px;
-    gap: 20px;
-    padding: 20px;
-  }
-  .cameras-column {
-    gap: 20px;
-    padding: 16px;
-  }
-  .cam-label-centered {
-    font-size: 14px;
-    padding: 10px 20px;
-  }
-  .section-header {
-    font-size: 16px;
-  }
-}
-
-@media (max-width: 1024px) {
-  .container {
-    grid-template-columns: 1fr 260px;
-    grid-template-rows: 60px 1fr;
-  }
-  .sidebar { display: none; }
-}
-
-@media (max-width: 768px) {
+/* Phone landscape / small tablet 600px-767px */
+@media (max-width: 767px) {
   .container {
     display: flex;
     flex-direction: column;
     height: auto;
     min-height: 100vh;
-    padding: 10px;
-    gap: 10px;
+    padding: 8px;
+    gap: 8px;
   }
-  .header { flex-wrap: wrap; padding: 10px; gap: 10px; }
-  .header h1 { font-size: 14px; width: 100%; text-align: center; }
-  .status { font-size: 18px; }
-  .cameras-column { flex: none; padding: 8px; }
-  .cam-container { min-height: 35vh; flex: none; }
-  .ptz-overlay { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px); }
-  .ptz-btn { font-size: 18px; }
-  .sidebar { display: block; padding: 10px; }
+  .header {
+    flex-wrap: wrap;
+    padding: 8px;
+    gap: 8px;
+  }
+  .header h1 {
+    font-size: 14px;
+    width: 100%;
+    text-align: center;
+    order: -1;
+  }
+  .header-devices { display: none; }
+  .header-right { font-size: 10px; }
+  .cameras-column {
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+  }
+  .cam-wrapper {
+    transform: scale(1);
+    margin-bottom: 0;
+  }
+  .light-cam-wide {
+    flex-direction: column;
+    gap: 0;
+  }
+  .middle-column, .sidebar {
+    width: 100%;
+  }
+  .tank-robot-view {
+    transform: scale(0.85);
+  }
+}
+
+/* Phone portrait max 480px */
+@media (max-width: 480px) {
+  .container {
+    padding: 5px;
+    gap: 6px;
+  }
+  .header {
+    padding: 6px;
+    gap: 6px;
+  }
+  .header h1 {
+    font-size: 12px;
+  }
+  .header-right {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
+  .info-chip {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+  .cameras-column {
+    padding: 0;
+    gap: 4px;
+  }
+  .cam-wrapper {
+    transform: scale(0.9);
+  }
+  .section-header {
+    font-size: 11px;
+  }
+  .tank-robot-view {
+    transform: scale(0.7);
+  }
+  .future-sensors.horizontal {
+    gap: 4px;
+  }
+  .future-chip {
+    font-size: 9px;
+    padding: 4px 6px;
+  }
 }
 
 /* XBOX CONTROLLER STATUS */
