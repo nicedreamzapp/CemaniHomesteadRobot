@@ -59,8 +59,11 @@ async function playAudioChunk(data) {
 // ============ CAMERA PLAYERS ============
 let cam1Image = null;
 let cam2Image = null;
+let cam3Image = null;  // V380 Light Bulb Cam
 let cam1Active = false;
 let cam2Active = false;
+let cam3Active = false;
+let v380LightState = -1;  // -1 = unknown, 0 = off, 1 = on, 2 = auto
 
 function initCam1() {
   const container = document.getElementById('cam1-video');
@@ -88,7 +91,21 @@ function initCam2() {
   }
 }
 
-let pendingFrameUrl = { 1: null, 2: null };
+function initCam3() {
+  const container = document.getElementById('cam3-video');
+  if (!container) return;
+  if (!cam3Image) {
+    cam3Image = document.createElement('img');
+    cam3Image.style.width = '100%';
+    cam3Image.style.height = '100%';
+    cam3Image.style.objectFit = 'cover';  // Cover for circular crop
+    cam3Image.style.background = '#000';
+    container.innerHTML = '';
+    container.appendChild(cam3Image);
+  }
+}
+
+let pendingFrameUrl = { 1: null, 2: null, 3: null };
 
 function displayFrame(blob, camId) {
   if (pendingFrameUrl[camId]) {
@@ -120,6 +137,19 @@ function displayFrame(blob, camId) {
       cam2Active = true;
       updateCamStatus(2, true, true);
     }
+  } else if (camId === 3) {
+    if (!cam3Image) initCam3();
+    if (cam3Image) {
+      cam3Image.src = url;
+      cam3Image.onload = () => {
+        URL.revokeObjectURL(url);
+        if (pendingFrameUrl[3] === url) pendingFrameUrl[3] = null;
+      };
+      if (!cam3Active) {
+        cam3Active = true;
+        updateCamStatus(3, true, true);
+      }
+    }
   }
 }
 
@@ -128,18 +158,21 @@ function updateCamStatus(camId, connected, streaming) {
   const txt = document.getElementById('cam' + camId + 'StatusText');
   const card = document.getElementById('cam' + camId + 'Card');
 
+  // V380 uses different badge class
+  const badgeClass = (camId === 3) ? 'v380-status-badge' : 'cam-status-badge';
+
   if (streaming) {
     el.textContent = 'LIVE';
-    el.className = 'cam-status-badge live';
+    el.className = badgeClass + ' live';
     el.style.background = '';  // Use CSS default (green)
     if (txt) txt.textContent = 'Live';
-    if (card) card.className = 'status-card';
+    if (card) card.className = 'device-chip online';
   } else {
     el.textContent = 'OFFLINE';
-    el.className = 'cam-status-badge';
+    el.className = badgeClass;
     el.style.background = '';  // Use CSS default (red)
     if (txt) txt.textContent = 'Offline';
-    if (card) card.className = 'status-card offline';
+    if (card) card.className = 'device-chip';
   }
 }
 
@@ -174,8 +207,8 @@ function ptzStop(camId) {
   ptzMoving[camId] = false;
 }
 
-// Camera 1 PTZ
-document.querySelectorAll('.ptz-btn').forEach(btn => {
+// Camera 1 PTZ - bind both old .ptz-btn and new PTZ pad elements
+document.querySelectorAll('[data-ptz]').forEach(btn => {
   const action = btn.dataset.ptz;
   if (!action) return;
 
@@ -311,12 +344,12 @@ ws.onmessage = function(e) {
 
     // Update ESP32 status card
     document.getElementById('esp32Status').textContent = d.connected ? 'Online' : 'Offline';
-    document.getElementById('esp32Card').className = 'status-card' + (d.connected ? '' : ' offline');
+    document.getElementById('esp32Card').className = 'device-chip' + (d.connected ? ' online' : '');
 
     // Update Teensy status card
     if(d.teensyConnected !== undefined) {
       document.getElementById('teensyStatus').textContent = d.teensyConnected ? 'Online' : 'Offline';
-      document.getElementById('teensyCard').className = 'status-card' + (d.teensyConnected ? '' : ' offline');
+      document.getElementById('teensyCard').className = 'device-chip' + (d.teensyConnected ? ' online' : '');
     }
     if(d.teensyVersion) {
       document.getElementById('teensyVersion').textContent = 'v' + d.teensyVersion;
@@ -437,3 +470,31 @@ function toggleMute2() {
     btn.style.opacity = "0.7";
   }
 }
+
+// ============ V380 LIGHT CONTROL ============
+function v380Light(state) {
+  // state: 0 = off, 1 = on, 2 = auto
+  v380LightState = state;
+
+  // Update button states
+  document.getElementById('lightOnBtn').classList.toggle('active', state === 1);
+  document.getElementById('lightAutoBtn').classList.toggle('active', state === 2);
+  document.getElementById('lightOffBtn').classList.toggle('active', state === 0);
+
+  // Send to server via WebSocket
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'v380_light', state: state }));
+  }
+
+  // Also try direct HTTP API to mac-camera-relay
+  fetch('/api/v380/light', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: state })
+  }).catch(err => console.log('V380 light API error:', err));
+}
+
+// Initialize V380 cam on load
+setTimeout(() => {
+  if (!cam3Active) initCam3();
+}, 1500);

@@ -8,19 +8,59 @@
 <body>
 <div class="container">
   <div class="header glass">
-    <!-- Left: Status indicator (bigger) -->
+    <!-- Left: Status dot only (individual devices show their status) -->
     <div class="header-left">
-      <div class="status-indicator-large" id="statusIndicator">
+      <div class="status-indicator-small" id="statusIndicator">
         <span class="status-dot offline" id="statusDot"></span>
-        <span class="status-text-large" id="status">OFFLINE</span>
       </div>
+      <!-- Hidden for JS compatibility -->
+      <span id="status" style="display:none">OFFLINE</span>
     </div>
 
     <!-- Center: Title -->
     <h1>CEMANI COMMAND CENTER</h1>
 
-    <!-- Right: WiFi info -->
+    <!-- Center-Right: Device Status (moved from CONNECTION section) -->
+    <div class="header-devices">
+      <div class="device-chip" id="esp32Card">
+        <span class="dev-icon">&#128225;</span>
+        <div class="dev-info">
+          <span class="dev-label">ESP32</span>
+          <span class="dev-status" id="esp32Status">--</span>
+          <span class="dev-version" id="esp32Version"></span>
+        </div>
+      </div>
+      <div class="device-chip" id="teensyCard">
+        <span class="dev-icon">&#9881;</span>
+        <div class="dev-info">
+          <span class="dev-label">Teensy</span>
+          <span class="dev-status" id="teensyStatus">--</span>
+          <span class="dev-version" id="teensyVersion"></span>
+        </div>
+      </div>
+      <div class="device-chip" id="cam1Card">
+        <span class="dev-icon">&#127909;</span>
+        <div class="dev-info">
+          <span class="dev-label">Cam 1</span>
+          <span class="dev-status" id="cam1StatusText">--</span>
+        </div>
+      </div>
+      <div class="device-chip" id="cam2Card">
+        <span class="dev-icon">&#127909;</span>
+        <div class="dev-info">
+          <span class="dev-label">Cam 2</span>
+          <span class="dev-status" id="cam2StatusText">--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battery + WiFi info -->
     <div class="header-right">
+      <div class="header-battery">
+        <span class="header-batt-icon">&#128267;</span>
+        <div class="header-batt-bar"><div class="header-batt-fill" id="headerBatteryFill"></div></div>
+        <span class="header-batt-text"><span id="headerBatteryVoltage">--</span>V <span id="headerBatteryPercent">--</span>%</span>
+      </div>
       <span class="info-chip"><span class="chip-label">WiFi</span><span class="chip-value" id="wifi">--</span></span>
       <span class="info-chip"><span class="chip-label">Signal</span><span class="chip-value" id="rssi">--</span></span>
       <span class="info-chip"><span class="chip-label">Up</span><span class="chip-value" id="uptime">--</span></span>
@@ -85,119 +125,71 @@
     </div>
   </div>
 
-  <!-- Middle: Robot controls + Serial -->
+  <!-- Middle: Drive System (merged with Robot Control) -->
   <div class="middle-column glass">
-    <div class="section-header"><span class="emoji">&#128296;</span> ROBOT CONTROL</div>
-    <div class="robot-controls">
-      <!-- DIRECTION PAD -->
-      <div class="compass-container">
-        <div class="compass-ring">
-          <div class="compass-dir n" id="dirF">FWD</div>
-          <div class="compass-dir e" id="dirR">R</div>
-          <div class="compass-dir s" id="dirB">BACK</div>
-          <div class="compass-dir w" id="dirL">L</div>
-          <div class="compass-center">
-            <div class="compass-center-label">MOVE</div>
-            <div class="compass-center-value" id="currentDir">--</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- DISTANCE -->
-      <div class="dist-row">
-        <div class="dist-btn" data-dist="0.5">0.5ft</div>
-        <div class="dist-btn" data-dist="1">1ft</div>
-        <div class="dist-btn" data-dist="3">3ft</div>
-        <div class="dist-btn" data-dist="10">10ft</div>
-      </div>
-
-      <!-- COMMAND QUEUE -->
-      <div class="cmd-queue">
-        <div class="cmd-queue-label">COMMAND QUEUE</div>
-        <div class="cmd-queue-display" id="cmdQueueDisplay">
-          <span style="color:#666">No commands queued</span>
-        </div>
-      </div>
-
-      <!-- STATUS -->
-      <div class="move-status idle" id="moveStatus">Tap direction, then distance</div>
-
-      <!-- EXECUTE -->
-      <div class="exec-row">
-        <button class="exec-btn clear" onclick="clearQueue()">CLEAR</button>
-        <button class="exec-btn go" onclick="executeQueue()">GO</button>
-        <button class="exec-btn stop" onclick="emergencyStop()">STOP</button>
-      </div>
-    </div>
-
-    <!-- DRIVE SYSTEM - EV Dashboard Style -->
+    <!-- DRIVE SYSTEM - EV Dashboard Style with Controls -->
     <div class="section-header"><span class="emoji">&#128664;</span> DRIVE SYSTEM</div>
     <div class="drive-panel">
-      <!-- Battery Bar -->
-      <div class="battery-row">
-        <span class="batt-icon">&#128267;</span>
-        <div class="batt-bar" id="batteryBar"><div class="batt-fill" id="batteryFill"></div></div>
-        <span class="batt-text"><span id="batteryVoltage">--</span>V <span id="batteryPercent">--</span>%</span>
+      <!-- Hidden battery elements for JS compatibility -->
+      <div style="display:none">
+        <div id="batteryBar"><div id="batteryFill"></div></div>
+        <span id="batteryVoltage">--</span>
+        <span id="batteryPercent">--</span>
       </div>
 
       <!-- Driver Temps Row - Above Robot -->
       <div class="driver-temps-row">
         <div class="driver-temp-box">
           <span class="driver-icon">&#9881;</span>
-          <span class="driver-name">Driver 2 Left</span>
+          <span class="driver-name">Driver 2</span>
           <span class="driver-temp-val" id="driver2Temp">--</span><span class="temp-unit">&deg;F</span>
         </div>
         <div class="driver-temp-box">
           <span class="driver-icon">&#9881;</span>
-          <span class="driver-name">Driver 1 Right</span>
+          <span class="driver-name">Driver 1</span>
           <span class="driver-temp-val" id="driver1Temp">--</span><span class="temp-unit">&deg;F</span>
         </div>
       </div>
 
-      <!-- Robot Top-Down View - Tank Style with Side Wheels -->
+      <!-- Robot Top-Down View - Tank Style with Side Wheels and Controls -->
       <div class="tank-robot-view">
-        <!-- Direction Arrows (left side, outside wheels) -->
-        <div class="tank-arrows left">
-          <div class="tank-arrow" id="arrowLF"></div>
-          <div class="tank-arrow" id="arrowLR"></div>
-        </div>
+        <!-- Left Steering Button -->
+        <div class="tank-steer-btn" id="dirL">&#9664; L</div>
 
         <!-- Left Track/Wheels (2 wheels stacked vertically) -->
         <div class="tank-track left">
           <div class="tank-wheel-box">
-            <div class="tank-wheel" id="wheelLF"></div>
             <div class="tank-wheel-temp"><span id="motorTempLF">--</span>&deg;F</div>
+            <div class="tank-wheel" id="wheelLF"><div class="tank-arrow" id="arrowLF"></div></div>
           </div>
           <div class="tank-wheel-box">
-            <div class="tank-wheel" id="wheelLR"></div>
             <div class="tank-wheel-temp"><span id="motorTempLR">--</span>&deg;F</div>
+            <div class="tank-wheel" id="wheelLR"><div class="tank-arrow" id="arrowLR"></div></div>
           </div>
         </div>
 
-        <!-- Robot Body/Chassis (center) -->
+        <!-- Robot Body/Chassis (center) with control buttons -->
         <div class="tank-body">
-          <div class="tank-fwd">&#9650; FWD</div>
+          <div class="tank-dir-btn" id="dirF">&#9650; FWD</div>
           <div class="tank-label">CEMANI</div>
-          <div class="tank-rear">REAR &#9660;</div>
+          <div class="tank-queue" id="ctrlQueueDisplay"></div>
+          <div class="tank-dir-btn" id="dirB">BACK &#9660;</div>
         </div>
 
         <!-- Right Track/Wheels (2 wheels stacked vertically) -->
         <div class="tank-track right">
           <div class="tank-wheel-box">
-            <div class="tank-wheel" id="wheelRF"></div>
+            <div class="tank-wheel" id="wheelRF"><div class="tank-arrow" id="arrowRF"></div></div>
             <div class="tank-wheel-temp"><span id="motorTempRF">--</span>&deg;F</div>
           </div>
           <div class="tank-wheel-box">
-            <div class="tank-wheel" id="wheelRR"></div>
+            <div class="tank-wheel" id="wheelRR"><div class="tank-arrow" id="arrowRR"></div></div>
             <div class="tank-wheel-temp"><span id="motorTempRR">--</span>&deg;F</div>
           </div>
         </div>
 
-        <!-- Direction Arrows (right side, outside wheels) -->
-        <div class="tank-arrows right">
-          <div class="tank-arrow" id="arrowRF"></div>
-          <div class="tank-arrow" id="arrowRR"></div>
-        </div>
+        <!-- Right Steering Button -->
+        <div class="tank-steer-btn" id="dirR">R &#9654;</div>
       </div>
 
       <!-- Speed Displays -->
@@ -212,6 +204,27 @@
           <span class="spd-val" id="velocityR">0.00</span>
           <span class="spd-unit">MPH</span>
         </div>
+      </div>
+
+      <!-- DISTANCE -->
+      <div class="dist-row">
+        <div class="dist-btn" data-dist="0.5">0.5ft</div>
+        <div class="dist-btn" data-dist="1">1ft</div>
+        <div class="dist-btn" data-dist="3">3ft</div>
+        <div class="dist-btn" data-dist="10">10ft</div>
+      </div>
+
+      <!-- Hidden for JS compatibility -->
+      <div id="currentDir" style="display:none">--</div>
+      <div id="cmdQueueDisplay" style="display:none"></div>
+
+      <!-- STATUS -->
+      <div class="move-status idle" id="moveStatus">Tap direction, then distance</div>
+
+      <!-- EXECUTE -->
+      <div class="exec-row">
+        <button class="exec-btn go" onclick="executeQueue()">GO</button>
+        <button class="exec-btn stop" onclick="emergencyStop()">STOP</button>
       </div>
     </div>
 
@@ -230,38 +243,12 @@
 
   <!-- Right: Status + Telemetry + Code -->
   <div class="sidebar glass">
-    <!-- CONNECTION STATUS - Two Column with Emojis -->
-    <div class="section-header"><span class="emoji">&#128279;</span> CONNECTION</div>
-    <div class="status-grid">
-      <div class="status-card" id="esp32Card">
-        <span class="icon">&#128225;</span>
-        <div class="info">
-          <span class="label">ESP32</span>
-          <span class="value" id="esp32Status">--</span>
-          <span class="version" id="esp32Version" style="font-size:10px;opacity:0.7;"></span>
-        </div>
-      </div>
-      <div class="status-card" id="teensyCard">
-        <span class="icon">&#9881;</span>
-        <div class="info">
-          <span class="label">Teensy</span>
-          <span class="value" id="teensyStatus">--</span>
-          <span class="version" id="teensyVersion" style="font-size:10px;opacity:0.7;"></span>
-        </div>
-      </div>
-      <div class="status-card" id="cam1Card">
-        <span class="icon">&#127909;</span>
-        <div class="info">
-          <span class="label">Cam 1</span>
-          <span class="value" id="cam1StatusText">--</span>
-        </div>
-      </div>
-      <div class="status-card" id="cam2Card">
-        <span class="icon">&#127909;</span>
-        <div class="info">
-          <span class="label">Cam 2</span>
-          <span class="value" id="cam2StatusText">--</span>
-        </div>
+    <!-- LIGHT CAM - Round Camera Feed -->
+    <div class="section-header"><span class="emoji">&#128161;</span> LIGHT CAM</div>
+    <div class="light-cam-section">
+      <div class="light-cam-container">
+        <div id="cam3-video" class="light-cam-video"></div>
+        <div class="light-cam-status" id="cam3-status">OFFLINE</div>
       </div>
     </div>
 

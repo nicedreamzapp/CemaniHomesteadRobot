@@ -95,6 +95,14 @@ function updateDriverTelemetry(data) {
     const bar = document.getElementById('batteryBar');
     if (fill) fill.style.width = data.batteryPct + '%';
 
+    // Update header battery too
+    const headerFill = document.getElementById('headerBatteryFill');
+    const headerPct = document.getElementById('headerBatteryPercent');
+    const headerVolt = document.getElementById('headerBatteryVoltage');
+    if (headerFill) headerFill.style.width = data.batteryPct + '%';
+    if (headerPct) headerPct.textContent = data.batteryPct;
+    if (headerVolt) headerVolt.textContent = data.batteryV.toFixed(1);
+
     // Color based on level
     if (bar) {
       bar.classList.remove('warning', 'critical');
@@ -137,21 +145,30 @@ function updateDriverTelemetry(data) {
   if (data.motorTempLF_F !== undefined) {
     const el = document.getElementById('motorTempLF');
     if (el) el.textContent = data.motorTempLF_F;
+    // Also update control panel temps
+    const ctrlEl = document.getElementById('ctrlTempLF');
+    if (ctrlEl) ctrlEl.textContent = data.motorTempLF_F;
   }
   // Left Rear
   if (data.motorTempLR_F !== undefined) {
     const el = document.getElementById('motorTempLR');
     if (el) el.textContent = data.motorTempLR_F;
+    const ctrlEl = document.getElementById('ctrlTempLR');
+    if (ctrlEl) ctrlEl.textContent = data.motorTempLR_F;
   }
   // Right Front
   if (data.motorTempRF_F !== undefined) {
     const el = document.getElementById('motorTempRF');
     if (el) el.textContent = data.motorTempRF_F;
+    const ctrlEl = document.getElementById('ctrlTempRF');
+    if (ctrlEl) ctrlEl.textContent = data.motorTempRF_F;
   }
   // Right Rear
   if (data.motorTempRR_F !== undefined) {
     const el = document.getElementById('motorTempRR');
     if (el) el.textContent = data.motorTempRR_F;
+    const ctrlEl = document.getElementById('ctrlTempRR');
+    if (ctrlEl) ctrlEl.textContent = data.motorTempRR_F;
   }
 
   // Legacy L/R averages for compatibility
@@ -201,6 +218,23 @@ function updateDriverTelemetry(data) {
         arrow.classList.add('arrow-' + direction);
       }
     });
+
+    // Also animate control panel left wheels
+    const ctrlWheelLF = document.getElementById('ctrlWheelLF');
+    const ctrlWheelLR = document.getElementById('ctrlWheelLR');
+    const ctrlArrowLF = document.getElementById('ctrlArrowLF');
+    const ctrlArrowLR = document.getElementById('ctrlArrowLR');
+    [ctrlWheelLF, ctrlWheelLR].forEach(wheel => {
+      if (wheel) {
+        wheel.classList.remove('forward', 'backward');
+        if (isSpinning) wheel.classList.add(direction);
+      }
+    });
+    [ctrlArrowLF, ctrlArrowLR].forEach(arrow => {
+      if (arrow) {
+        arrow.textContent = direction === 'forward' ? '▲' : (direction === 'backward' ? '▼' : '');
+      }
+    });
   }
   if (data.velR !== undefined) {
     const mphR = rpmToMph(data.velR);
@@ -231,6 +265,23 @@ function updateDriverTelemetry(data) {
       if (arrow) {
         arrow.classList.remove('arrow-forward', 'arrow-backward', 'arrow-stopped');
         arrow.classList.add('arrow-' + direction);
+      }
+    });
+
+    // Also animate control panel right wheels
+    const ctrlWheelRF = document.getElementById('ctrlWheelRF');
+    const ctrlWheelRR = document.getElementById('ctrlWheelRR');
+    const ctrlArrowRF = document.getElementById('ctrlArrowRF');
+    const ctrlArrowRR = document.getElementById('ctrlArrowRR');
+    [ctrlWheelRF, ctrlWheelRR].forEach(wheel => {
+      if (wheel) {
+        wheel.classList.remove('forward', 'backward');
+        if (isSpinning) wheel.classList.add(direction);
+      }
+    });
+    [ctrlArrowRF, ctrlArrowRR].forEach(arrow => {
+      if (arrow) {
+        arrow.textContent = direction === 'forward' ? '▲' : (direction === 'backward' ? '▼' : '');
       }
     });
   }

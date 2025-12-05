@@ -196,6 +196,12 @@ function connectToVPS() {
         const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
         if (cam) await sendSnapshot(cam);
       }
+
+      // V380 Light Control
+      if (msg.type === 'v380_light') {
+        console.log('[V380] Light command received:', msg.state);
+        handleV380Light(msg.state);
+      }
     } catch (err) {
       // Ignore parse errors from binary data
     }
@@ -318,6 +324,26 @@ function startVideoStream(cam) {
       '-c:v', 'mjpeg',
       '-q:v', '10',
       '-r', '12',
+      'pipe:1'
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  } else if (cam.id === 3) {
+    // CAM 3: V380 Light Bulb Camera - VIDEO ONLY, square format
+    // This camera has no authentication for RTSP stream
+    const v380RtspUrl = `rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`;
+    console.log(`[CAM${cam.id}] Starting V380 (TCP): ${v380RtspUrl}`);
+    proc = spawn(FFMPEG, [
+      '-rtsp_transport', 'tcp',
+      '-fflags', 'nobuffer+discardcorrupt',
+      '-flags', 'low_delay',
+      '-analyzeduration', '1000000',
+      '-probesize', '500000',
+      '-i', v380RtspUrl,
+      '-map', '0:v',
+      '-vf', 'scale=240:240',  // Square for circular display
+      '-f', 'image2pipe',
+      '-c:v', 'mjpeg',
+      '-q:v', '8',
+      '-r', '10',  // Lower framerate for light bulb cam
       'pipe:1'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
   } else {
@@ -561,6 +587,59 @@ async function sendSnapshot(cam) {
       vpsSocket.send(JSON.stringify({ type: 'cam_snapshot_data', camera: cam.id, data: base64 }));
     }
   } catch (e) {}
+}
+
+// ============================================
+// V380 LIGHT CONTROL
+// Uses v380 tool at /tmp/v380/v380/v380
+// ============================================
+const V380_TOOL = '/tmp/v380/v380/v380';
+const V380_IP = '192.168.1.200';
+const V380_ID = '46337958';
+const V380_USER = '46337958';
+const V380_PASS = 'Kookster#420';
+
+function handleV380Light(state) {
+  // state: 0 = off, 1 = on, 2 = auto
+  const lightArg = state;
+
+  console.log(`[V380] Sending light command: ${state} (0=off, 1=on, 2=auto)`);
+
+  // Spawn the v380 tool with light control
+  const v380 = spawn(V380_TOOL, [
+    '-addr', V380_IP,
+    '-id', V380_ID,
+    '-u', V380_USER,
+    '-p', V380_PASS,
+    `--light=${lightArg}`
+  ], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 10000
+  });
+
+  v380.stdout.on('data', (data) => {
+    console.log('[V380] stdout:', data.toString().substring(0, 100));
+  });
+
+  v380.stderr.on('data', (data) => {
+    console.log('[V380] stderr:', data.toString().substring(0, 100));
+  });
+
+  v380.on('error', (err) => {
+    console.error('[V380] Error:', err.message);
+  });
+
+  // Kill after 5 seconds (command should complete quickly)
+  setTimeout(() => {
+    if (!v380.killed) {
+      v380.kill('SIGTERM');
+      console.log('[V380] Killed after timeout');
+    }
+  }, 5000);
+
+  v380.on('close', (code) => {
+    console.log('[V380] Process exited with code:', code);
+  });
 }
 
 // STARTUP

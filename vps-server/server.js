@@ -78,7 +78,8 @@ let cameraStatus = {
 // Per-camera streaming status with timeout detection
 const perCameraStatus = {
   1: { streaming: false, lastFrame: 0 },
-  2: { streaming: false, lastFrame: 0 }
+  2: { streaming: false, lastFrame: 0 },
+  3: { streaming: false, lastFrame: 0 }  // V380 Light Bulb Camera
 };
 const CAMERA_TIMEOUT_MS = 3000; // Mark as not streaming if no frame for 3 seconds
 
@@ -618,6 +619,12 @@ wss.on("connection", (ws, req) => {
       if((data.type === "talkback_start" || data.type === "talkback_stop") && cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
         cameraSocket.send(JSON.stringify(data));
         console.log('[TALKBACK]', data.type, 'camera:', data.camera);
+      }
+
+      // Forward V380 light control to camera relay
+      if(data.type === "v380_light" && cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
+        cameraSocket.send(JSON.stringify(data));
+        console.log('[V380] Light command:', data.state);
       }
 
     } catch (err) {

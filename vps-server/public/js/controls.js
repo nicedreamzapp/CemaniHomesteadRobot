@@ -14,17 +14,19 @@ const FEET_TO_METERS = 0.3048;
 function updateDisplay() {
   document.getElementById('currentDir').textContent = selectedDir ? dirLabels[selectedDir] : '--';
 
-  document.querySelectorAll('.compass-dir').forEach(d => {
-    d.style.background = 'rgba(0, 255, 136, 0.2)';
-    d.style.color = '#00ff88';
+  // Update direction buttons (works with compass-dir, ctrl-dir-btn, ctrl-round-btn, tank-steer-btn, tank-dir-btn)
+  document.querySelectorAll('.compass-dir, .ctrl-dir-btn, .ctrl-round-btn, .tank-steer-btn, .tank-dir-btn').forEach(d => {
+    d.classList.remove('active');
   });
   if (selectedDir) {
     const el = document.getElementById('dir' + selectedDir);
     if (el) {
-      el.style.background = '#00ff88';
-      el.style.color = '#000';
+      el.classList.add('active');
     }
   }
+
+  // Update center display - queue shown inside chassis
+  updateChassisQueueDisplay();
 
   document.querySelectorAll('.dist-btn').forEach(d => {
     d.style.background = 'rgba(81, 207, 102, 0.2)';
@@ -53,20 +55,29 @@ function updateDisplay() {
 }
 
 function updateQueueDisplay() {
-  const queueDiv = document.getElementById('cmdQueueDisplay');
-  if (!queueDiv) return;
+  // Legacy - kept for compatibility
+}
+
+function updateChassisQueueDisplay() {
+  const ctrlQueue = document.getElementById('ctrlQueueDisplay');
+  const ctrlLabel = document.getElementById('ctrlLabel');
+  if (!ctrlQueue || !ctrlLabel) return;
 
   if (commandQueue.length === 0) {
-    queueDiv.innerHTML = '<span style="color:#666">No commands queued</span>';
+    ctrlLabel.textContent = 'CEMANI';
+    ctrlQueue.innerHTML = '';
     return;
   }
 
+  // Show queue count in label
+  ctrlLabel.textContent = commandQueue.length + ' CMD';
+
+  // Show compact queue items inside chassis
   let html = '';
   commandQueue.forEach((cmd, i) => {
-    html += '<span class="cmd-chip">' + cmd.dist + 'ft ' + (dirLabels[cmd.dir] || cmd.dir) +
-            ' <span class="remove" onclick="removeFromQueue(' + i + ')">&#215;</span></span>';
+    html += '<div class="ctrl-queue-item">' + cmd.dist + '\' ' + cmd.dir + '</div>';
   });
-  queueDiv.innerHTML = html;
+  ctrlQueue.innerHTML = html;
 }
 
 function removeFromQueue(index) {
@@ -77,8 +88,8 @@ function removeFromQueue(index) {
 function updateRadarRobot() {
   const robot = document.getElementById('radarRobot');
   const grid = document.getElementById('radarGrid');
-  robot.style.transform = `translate(-50%, -50%) rotate(${robotHeading}deg)`;
-  grid.style.transform = `translate(${-gridOffsetX}px, ${-gridOffsetY}px)`;
+  if (robot) robot.style.transform = `translate(-50%, -50%) rotate(${robotHeading}deg)`;
+  if (grid) grid.style.transform = `translate(${-gridOffsetX}px, ${-gridOffsetY}px)`;
 }
 
 function setStatus(text, type) {
@@ -131,12 +142,23 @@ function executeQueue() {
       setStatus('Completed ' + commands.length + ' commands', 'idle');
       selectedDir = null;
       selectedDist = null;
+      // Restore CEMANI label after completion
+      const ctrlLabel = document.getElementById('ctrlLabel');
+      const ctrlQueue = document.getElementById('ctrlQueueDisplay');
+      if (ctrlLabel) ctrlLabel.textContent = 'CEMANI';
+      if (ctrlQueue) ctrlQueue.innerHTML = '';
       updateDisplay();
       return;
     }
 
     const cmd = commands[currentIndex];
     setStatus('Moving ' + (currentIndex + 1) + '/' + commands.length + ': ' + cmd.dist + 'ft ' + dirLabels[cmd.dir], 'moving');
+
+    // Update tank control center display during execution
+    const ctrlLabel = document.getElementById('ctrlLabel');
+    const ctrlQueue = document.getElementById('ctrlQueueDisplay');
+    if (ctrlLabel) ctrlLabel.textContent = 'MOVE';
+    if (ctrlQueue) ctrlQueue.innerHTML = '<div class="ctrl-queue-item">' + cmd.dist + '\' ' + dirLabels[cmd.dir] + '</div>';
 
     // Convert feet to meters for the robot command
     const distanceMeters = cmd.dist * FEET_TO_METERS;
@@ -283,14 +305,23 @@ function updateXboxStatus(connected) {
   robotXboxConnected = connected;
   const statusEl = document.getElementById('xboxStatus');
   const stateEl = document.getElementById('xboxState');
+  const chipEl = document.getElementById('xboxChip');
 
-  if (statusEl && stateEl) {
+  if (stateEl) {
+    stateEl.textContent = connected ? 'OK' : '--';
+  }
+  if (statusEl) {
     if (connected) {
       statusEl.classList.add('connected');
-      stateEl.textContent = 'Connected';
     } else {
       statusEl.classList.remove('connected');
-      stateEl.textContent = 'Disconnected';
+    }
+  }
+  if (chipEl) {
+    if (connected) {
+      chipEl.classList.add('online');
+    } else {
+      chipEl.classList.remove('online');
     }
   }
 }
