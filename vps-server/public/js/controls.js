@@ -592,3 +592,68 @@ function pollGamepadForPtz() {
 
 // Poll gamepad at 60fps for responsive PTZ control
 setInterval(pollGamepadForPtz, 16);
+
+// ============ SERIAL POPUP ============
+function toggleSerialPopup() {
+  const popup = document.getElementById('serialPopup');
+  if (popup) {
+    popup.classList.toggle('open');
+  }
+}
+
+// Make serial popup draggable
+(function() {
+  const popup = document.getElementById('serialPopup');
+  const header = document.getElementById('serialPopupHeader');
+  if (!popup || !header) return;
+
+  let isDragging = false;
+  let offsetX = 0, offsetY = 0;
+
+  header.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    offsetX = e.clientX - popup.offsetLeft;
+    offsetY = e.clientY - popup.offsetTop;
+    popup.style.transition = 'none';
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    let x = e.clientX - offsetX;
+    let y = e.clientY - offsetY;
+    // Keep within viewport
+    x = Math.max(0, Math.min(x, window.innerWidth - popup.offsetWidth));
+    y = Math.max(0, Math.min(y, window.innerHeight - popup.offsetHeight));
+    popup.style.left = x + 'px';
+    popup.style.top = y + 'px';
+  });
+
+  document.addEventListener('mouseup', function() {
+    isDragging = false;
+  });
+
+  // Touch support for mobile
+  header.addEventListener('touchstart', function(e) {
+    isDragging = true;
+    const touch = e.touches[0];
+    offsetX = touch.clientX - popup.offsetLeft;
+    offsetY = touch.clientY - popup.offsetTop;
+    popup.style.transition = 'none';
+  });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    let x = touch.clientX - offsetX;
+    let y = touch.clientY - offsetY;
+    x = Math.max(0, Math.min(x, window.innerWidth - popup.offsetWidth));
+    y = Math.max(0, Math.min(y, window.innerHeight - popup.offsetHeight));
+    popup.style.left = x + 'px';
+    popup.style.top = y + 'px';
+  });
+
+  document.addEventListener('touchend', function() {
+    isDragging = false;
+  });
+})();

@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/styles.css?v=5">
+<link rel="stylesheet" href="css/styles.css?v=11">
 </head>
 <body>
 <div class="container">
@@ -125,12 +125,10 @@
       </div>
     </div>
 
-    <!-- SERIAL + COMING SOON row -->
-    <div class="serial-coming-row">
-      <div class="serial-section cam-serial">
-        <div class="section-header"><span class="emoji">&#128187;</span> SERIAL</div>
-        <div class="serial" id="serial"></div>
-        <input type="text" id="cmd" placeholder="Send command...">
+    <!-- COMING SOON row with Serial trigger -->
+    <div class="coming-soon-row">
+      <div class="serial-trigger" onclick="toggleSerialPopup()">
+        <span class="emoji">&#128187;</span> SERIAL
       </div>
       <div class="coming-soon-cams">
         <div class="section-header"><span class="emoji">&#128301;</span> COMING SOON</div>
@@ -144,6 +142,7 @@
         </div>
       </div>
     </div>
+
   </div>
 
   <!-- LIGHT CAM - Spanning 2 columns, compact inline layout -->
@@ -326,6 +325,16 @@
     </div>
 
   </div>
+</div>
+
+<!-- Serial Monitor Popup (draggable, outside container for full window drag) -->
+<div class="serial-popup" id="serialPopup">
+  <div class="serial-popup-header" id="serialPopupHeader">
+    <span class="emoji">&#128187;</span> SERIAL MONITOR
+    <span class="serial-popup-close" onclick="toggleSerialPopup()">&times;</span>
+  </div>
+  <div class="serial" id="serial"></div>
+  <input type="text" id="cmd" placeholder="Send command...">
 </div>
 
 <!-- Load JavaScript files in correct order: controls defines updateXboxStatus, websocket calls it -->

@@ -51,9 +51,9 @@ body {
   grid-area: lightcam;
   display: flex;
   flex-direction: row;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
-  padding: 8px;
+  padding: 0;
   gap: 0;
   min-height: 0;
   overflow: hidden;
@@ -361,11 +361,11 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   padding: 0;
 }
 
-/* Camera wrapper - 3D embossed frame - flex to fill available space */
+/* Camera wrapper - 3D embossed frame - shrunk 35% from original */
 .cam-wrapper {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 0.65;
   min-height: 0;
   background: transparent;
   border-radius: 0;
@@ -1238,17 +1238,17 @@ input[type="text"] {
   width: auto;
   height: 100%;
   max-height: 100%;
-  aspect-ratio: 16/9;
+  aspect-ratio: 1;
   flex-shrink: 0;
 }
 .light-cam-container.large .light-cam-video {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: 50%;
 }
 .light-cam-container.large .light-cam-video video,
 .light-cam-container.large .light-cam-video img {
-  border-radius: 12px;
+  border-radius: 50%;
 }
 .light-toggle-btn {
   position: static;
@@ -2553,29 +2553,40 @@ input[type="text"] {
   justify-content: center;
   gap: 8px;
 }
-/* Serial + Coming Soon side by side - equal columns */
-.serial-coming-row {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
+/* Coming Soon row with Serial trigger */
+.coming-soon-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 4px;
   width: 100%;
   flex-shrink: 0;
-  min-height: 90px;
-  max-height: 100px;
+  padding: 4px;
+  align-items: center;
+  align-content: flex-start;
 }
-.serial-coming-row > .serial-section,
-.serial-coming-row > .serial-section.cam-serial {
-  flex: 1 1 48% !important;
-  width: 48% !important;
-  max-width: 48% !important;
-  min-width: 0 !important;
+.serial-trigger {
+  padding: 6px 12px;
+  background: linear-gradient(145deg, #2a4a3a, #1a3028);
+  border: 2px solid rgba(0, 255, 136, 0.5);
+  border-radius: 8px;
+  color: #00ff88;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(0, 255, 136, 0.2);
 }
-.serial-coming-row > .coming-soon-cams {
-  flex: 1 1 48% !important;
-  width: 48% !important;
-  max-width: 48% !important;
-  min-width: 0 !important;
+.serial-trigger:hover {
+  background: linear-gradient(145deg, #3a5a4a, #2a4038);
+  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.4);
+  transform: translateY(-1px);
+}
+.coming-soon-row > .coming-soon-cams {
+  flex: 1;
   padding: 4px;
   background: linear-gradient(145deg, rgba(40, 60, 90, 0.3), rgba(20, 40, 70, 0.3));
   border-radius: 8px;
@@ -2585,6 +2596,79 @@ input[type="text"] {
   align-items: center;
   align-content: flex-start;
   gap: 4px;
+}
+
+/* Serial Monitor Popup */
+.serial-popup {
+  display: none;
+  position: fixed;
+  top: 100px;
+  left: 100px;
+  width: 350px;
+  height: 200px;
+  background: rgba(20, 35, 55, 0.95);
+  backdrop-filter: blur(10px);
+  border: 3px solid rgba(0, 255, 136, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 255, 136, 0.2);
+  z-index: 1000;
+  flex-direction: column;
+  overflow: hidden;
+}
+.serial-popup.open {
+  display: flex;
+}
+.serial-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: linear-gradient(145deg, #1a3028, #0d1a14);
+  color: #00ff88;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: move;
+  user-select: none;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.3);
+}
+.serial-popup-close {
+  font-size: 20px;
+  cursor: pointer;
+  color: #ff6b6b;
+  line-height: 1;
+  padding: 0 4px;
+  transition: all 0.15s;
+}
+.serial-popup-close:hover {
+  color: #ff4444;
+  transform: scale(1.2);
+}
+.serial-popup .serial {
+  flex: 1;
+  background: #0a0a0a;
+  margin: 8px;
+  margin-bottom: 4px;
+  padding: 6px;
+  border-radius: 6px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: #51cf66;
+}
+.serial-popup input {
+  margin: 0 8px 8px 8px;
+  padding: 8px;
+  background: #0a0a0a;
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  border-radius: 6px;
+  color: #51cf66;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+}
+.serial-popup input:focus {
+  outline: none;
+  border-color: #00ff88;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
 }
 .coming-soon-cams .section-header {
   margin-bottom: 0;

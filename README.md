@@ -106,14 +106,15 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 - 🔋 **Battery Monitor** - Live voltage + percentage (24V LiFePO4 8S)
 - 🌡️ **Temperature Display** - Driver and motor temps in Fahrenheit
 - ⚡ **Motor Stats** - Left/Right speed (RPM), torque (Amps), encoder position
-- 🖥️ **Serial Monitor** - Watch Teensy debug output in browser
+- 🖥️ **Serial Monitor Popup** - Draggable floating window for Teensy debug output
 - 💻 **Code Editor** - Edit Teensy/ESP32/Driver code with syntax highlighting
 - ⚡ **Compile & Upload** - Wireless firmware updates via browser
 - 📡 **Command Input** - Send custom commands to robot
 - 🔄 **Reset Button** - Soft reset (simulates Xbox A button)
-- 📷 **Camera Feeds** - Dual IP camera streams with PTZ control
+- 📷 **Camera Feeds** - Dual IP camera streams with PTZ control + round light cam
 - 🔋 **System Status** - ESP32, Teensy, ZLAC drivers health
 - 🛰️ **Future Sensors** - Jetson Orin, LiDAR, GPS, PIR, OpenArm placeholders
+- 🗺️ **Position Tracker** - Real-time odometry map with trip distance and heading
 
 **Tech:** Glassmorphism CSS (backdrop-filter, blur, transparency), WebSocket real-time updates, Monaco editor integration
 
