@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.16"
+#define TEENSY_VERSION "3.25"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -27,6 +27,7 @@
 // Software acceleration (RPM change per update cycle)
 #define ACCEL_RATE_NORMAL 4      // Fast ramp for responsive feel
 #define ACCEL_RATE_TURN 4        // Same as normal - no slow turn mode
+#define ACCEL_RATE_TURBO 15      // Faster ramp for turbo mode
 
 // Hardware acceleration (ms to reach target - higher = slower)
 #define DRIVER_ACCEL_NORMAL 400  // Fast hardware accel

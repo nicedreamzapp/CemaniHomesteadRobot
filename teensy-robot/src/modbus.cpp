@@ -212,8 +212,9 @@ void setDriverSpeed(uint8_t driverID, int16_t speed) {
     speed = -speed;
   }
 
-  if (speed > MAX_SPEED_RPM) speed = MAX_SPEED_RPM;
-  if (speed < -MAX_SPEED_RPM) speed = -MAX_SPEED_RPM;
+  // Use TURBO_SPEED_RPM as absolute max - turbo speeds are already clamped in main.cpp
+  if (speed > TURBO_SPEED_RPM) speed = TURBO_SPEED_RPM;
+  if (speed < -TURBO_SPEED_RPM) speed = -TURBO_SPEED_RPM;
 
   Serial.printf("[DRIVER%d] Setting speed: %d RPM (orig: %d)\n", driverID, speed, originalSpeed);
   sendModbusSyncVelocity(driverID, speed, speed);

@@ -24,7 +24,7 @@ extern int16_t targetLeftSpeed, targetRightSpeed;
 // Joystick control
 float applyJoystickCurve(float input);
 void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpeed, bool turboActive = false);
-int16_t rampSpeed(int16_t current, int16_t target);
+int16_t rampSpeed(int16_t current, int16_t target, bool turboActive = false);
 
 // Discrete movement commands
 void startRelativeMove(char direction, int distanceCm);

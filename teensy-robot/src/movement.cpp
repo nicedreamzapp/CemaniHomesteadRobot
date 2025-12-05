@@ -69,8 +69,16 @@ void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpe
   rightSpeed = constrain(rightSpeed, -clampMax, clampMax);
 }
 
-int16_t rampSpeed(int16_t current, int16_t target) {
-  int16_t rate = isTurning ? ACCEL_RATE_TURN : ACCEL_RATE_NORMAL;
+int16_t rampSpeed(int16_t current, int16_t target, bool turboActive) {
+  // Use faster ramp rate when turbo is active for quicker acceleration
+  int16_t rate;
+  if (turboActive && !isTurning) {
+    rate = ACCEL_RATE_TURBO;  // Fast ramp for turbo
+  } else if (isTurning) {
+    rate = ACCEL_RATE_TURN;
+  } else {
+    rate = ACCEL_RATE_NORMAL;
+  }
 
   if (current < target) {
     current += rate;
@@ -79,6 +87,12 @@ int16_t rampSpeed(int16_t current, int16_t target) {
     current -= rate;
     if (current < target) current = target;
   }
+
+  // SAFETY: Hard clamp to max allowed speed based on turbo state
+  // This ensures speed immediately drops when turbo is released
+  int16_t maxAllowed = turboActive ? TURBO_SPEED_RPM : MAX_SPEED_RPM;
+  current = constrain(current, -maxAllowed, maxAllowed);
+
   return current;
 }
 

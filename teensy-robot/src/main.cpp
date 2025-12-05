@@ -122,13 +122,15 @@ void loop() {
           else if (strcmp(name, "LY") == 0) currentLY = val;
           else if (strcmp(name, "RT") == 0) {
             rightTriggerValue = val;
-            // Log turbo activation
+            // Log turbo activation - send to both USB and ESP32
             static bool wasTurbo = false;
             bool isTurbo = (val >= TURBO_TRIGGER_THRESHOLD);
             if (isTurbo && !wasTurbo) {
               Serial.println("[TURBO] Activated!");
+              Serial1.println("TURBO,ON");
             } else if (!isTurbo && wasTurbo) {
               Serial.println("[TURBO] Deactivated");
+              Serial1.println("TURBO,OFF");
             }
             wasTurbo = isTurbo;
           }
@@ -210,8 +212,13 @@ void loop() {
       calculateTankSpeeds(currentLX, currentLY, targetLeftSpeed, targetRightSpeed, turboActive);
 
       // No more mode switching - same fast response for turning and driving
-      int16_t newLeft = rampSpeed(lastLeftSpeed, targetLeftSpeed);
-      int16_t newRight = rampSpeed(lastRightSpeed, targetRightSpeed);
+      int16_t newLeft = rampSpeed(lastLeftSpeed, targetLeftSpeed, turboActive);
+      int16_t newRight = rampSpeed(lastRightSpeed, targetRightSpeed, turboActive);
+
+      // CRITICAL: Hard clamp output speeds based on turbo state
+      int16_t maxSpeed = turboActive ? TURBO_SPEED_RPM : MAX_SPEED_RPM;
+      newLeft = constrain(newLeft, -maxSpeed, maxSpeed);
+      newRight = constrain(newRight, -maxSpeed, maxSpeed);
 
       // Always send 0 when target is 0 to ensure motors stop
       // Otherwise only send if change > 2 to reduce noise
@@ -234,7 +241,10 @@ void loop() {
         if (shouldStop) {
           Serial.println("[MOTOR] Joystick centered - motors STOPPED");
         } else if (abs(newLeft) > 5 || abs(newRight) > 5) {
-          Serial.printf("L:%+4d  R:%+4d RPM  %s\n", newLeft, newRight, isTurning ? "[TURN]" : "");
+          bool turbo = (rightTriggerValue >= TURBO_TRIGGER_THRESHOLD);
+          Serial.printf("L:%+4d  R:%+4d RPM  %s%s\n", newLeft, newRight,
+            isTurning ? "[TURN]" : "", turbo ? "[TURBO]" : "");
+          Serial1.printf("SPEED,L:%d,R:%d%s\n", newLeft, newRight, turbo ? ",TURBO" : "");
         }
       }
     }
