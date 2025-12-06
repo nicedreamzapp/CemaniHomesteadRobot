@@ -20,6 +20,27 @@ bool controllerConnected = false;
 long currentLX = 0, currentLY = 0;
 int16_t targetLeftSpeed = 0, targetRightSpeed = 0;
 
+// Aircraft-grade full stop - sends multiple zero commands to ensure complete stop
+void fullStopMotors() {
+  Serial.println("[STOP] Aircraft-grade motor stop - triple zero command");
+
+  // Send stop commands 3 times with delays to ensure they are received
+  for (int i = 0; i < 3; i++) {
+    setDriverSpeed(1, 0);
+    delay(20);
+    setDriverSpeed(2, 0);
+    delay(20);
+  }
+
+  // Reset all movement state
+  targetLeftSpeed = 0;
+  targetRightSpeed = 0;
+  discreteMoveActive = false;
+  discreteMovePhase = 0;
+
+  Serial.println("[STOP] Motors confirmed stopped");
+}
+
 // Apply exponential curve to joystick input for finer control at low values
 float applyJoystickCurve(float input) {
   float sign = (input >= 0) ? 1.0f : -1.0f;
@@ -141,9 +162,9 @@ void startRelativeMove(char direction, int distanceCm) {
     discreteMoveBackward = false;
     discreteMovePhase = 1;
     Serial.println("[MOVE] Turn LEFT 90");
-    setDriverSpeed(1, -DISCRETE_TURN_RPM);
+    setDriverSpeed(1, DISCRETE_TURN_RPM);
     delay(20);  // Give Modbus bus time between commands
-    setDriverSpeed(2, DISCRETE_TURN_RPM);
+    setDriverSpeed(2, -DISCRETE_TURN_RPM);
     Serial1.println("MOVE_STATUS,TURN_LEFT,90");
   }
   else if (direction == 'R') {
@@ -152,9 +173,9 @@ void startRelativeMove(char direction, int distanceCm) {
     discreteMoveBackward = false;
     discreteMovePhase = 1;
     Serial.println("[MOVE] Turn RIGHT 90");
-    setDriverSpeed(1, DISCRETE_TURN_RPM);
+    setDriverSpeed(1, -DISCRETE_TURN_RPM);
     delay(20);  // Give Modbus bus time between commands
-    setDriverSpeed(2, -DISCRETE_TURN_RPM);
+    setDriverSpeed(2, DISCRETE_TURN_RPM);
     Serial1.println("MOVE_STATUS,TURN_RIGHT,90");
   }
   else {
@@ -238,11 +259,8 @@ void updateDiscreteMove() {
                       discreteMoveBackward ? "backward" : "forward");
         Serial1.printf("MOVE_STATUS,MOVING,%d\n", discreteDistanceCm);
       } else {
-        // All done
-        setDriverSpeed(1, 0);
-        setDriverSpeed(2, 0);
-        discreteMoveActive = false;
-        discreteMovePhase = 0;
+        // All done - use aircraft-grade full stop
+        fullStopMotors();
         Serial.println("[MOVE] Complete!");
         Serial1.println("MOVE_COMPLETE");
       }
@@ -252,11 +270,8 @@ void updateDiscreteMove() {
     // Moving phase
     uint32_t moveDuration = abs(discreteDistanceCm) * MOVE_MS_PER_CM;
     if (elapsed >= moveDuration) {
-      // Move complete - stop motors
-      setDriverSpeed(1, 0);
-      setDriverSpeed(2, 0);
-      discreteMoveActive = false;
-      discreteMovePhase = 0;
+      // Move complete - use aircraft-grade full stop
+      fullStopMotors();
       Serial.printf("[MOVE] Move complete (%lu ms)\n", elapsed);
       Serial1.println("MOVE_COMPLETE");
     }

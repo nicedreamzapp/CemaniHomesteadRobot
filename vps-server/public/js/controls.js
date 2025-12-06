@@ -1,88 +1,78 @@
 // ============ NAVIGATION CONTROL ============
-console.log('[CONTROLS.JS] LOADED - Version 2024-12-04');
-let selectedDir = null;
-let selectedDist = null;
-let commandQueue = [];
+console.log('[CONTROLS.JS] LOADED - Version 2024-12-05-v7');
+let currentDir = null;
+let currentDist = null;
 let gridOffsetX = 0;
 let gridOffsetY = 0;
 let robotHeading = 0;
 
 const dirLabels = { F: 'FWD', B: 'BACK', L: 'LEFT', R: 'RIGHT' };
-const PIXELS_PER_FOOT = 13;  // Scaled for display
+const PIXELS_PER_FOOT = 13;
 const FEET_TO_METERS = 0.3048;
 
 function updateDisplay() {
-  document.getElementById('currentDir').textContent = selectedDir ? dirLabels[selectedDir] : '--';
+  // Update hidden element for compatibility
+  document.getElementById('currentDir').textContent = currentDir ? dirLabels[currentDir] : '--';
 
-  // Update direction buttons (works with compass-dir, ctrl-dir-btn, ctrl-round-btn, tank-steer-btn, tank-dir-btn)
+  // Highlight active direction button
   document.querySelectorAll('.compass-dir, .ctrl-dir-btn, .ctrl-round-btn, .tank-steer-btn, .tank-dir-btn').forEach(d => {
     d.classList.remove('active');
   });
-  if (selectedDir) {
-    const el = document.getElementById('dir' + selectedDir);
-    if (el) {
-      el.classList.add('active');
-    }
+  if (currentDir) {
+    const el = document.getElementById('dir' + currentDir);
+    if (el) el.classList.add('active');
   }
 
-  // Update center display - queue shown inside chassis
-  updateChassisQueueDisplay();
-
+  // Highlight active distance button
   document.querySelectorAll('.dist-btn').forEach(d => {
     d.style.background = 'rgba(81, 207, 102, 0.2)';
     d.style.color = '#51cf66';
   });
-  if (selectedDist) {
+  if (currentDist) {
     document.querySelectorAll('.dist-btn').forEach(d => {
-      if (parseFloat(d.dataset.dist) === selectedDist) {
+      if (parseFloat(d.dataset.dist) === currentDist) {
         d.style.background = '#51cf66';
         d.style.color = '#000';
       }
     });
   }
 
-  updateQueueDisplay();
+  // Update chassis display
+  updateChassisDisplay();
 
-  if (commandQueue.length > 0) {
-    setStatus(commandQueue.length + ' command(s) queued - Press GO', 'idle');
-  } else if (selectedDir && selectedDist) {
-    setStatus(selectedDist + 'ft ' + dirLabels[selectedDir] + ' - Tap again to add, or GO', 'idle');
-  } else if (selectedDir) {
-    setStatus('Direction: ' + dirLabels[selectedDir] + ' - Now tap distance', 'idle');
+  // Update status message
+  if (currentDir && currentDist) {
+    setStatus(dirLabels[currentDir] + ' ' + currentDist + 'ft - Press GO', 'idle');
+  } else if (currentDir) {
+    setStatus(dirLabels[currentDir] + ' - Tap distance', 'idle');
+  } else if (currentDist) {
+    setStatus(currentDist + 'ft - Tap direction', 'idle');
   } else {
-    setStatus('Tap direction, then distance', 'idle');
+    setStatus('Tap direction or distance', 'idle');
   }
 }
 
-function updateQueueDisplay() {
-  // Legacy - kept for compatibility
-}
-
-function updateChassisQueueDisplay() {
-  const ctrlQueue = document.getElementById('ctrlQueueDisplay');
-  const ctrlLabel = document.getElementById('ctrlLabel');
-  if (!ctrlQueue || !ctrlLabel) return;
-
-  if (commandQueue.length === 0) {
-    ctrlLabel.textContent = 'CEMANI';
-    ctrlQueue.innerHTML = '';
+function updateChassisDisplay() {
+  const chassis = document.getElementById('ctrlQueueDisplay');
+  if (!chassis) {
+    console.log('[CHASSIS] Element not found!');
     return;
   }
 
-  // Show queue count in label
-  ctrlLabel.textContent = commandQueue.length + ' CMD';
-
-  // Show compact queue items inside chassis
+  // Always show what's selected in the chassis
   let html = '';
-  commandQueue.forEach((cmd, i) => {
-    html += '<div class="ctrl-queue-item">' + cmd.dist + '\' ' + cmd.dir + '</div>';
-  });
-  ctrlQueue.innerHTML = html;
+  if (currentDir) {
+    html += '<div class="tank-cmd-line">' + dirLabels[currentDir] + '</div>';
+  }
+  if (currentDist) {
+    html += '<div class="tank-cmd-line">' + currentDist + '\'</div>';
+  }
+  chassis.innerHTML = html;
+  console.log('[CHASSIS] Updated:', html);
 }
 
 function removeFromQueue(index) {
-  commandQueue.splice(index, 1);
-  updateDisplay();
+  // Legacy - no longer used
 }
 
 function updateRadarRobot() {
@@ -99,114 +89,87 @@ function setStatus(text, type) {
 }
 
 function selectDirection(dir) {
-  selectedDir = dir;
+  currentDir = dir;
   updateDisplay();
 }
 
 function selectDistance(distance) {
-  if (!selectedDir) {
-    setStatus('Tap a direction first!', 'error');
-    return;
-  }
-
-  commandQueue.push({ dir: selectedDir, dist: distance });
-
-  const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#74c0fc">[QUEUE] Added ' + distance + 'ft ' + dirLabels[selectedDir] + '</span><br>';
-  serialDiv.scrollTop = serialDiv.scrollHeight;
-
-  selectedDir = null;
-  selectedDist = null;
+  currentDist = distance;
   updateDisplay();
 }
 
 function executeQueue() {
-  if (commandQueue.length === 0) {
-    setStatus('No commands queued!', 'error');
+  // Must have both direction and distance
+  if (!currentDir || !currentDist) {
+    setStatus('Select direction and distance first!', 'error');
     return;
   }
 
-  const commands = [...commandQueue];
-  commandQueue = [];
+  // Save the command
+  const cmd = { dir: currentDir, dist: currentDist };
 
   const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#51cf66">[GO] Executing ' + commands.length + ' command(s)...</span><br>';
+  serialDiv.innerHTML += '<span style="color:#51cf66">[GO] Executing ' + dirLabels[cmd.dir] + ' ' + cmd.dist + 'ft</span><br>';
   serialDiv.scrollTop = serialDiv.scrollHeight;
 
-  setStatus('EXECUTING ' + commands.length + ' commands...', 'moving');
+  setStatus('EXECUTING ' + dirLabels[cmd.dir] + ' ' + cmd.dist + 'ft...', 'moving');
 
-  let currentIndex = 0;
-
-  function executeNext() {
-    if (currentIndex >= commands.length) {
-      setStatus('Completed ' + commands.length + ' commands', 'idle');
-      selectedDir = null;
-      selectedDist = null;
-      // Restore CEMANI label after completion
-      const ctrlLabel = document.getElementById('ctrlLabel');
-      const ctrlQueue = document.getElementById('ctrlQueueDisplay');
-      if (ctrlLabel) ctrlLabel.textContent = 'CEMANI';
-      if (ctrlQueue) ctrlQueue.innerHTML = '';
-      updateDisplay();
-      return;
-    }
-
-    const cmd = commands[currentIndex];
-    setStatus('Moving ' + (currentIndex + 1) + '/' + commands.length + ': ' + cmd.dist + 'ft ' + dirLabels[cmd.dir], 'moving');
-
-    // Update tank control center display during execution
-    const ctrlLabel = document.getElementById('ctrlLabel');
-    const ctrlQueue = document.getElementById('ctrlQueueDisplay');
-    if (ctrlLabel) ctrlLabel.textContent = 'MOVE';
-    if (ctrlQueue) ctrlQueue.innerHTML = '<div class="ctrl-queue-item">' + cmd.dist + '\' ' + dirLabels[cmd.dir] + '</div>';
-
-    // Convert feet to meters for the robot command
-    const distanceMeters = cmd.dist * FEET_TO_METERS;
-    ws.send(JSON.stringify({
-      type: 'move_command',
-      distance: distanceMeters,
-      direction: cmd.dir
-    }));
-
-    serialDiv.innerHTML += '<span style="color:#51cf66">[MOVE] ' + cmd.dist + 'ft ' + dirLabels[cmd.dir] + '</span><br>';
-    serialDiv.scrollTop = serialDiv.scrollHeight;
-
-    const movePixels = cmd.dist * PIXELS_PER_FOOT;
-    const headingRad = robotHeading * Math.PI / 180;
-
-    if (cmd.dir === 'F') {
-      gridOffsetX += Math.sin(headingRad) * movePixels;
-      gridOffsetY -= Math.cos(headingRad) * movePixels;
-    } else if (cmd.dir === 'B') {
-      gridOffsetX -= Math.sin(headingRad) * movePixels;
-      gridOffsetY += Math.cos(headingRad) * movePixels;
-    } else if (cmd.dir === 'L') {
-      robotHeading -= 90;
-    } else if (cmd.dir === 'R') {
-      robotHeading += 90;
-    }
-    updateRadarRobot();
-
-    let totalTime;
-    if (cmd.dir === 'L' || cmd.dir === 'R') {
-      totalTime = 90 * 100 + 500;
-    } else {
-      totalTime = cmd.dist * 100 * 200 + 500;
-    }
-
-    currentIndex++;
-    setTimeout(executeNext, totalTime);
+  // Show command in YELLOW (executing)
+  const chassis = document.getElementById('ctrlQueueDisplay');
+  if (chassis) {
+    chassis.innerHTML = '<div class="tank-cmd-line executing">' + dirLabels[cmd.dir] + '</div><div class="tank-cmd-line executing">' + cmd.dist + '\'</div>';
   }
 
-  executeNext();
-  updateDisplay();
+  // Convert feet to meters for the robot command
+  const distanceMeters = cmd.dist * FEET_TO_METERS;
+  ws.send(JSON.stringify({
+    type: 'move_command',
+    distance: distanceMeters,
+    direction: cmd.dir
+  }));
+
+  // Update radar/position tracker
+  const movePixels = cmd.dist * PIXELS_PER_FOOT;
+  const headingRad = robotHeading * Math.PI / 180;
+
+  if (cmd.dir === 'F') {
+    gridOffsetX += Math.sin(headingRad) * movePixels;
+    gridOffsetY -= Math.cos(headingRad) * movePixels;
+  } else if (cmd.dir === 'B') {
+    gridOffsetX -= Math.sin(headingRad) * movePixels;
+    gridOffsetY += Math.cos(headingRad) * movePixels;
+  } else if (cmd.dir === 'L') {
+    robotHeading -= 90;
+  } else if (cmd.dir === 'R') {
+    robotHeading += 90;
+  }
+  updateRadarRobot();
+
+  // Calculate execution time
+  let totalTime;
+  if (cmd.dir === 'L' || cmd.dir === 'R') {
+    totalTime = 90 * 100 + 500;
+  } else {
+    totalTime = cmd.dist * 100 * 200 + 500;
+  }
+
+  // Complete after execution time
+  setTimeout(function() {
+    setStatus('Complete', 'idle');
+    currentDir = null;
+    currentDist = null;
+    const chassis = document.getElementById('ctrlQueueDisplay');
+    if (chassis) chassis.innerHTML = '';
+    updateDisplay();
+  }, totalTime);
 }
 
 function emergencyStop() {
   ws.send(JSON.stringify({ type: 'emergency_stop' }));
-  selectedDir = null;
-  selectedDist = null;
-  commandQueue = [];
+  currentDir = null;
+  currentDist = null;
+  const chassis = document.getElementById('ctrlQueueDisplay');
+  if (chassis) chassis.innerHTML = '';
   updateDisplay();
 }
 
@@ -214,30 +177,104 @@ function emergencyStop() {
 let lightOn = false;
 function toggleLight() {
   lightOn = !lightOn;
+  // Update old button if exists
   const btn = document.getElementById('lightToggleBtn');
   if (btn) {
     btn.classList.toggle('on', lightOn);
   }
-  // Send light command to server
-  if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'light_toggle', state: lightOn }));
+  // Update new light switch overlay
+  const lightSwitch = document.getElementById('lightSwitch');
+  if (lightSwitch) {
+    lightSwitch.classList.toggle('on', lightOn);
+  }
+  // Use the v380Light function from websocket.js (0 = off, 1 = on)
+  if (typeof v380Light === 'function') {
+    v380Light(lightOn ? 1 : 0);
+  } else if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
+    // Fallback to direct websocket with correct format
+    ws.send(JSON.stringify({ type: 'v380_light', state: lightOn ? 1 : 0 }));
   }
   console.log('[LIGHT] Toggled:', lightOn ? 'ON' : 'OFF');
 }
 
+// ============ CODE POPUP ============
+function toggleCodePopup() {
+  const popup = document.getElementById('codePopup');
+  if (popup) {
+    popup.classList.toggle('open');
+  }
+}
+
+// Make code popup draggable
+(function() {
+  const popup = document.getElementById('codePopup');
+  const header = document.getElementById('codePopupHeader');
+  if (!popup || !header) return;
+
+  let isDragging = false;
+  let offsetX = 0, offsetY = 0;
+
+  header.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    offsetX = e.clientX - popup.offsetLeft;
+    offsetY = e.clientY - popup.offsetTop;
+    popup.style.transition = 'none';
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    let x = e.clientX - offsetX;
+    let y = e.clientY - offsetY;
+    x = Math.max(0, Math.min(x, window.innerWidth - popup.offsetWidth));
+    y = Math.max(0, Math.min(y, window.innerHeight - popup.offsetHeight));
+    popup.style.left = x + 'px';
+    popup.style.top = y + 'px';
+  });
+
+  document.addEventListener('mouseup', function() {
+    isDragging = false;
+  });
+
+  // Touch support
+  header.addEventListener('touchstart', function(e) {
+    isDragging = true;
+    const touch = e.touches[0];
+    offsetX = touch.clientX - popup.offsetLeft;
+    offsetY = touch.clientY - popup.offsetTop;
+    popup.style.transition = 'none';
+  });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    let x = touch.clientX - offsetX;
+    let y = touch.clientY - offsetY;
+    x = Math.max(0, Math.min(x, window.innerWidth - popup.offsetWidth));
+    y = Math.max(0, Math.min(y, window.innerHeight - popup.offsetHeight));
+    popup.style.left = x + 'px';
+    popup.style.top = y + 'px';
+  });
+
+  document.addEventListener('touchend', function() {
+    isDragging = false;
+  });
+})();
+
 function clearQueue() {
-  selectedDir = null;
-  selectedDist = null;
-  commandQueue = [];
+  currentDir = null;
+  currentDist = null;
   gridOffsetX = 0;
   gridOffsetY = 0;
   robotHeading = 0;
+  const chassis = document.getElementById('ctrlQueueDisplay');
+  if (chassis) chassis.innerHTML = '';
   updateRadarRobot();
   updateDisplay();
-  setStatus('Cleared. Tap direction to start.', 'idle');
+  setStatus('Cleared', 'idle');
 
   const serialDiv = document.getElementById('serial');
-  serialDiv.innerHTML += '<span style="color:#74c0fc">[CLEAR] Queue cleared, radar reset</span><br>';
+  serialDiv.innerHTML += '<span style="color:#74c0fc">[CLEAR] Cleared</span><br>';
   serialDiv.scrollTop = serialDiv.scrollHeight;
 }
 

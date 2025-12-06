@@ -18,7 +18,7 @@ body {
 .container {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) minmax(280px, 320px) minmax(260px, 300px);
-  grid-template-rows: 50px minmax(0, 1fr) minmax(200px, 280px);
+  grid-template-rows: 50px auto 1fr;
   grid-template-areas:
     "header header header"
     "cams middle sidebar"
@@ -40,15 +40,28 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 .sidebar {
   grid-area: sidebar;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 .light-cam-wide {
   grid-area: lightcam;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  overflow: hidden;
+}
+/* Light cam now goes inside sidebar */
+.light-cam-inline {
+  flex: 1;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -803,15 +816,17 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  max-height: 50px;
-  overflow: hidden;
 }
-.ctrl-queue-item {
-  font-size: 7px;
-  padding: 1px 4px;
-  background: rgba(255, 193, 7, 0.2);
-  border-radius: 3px;
-  white-space: nowrap;
+.tank-cmd-line {
+  font-size: 14px;
+  font-weight: bold;
+  color: #00bfff;
+  text-shadow: 0 0 10px #00bfff, 0 0 20px #00bfff;
+  line-height: 1.4;
+}
+.tank-cmd-line.executing {
+  color: #ffd700;
+  text-shadow: 0 0 10px #ffd700, 0 0 20px #ffd700;
 }
 .ctrl-dir-btn {
   padding: 8px 6px;
@@ -1235,20 +1250,32 @@ input[type="text"] {
   padding: 0;
 }
 .light-cam-container.large {
-  width: auto;
+  position: relative;
+  width: 100%;
   height: 100%;
   max-height: 100%;
-  aspect-ratio: 1;
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .light-cam-container.large .light-cam-video {
   width: 100%;
   height: 100%;
+  aspect-ratio: 1;
   border-radius: 50%;
+  border: 4px solid rgba(255, 200, 50, 0.7);
+  box-shadow: 0 0 40px rgba(255, 200, 50, 0.5), inset 0 0 30px rgba(0, 0, 0, 0.8);
 }
 .light-cam-container.large .light-cam-video video,
 .light-cam-container.large .light-cam-video img {
   border-radius: 50%;
+}
+.light-cam-container.large .light-switch {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 45px;
+  height: 45px;
 }
 .light-toggle-btn {
   position: static;
@@ -1904,9 +1931,11 @@ input[type="text"] {
     inset 0 -2px 0 rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   padding: 8px 6px;
+  gap: 4px;
+  overflow: visible;
 }
 /* Steering buttons (L/R) - round neon blue */
 .tank-steer-btn {
@@ -1964,12 +1993,16 @@ input[type="text"] {
 }
 /* Queue display inside chassis */
 .tank-queue {
-  font-size: 8px;
+  font-size: 14px;
   font-weight: bold;
-  color: #ffc107;
-  text-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
   text-align: center;
-  min-height: 12px;
+  min-height: 36px;
+  z-index: 100;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 .tank-label {
   font-size: 10px;
@@ -1977,6 +2010,7 @@ input[type="text"] {
   color: #00ff88;
   letter-spacing: 2px;
   text-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
+  margin-bottom: 4px;
 }
 
 /* Legacy EV styles (keep for compatibility) */
@@ -2585,6 +2619,13 @@ input[type="text"] {
   box-shadow: 0 4px 12px rgba(0, 255, 136, 0.4);
   transform: translateY(-1px);
 }
+.sidebar-triggers {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
 .coming-soon-row > .coming-soon-cams {
   flex: 1;
   padding: 4px;
@@ -2977,3 +3018,169 @@ input[type="text"] {
   color: #51cf66;
   text-shadow: 0 0 8px rgba(81, 207, 102, 0.6);
 }
+
+
+/* Light Switch - Overlay on Light Cam */
+.light-switch {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 100, 100, 0.6);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 10;
+}
+.light-switch:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: scale(1.1);
+}
+.light-switch-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 80, 80, 0.8);
+  box-shadow: 0 0 8px rgba(255, 80, 80, 0.6);
+  transition: all 0.2s;
+}
+.light-switch.on {
+  border-color: rgba(100, 255, 100, 0.8);
+}
+.light-switch.on .light-switch-indicator {
+  background: rgba(80, 255, 80, 0.9);
+  box-shadow: 0 0 15px rgba(80, 255, 80, 0.8);
+}
+
+/* Code Popup Content */
+.code-popup-content {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  overflow: hidden;
+}
+.code-popup-content .tabs {
+  margin-bottom: 0;
+}
+.code-popup-content .editor {
+  flex: 1;
+  min-height: 150px;
+}
+.code-popup-content .editor textarea {
+  height: 100%;
+}
+.code-popup-buttons {
+  display: flex;
+  gap: 8px;
+}
+.code-popup-buttons .btn {
+  flex: 1;
+  margin: 0;
+}
+
+
+
+/* Light Cam Inline - fills remaining space in middle column */
+.light-cam-section-inline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px;
+  min-height: 200px;
+}
+.light-cam-container-inline {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.light-cam-container-inline .light-cam-video {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #0a0a0a;
+  border: 4px solid rgba(255, 200, 50, 0.7);
+  box-shadow: 0 0 30px rgba(255, 200, 50, 0.4), inset 0 0 30px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+.light-cam-container-inline .light-cam-video video,
+.light-cam-container-inline .light-cam-video img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.light-cam-container-inline .light-switch {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  width: 40px;
+  height: 40px;
+}
+
+
+
+/* Code Popup - larger than serial popup */
+#codePopup {
+  width: 400px;
+  height: 350px;
+  top: 80px;
+  left: 150px;
+}
+#codePopup .code-popup-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  overflow: hidden;
+}
+#codePopup .tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+#codePopup .editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+#codePopup .editor textarea {
+  flex: 1;
+  width: 100%;
+  background: #0a0f14;
+  color: #00ff88;
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: monospace;
+  font-size: 11px;
+  resize: none;
+}
+#codePopup .code-popup-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+#codePopup .code-popup-buttons .btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 10px;
+  text-align: center;
+  cursor: pointer;
+}
+

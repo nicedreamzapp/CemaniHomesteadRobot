@@ -19,16 +19,26 @@
       "onvifPort": 5000,
       "username": "admin",
       "password": "your_password"
+    },
+    {
+      "id": 3,
+      "name": "V380 Light",
+      "ip": "192.168.1.XXX",
+      "rtspPort": 554,
+      "rtspPath": "/live/ch00_0",
+      "onvifPort": null,
+      "username": "",
+      "password": ""
     }
   ],
   "vps": {
-    "wsUrl": "ws://your-server.com",
+    "wsUrl": "ws://your-server.com:3001",
     "streamPort": 9999
   },
   "stream": {
-    "fps": 15,
-    "quality": 40,
-    "scale": "480:270",
+    "fps": 30,
+    "quality": 95,
+    "scale": "960:540",
     "useWebSocket": true
   }
 }

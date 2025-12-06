@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/styles.css?v=11">
+<link rel="stylesheet" href="css/styles.css?v=18">
 </head>
 <body>
 <div class="container">
@@ -125,11 +125,8 @@
       </div>
     </div>
 
-    <!-- COMING SOON row with Serial trigger -->
+    <!-- COMING SOON row -->
     <div class="coming-soon-row">
-      <div class="serial-trigger" onclick="toggleSerialPopup()">
-        <span class="emoji">&#128187;</span> SERIAL
-      </div>
       <div class="coming-soon-cams">
         <div class="section-header"><span class="emoji">&#128301;</span> COMING SOON</div>
         <div class="future-sensors horizontal">
@@ -143,13 +140,6 @@
       </div>
     </div>
 
-  </div>
-
-  <!-- LIGHT CAM - Spanning 2 columns, compact inline layout -->
-  <div class="light-cam-wide glass">
-    <div class="light-cam-container large">
-      <div id="cam3-video" class="light-cam-video"></div>
-    </div>
   </div>
 
   <!-- Middle: Drive System (merged with Robot Control) -->
@@ -255,15 +245,16 @@
       </div>
     </div>
 
-    <!-- XBOX CONTROLLER - status updated by websocket.js from robot telemetry -->
-    <div class="xbox-section">
-      <div class="xbox-status" id="xboxStatus">
-        <span class="xbox-icon">&#127918;</span>
-        <span class="xbox-label">Xbox Controller</span>
-        <span class="xbox-state" id="xboxState">--</span>
+  </div>
+
+  <!-- LIGHT CAM - spans middle and sidebar columns, fills remaining space -->
+  <div class="light-cam-wide glass">
+    <div class="light-cam-container large">
+      <div id="cam3-video" class="light-cam-video"></div>
+      <div class="light-switch" id="lightSwitch" onclick="toggleLight()">
+        <div class="light-switch-indicator" id="lightIndicator"></div>
       </div>
     </div>
-
   </div>
 
   <!-- Right: Position Tracker + Code -->
@@ -310,18 +301,23 @@
       <span id="odomY"></span>
     </div>
 
-    <!-- CODE EDITOR -->
-    <div class="code-section">
-      <div class="section-header"><span class="emoji">&#128187;</span> CODE</div>
-      <div class="tabs">
-        <div class="tab" data-tab="teensy">Teensy</div>
-        <div class="tab active" data-tab="esp32">ESP32</div>
+    <!-- XBOX CONTROLLER - moved from middle column -->
+    <div class="xbox-section">
+      <div class="xbox-status" id="xboxStatus">
+        <span class="xbox-icon">&#127918;</span>
+        <span class="xbox-label">Xbox Controller</span>
+        <span class="xbox-state" id="xboxState">--</span>
       </div>
-      <div class="editor">
-        <textarea id="editor" placeholder="// ESP32 code..."></textarea>
+    </div>
+
+    <!-- SERIAL and CODE triggers -->
+    <div class="sidebar-triggers">
+      <div class="serial-trigger" onclick="toggleSerialPopup()">
+        <span class="emoji">&#128187;</span> SERIAL
       </div>
-      <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
-      <div class="btn" id="flashPrebuiltBtn" style="background:linear-gradient(135deg,#74c0fc,#4da3f0);margin-top:4px;">FLASH PREBUILT</div>
+      <div class="serial-trigger" onclick="toggleCodePopup()">
+        <span class="emoji">&#128221;</span> CODE
+      </div>
     </div>
 
   </div>
@@ -337,9 +333,30 @@
   <input type="text" id="cmd" placeholder="Send command...">
 </div>
 
+<!-- Code Editor Popup (draggable) -->
+<div class="serial-popup" id="codePopup">
+  <div class="serial-popup-header" id="codePopupHeader">
+    <span class="emoji">&#128221;</span> WRITE CODE
+    <span class="serial-popup-close" onclick="toggleCodePopup()">&times;</span>
+  </div>
+  <div class="code-popup-content">
+    <div class="tabs">
+      <div class="tab" data-tab="teensy">Teensy</div>
+      <div class="tab active" data-tab="esp32">ESP32</div>
+    </div>
+    <div class="editor">
+      <textarea id="editor" placeholder="// ESP32 code..."></textarea>
+    </div>
+    <div class="code-popup-buttons">
+      <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
+      <div class="btn" id="flashPrebuiltBtn" style="background:linear-gradient(135deg,#74c0fc,#4da3f0);">FLASH PREBUILT</div>
+    </div>
+  </div>
+</div>
+
 <!-- Load JavaScript files in correct order: controls defines updateXboxStatus, websocket calls it -->
 <script src="js/telemetry.js"></script>
-<script src="js/controls.js"></script>
+<script src="js/controls.js?v=7"></script>
 <script src="js/websocket.js"></script>
 </body>
 </html>

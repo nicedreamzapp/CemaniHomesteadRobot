@@ -32,4 +32,7 @@ void startDiscreteMoveDirection(char direction, int distanceCm);
 void startDiscreteMove(int turnDegrees, int distanceCm);
 void updateDiscreteMove();
 
+// Aircraft-grade full stop - triple zero command for safety
+void fullStopMotors();
+
 #endif // MOVEMENT_H
