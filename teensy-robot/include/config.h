@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.29"
+#define TEENSY_VERSION "3.31"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -36,23 +36,21 @@
 #define TORQUE_NORMAL 1000       // Original value
 #define TORQUE_TURN 150          // Keep low for turns
 
-// ===== AEROSPACE-GRADE INPUT FILTERING =====
-// These values are designed to eliminate ALL noise even after hours of operation
-// Tuned for Xbox controllers which drift 30-50 raw units when worn
-#define JOYSTICK_DEADZONE 0.20f  // 20% deadzone - bulletproof against drift
-#define MOTOR_UPDATE_INTERVAL 50
+// ===== INPUT FILTERING =====
+// Video game responsive - minimal filtering, instant response
+#define JOYSTICK_DEADZONE 0.08f  // 8% deadzone - tight like a video game
+#define MOTOR_UPDATE_INTERVAL 30 // Faster updates (30ms instead of 50ms)
 
-// Moving average filter - smooths out transient noise
-#define INPUT_FILTER_SAMPLES 4   // Average last 4 samples
-#define INPUT_CHANGE_THRESHOLD 5 // Minimum change to register
+// Moving average filter - minimal for instant response
+#define INPUT_FILTER_SAMPLES 1   // No averaging - direct input
+#define INPUT_CHANGE_THRESHOLD 2 // Very sensitive
 
-// Slew rate limiting - prevents sudden jumps from noise spikes
-#define MAX_INPUT_CHANGE_PER_CYCLE 40  // Max change per update cycle
+// Slew rate limiting - disabled for instant response
+#define MAX_INPUT_CHANGE_PER_CYCLE 512  // Effectively unlimited
 
-// Zero-crossing lockout - prevents oscillation around zero
-// THIS IS THE KEY: once motors stop, they STAY stopped until intentional input
-#define ZERO_LOCKOUT_THRESHOLD 0.12f  // Must exceed 12% to leave zero state (was 8%)
-#define ZERO_RETURN_THRESHOLD 0.08f   // Must drop below 8% to return to zero (was 5%)
+// Zero-crossing lockout - tight to prevent drift but responsive
+#define ZERO_LOCKOUT_THRESHOLD 0.05f  // 5% to leave zero
+#define ZERO_RETURN_THRESHOLD 0.03f   // 3% to return to zero
 
 // ===== MODBUS REGISTER DEFINITIONS =====
 #define REG_CONTROL_MODE    0x200D

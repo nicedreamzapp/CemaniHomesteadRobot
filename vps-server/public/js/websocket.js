@@ -461,13 +461,11 @@ function toggleMute2() {
   isMuted2 = !isMuted2;
   const btn = document.getElementById("speakerBtn2");
   if (isMuted2) {
-    btn.innerHTML = "&#128264;";
-    btn.style.color = "#ff4444";
-    btn.style.opacity = "0.5";
+    btn.innerHTML = "MUTE";
+    btn.classList.add("muted");
   } else {
-    btn.innerHTML = "&#128266;";
-    btn.style.color = "#44ff44";
-    btn.style.opacity = "0.7";
+    btn.innerHTML = "SOUND";
+    btn.classList.remove("muted");
   }
 }
 
