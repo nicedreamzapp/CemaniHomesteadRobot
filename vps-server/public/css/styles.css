@@ -554,9 +554,12 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   margin-bottom: 8px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   text-transform: uppercase;
   letter-spacing: 1px;
+  width: 100%;
+  padding: 8px 0;
 }
 .section-header .emoji { font-size: 18px; }
 

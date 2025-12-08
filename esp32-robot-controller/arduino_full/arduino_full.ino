@@ -1,8 +1,9 @@
 /*
- * Cemani Robot Controller v3.2.0
+ * Cemani Robot Controller v3.2.1
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket (SSL)
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.2.1 - Fix OTA flash: disable keepalive/gamepad during flash mode
  * v3.2.0 - Keepalive heartbeat to Teensy for watchdog safety
  * v3.1.0 - Fix D-pad PTZ: use Arduino String for websocket (was corrupting with char*)
  * v3.0.9 - Xbox D-pad controls camera PTZ, Y button toggles camera 1/2
@@ -43,6 +44,10 @@ uint16_t pbtn = 0;
 int8_t pdpad = -2;
 int activePtzCamera = 1;  // 1 or 2, Y button toggles
 
+// Flash mode state - MUST be declared before loop() uses it
+bool flashMode = false;
+int hexLinesReceived = 0;
+
 #define AXIS_DZ       15    // Deadzone for raw axis values (increased for noise)
 #define AXIS_CHANGE   8
 #define TRIG_CHANGE   4
@@ -63,7 +68,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.2.0");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.2.1");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -153,12 +158,16 @@ void loop() {
 
   // Send keepalive to Teensy to prevent watchdog timeout
   // This ensures Teensy knows ESP32 is alive even when no Xbox input
-  if (now - lastTeensyKeepalive > TEENSY_KEEPALIVE_INTERVAL) {
+  // IMPORTANT: Don't send keepalives during flash mode - they corrupt the hex stream!
+  if (!flashMode && now - lastTeensyKeepalive > TEENSY_KEEPALIVE_INTERVAL) {
     teensySerial.println("KEEPALIVE");
     lastTeensyKeepalive = now;
   }
 
-  handleGamepad();
+  // Don't handle gamepad during flash mode - avoid sending commands to Teensy
+  if (!flashMode) {
+    handleGamepad();
+  }
   forwardTeensySerial();
   delay(1);
 }
@@ -319,7 +328,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.2.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.2.1\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
@@ -366,9 +375,6 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
   }
 }
-
-bool flashMode = false;
-int hexLinesReceived = 0;
 
 void handleFlashMessage(uint8_t* payload, size_t length) {
   String msg = String((char*)payload);

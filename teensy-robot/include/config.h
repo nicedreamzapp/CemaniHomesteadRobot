@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.25"
+#define TEENSY_VERSION "3.27"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -20,7 +20,7 @@
 
 // SAFETY: Max speeds - keep LOW to prevent crashes!
 #define MAX_SPEED_RPM 75         // Normal max speed for forward/backward
-#define TURBO_SPEED_RPM 200      // Turbo mode (~4.8 mph) - requires right trigger
+#define TURBO_SPEED_RPM 240      // Turbo mode (~5.8 mph) - requires right trigger
 #define MAX_TURN_RPM 30          // Turn speed - smooth turning
 #define TURBO_TRIGGER_THRESHOLD 100  // Trigger value to activate turbo (0-1023)
 

@@ -7,6 +7,7 @@
 
 #include "flasher.h"
 #include "modbus.h"
+#include <stdarg.h>
 
 // External flash functions from Teensy4 core (eeprom.c)
 extern "C" {
@@ -237,6 +238,17 @@ int parse_hex_line(const char *theline, char *bytes,
   return 1;
 }
 
+// Helper to print to both Serial (USB) and Serial1 (ESP32) for wireless visibility
+void dualPrintf(const char* format, ...) {
+  static char buf[128];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buf, sizeof(buf), format, args);
+  va_end(args);
+  Serial.print(buf);
+  Serial1.print(buf);
+}
+
 // AUTO-CONFIRMS instead of asking user - essential for wireless OTA
 void update_firmware(Stream *in, Stream *out,
                 uint32_t buffer_addr, uint32_t buffer_size) {
@@ -248,23 +260,23 @@ void update_firmware(Stream *in, Stream *out,
     0, 0
   };
 
-  out->printf("reading hex lines...\n");
+  dualPrintf("FLASH_PROGRESS,reading hex lines...\n");
 
   while (!hex.eof) {
     read_ascii_line(in, line, sizeof(line));
 
     if (parse_hex_line((const char*)line, hex.data, &hex.addr, &hex.num, &hex.code) == 0) {
-      out->printf("abort - bad hex line %s\n", line);
+      dualPrintf("FLASH_ERROR,bad hex line: %s\n", line);
       return;
     }
     else if (process_hex_record(&hex) != 0) {
-      out->printf("abort - invalid hex code %d\n", hex.code);
+      dualPrintf("FLASH_ERROR,invalid hex code %d\n", hex.code);
       return;
     }
     else if (hex.code == 0) {
       uint32_t addr = buffer_addr + hex.base + hex.addr - FLASH_BASE_ADDR;
       if (hex.max > (FLASH_BASE_ADDR + buffer_size)) {
-        out->printf("abort - max address %08lX too large\n", hex.max);
+        dualPrintf("FLASH_ERROR,max address %08lX too large\n", hex.max);
         return;
       }
       else if (!IN_FLASH(buffer_addr)) {
@@ -273,30 +285,36 @@ void update_firmware(Stream *in, Stream *out,
       else if (IN_FLASH(buffer_addr)) {
         int error = flash_write_block(addr, hex.data, hex.num);
         if (error) {
-          out->printf("abort - error %02X in flash_write_block()\n", error);
+          dualPrintf("FLASH_ERROR,error %02X in flash_write_block()\n", error);
           return;
         }
       }
     }
     hex.lines++;
+
+    // Progress update every 500 lines
+    if (hex.lines % 500 == 0) {
+      dualPrintf("FLASH_PROGRESS,%d lines written\n", hex.lines);
+    }
   }
 
-  out->printf("\nhex file: %1d lines %1lu bytes (%08lX - %08lX)\n",
+  dualPrintf("FLASH_PROGRESS,hex file: %d lines %lu bytes (%08lX - %08lX)\n",
             hex.lines, hex.max-hex.min, hex.min, hex.max);
 
   // Check FLASH_ID in new code
   if (check_flash_id(buffer_addr, hex.max - hex.min)) {
-    out->printf("new code contains correct target ID %s\n", FLASH_ID);
+    dualPrintf("FLASH_PROGRESS,verified target ID %s\n", FLASH_ID);
   }
   else {
-    out->printf("abort - new code missing string %s\n", FLASH_ID);
+    dualPrintf("FLASH_ERROR,new code missing string %s\n", FLASH_ID);
     return;
   }
 
   // AUTO-CONFIRM: No user input needed for wireless OTA!
-  out->printf("AUTO-CONFIRM: flashing %d lines\n", hex.lines);
-  out->printf("calling flash_move() to load new firmware...\n");
-  out->flush();
+  dualPrintf("FLASH_PROGRESS,AUTO-CONFIRM: flashing %d lines\n", hex.lines);
+  dualPrintf("FLASH_PROGRESS,calling flash_move() to load new firmware...\n");
+  Serial.flush();
+  Serial1.flush();
 
   flash_move(FLASH_BASE_ADDR, buffer_addr, hex.max - hex.min);
   REBOOT;
@@ -307,26 +325,23 @@ void startOtaUpdate() {
   uint32_t buffer_addr, buffer_size;
 
   emergencyStopMotors();
-  Serial.println("\n[OTA] === FLASH MODE ACTIVATED ===");
-  Serial.println("[OTA] Initializing flash buffer...");
+  dualPrintf("\n[OTA] === FLASH MODE ACTIVATED ===\n");
+  dualPrintf("[OTA] Initializing flash buffer...\n");
 
   if (firmware_buffer_init(&buffer_addr, &buffer_size) == 0) {
-    Serial.println("[OTA] ERROR: Unable to create flash buffer!");
-    Serial1.println("FLASH_ERROR_BUFFER");
+    dualPrintf("FLASH_ERROR,Unable to create flash buffer!\n");
     return;
   }
 
-  Serial.printf("[OTA] Buffer: %luK at 0x%08lX\n", buffer_size/1024, buffer_addr);
-  Serial.println("[OTA] Ready - send Intel HEX data now...");
-  Serial1.println("FLASH_READY");
+  dualPrintf("[OTA] Buffer: %luK at 0x%08lX\n", buffer_size/1024, buffer_addr);
+  dualPrintf("FLASH_READY\n");
 
   update_firmware(&Serial1, &Serial, buffer_addr, buffer_size);
 
-  Serial.println("[OTA] Update failed or aborted, cleaning up...");
+  dualPrintf("FLASH_ERROR,Update failed or aborted, cleaning up...\n");
   firmware_buffer_free(buffer_addr, buffer_size);
-  Serial1.println("FLASH_FAILED");
 
-  Serial.println("[OTA] Rebooting...");
+  dualPrintf("[OTA] Rebooting...\n");
   delay(100);
   REBOOT;
 }

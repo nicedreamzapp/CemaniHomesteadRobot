@@ -4,7 +4,13 @@
 *.elf
 *.dmg
 *.pt
-ZLAC8015D*/*/ZLAC8015D*Wirings/*/*.mp4
+
+# Vendor documentation (large reference materials - keep locally)
+ZLAC8015D*/
+ZLLG80ASM250*/
+
+# Node modules
+node_modules/
 
 # IDE
 .vscode/

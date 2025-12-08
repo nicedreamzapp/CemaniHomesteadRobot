@@ -457,8 +457,14 @@ wss.on("connection", (ws, req) => {
         broadcast({type:"serial", data:data.data}, ws);
       }
 
-      if(data.type === "command" && robotSocket && robotSocket.readyState === WebSocket.OPEN) {
-        robotSocket.send(JSON.stringify({type:"command", data:data.data}));
+      if(data.type === "command") {
+        console.log("[CMD] Received command:", data.data);
+        if(robotSocket && robotSocket.readyState === WebSocket.OPEN) {
+          robotSocket.send(JSON.stringify({type:"command", data:data.data}));
+          console.log("[CMD] Forwarded to robot");
+        } else {
+          console.log("[CMD] Robot not connected, cannot forward");
+        }
       }
 
       if(data.type === "joystick" && robotSocket && robotSocket.readyState === WebSocket.OPEN) {
@@ -786,13 +792,18 @@ function handleCompile(target, code, clientWs) {
 
 // ============ FLASH PREBUILT HEX ============
 function handleFlashPrebuilt(clientWs) {
-  console.log("[FLASH] Flashing pre-built hex...");
+  console.log("[FLASH] === FLASH PREBUILT REQUESTED ===");
 
-  const hexPath = path.join(BUILD_DIR, "temp-sketch.ino.hex");
+  // Use the prebuilt hex file
+  const hexPath = "/root/vps-server/prebuilt/teensy41.hex";
+  console.log("[FLASH] Looking for hex at:", hexPath);
+
   if (!fs.existsSync(hexPath)) {
-    clientWs.send(JSON.stringify({ type: "compile_error", error: "No pre-built hex found. Upload code first." }));
+    console.log("[FLASH] ERROR: Hex file not found!");
+    clientWs.send(JSON.stringify({ type: "compile_error", error: "No pre-built hex found at " + hexPath }));
     return;
   }
+  console.log("[FLASH] Hex file found!");
 
   if (!robotSocket || robotSocket.readyState !== WebSocket.OPEN) {
     clientWs.send(JSON.stringify({ type: "compile_error", error: "Robot not connected" }));
@@ -812,6 +823,8 @@ function handleFlashPrebuilt(clientWs) {
     let lineIndex = 0;
     const sendNextLine = () => {
       if (lineIndex >= hexLines.length) {
+        // Send flash_complete to ESP32 so it knows we're done
+        robotSocket.send(JSON.stringify({ type: "flash_complete" }));
         clientWs.send(JSON.stringify({ type: "compile_success", message: "Flashed " + hexLines.length + " lines!" }));
         console.log("[FLASH] Complete!");
         return;

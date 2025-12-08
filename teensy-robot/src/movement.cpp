@@ -67,8 +67,12 @@ void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpe
   float turnRatio = (abs(y) < 0.1f) ? 1.0f : abs(x) / (abs(y) + 0.01f);
   isTurning = (abs(x) > 0.2f && turnRatio > 0.8f);
 
-  float leftPower = y + x;
-  float rightPower = y - x;
+  // When reversing, invert steering so left stick = left turn (intuitive driving)
+  // Without this, steering feels backwards when going in reverse
+  float steer = (y < 0) ? -x : x;
+
+  float leftPower = y + steer;
+  float rightPower = y - steer;
 
   // Normalize power to -1 to 1
   float maxPower = max(abs(leftPower), abs(rightPower));

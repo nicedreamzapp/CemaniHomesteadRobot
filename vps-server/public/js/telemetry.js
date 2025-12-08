@@ -588,7 +588,15 @@ let odomState = {
 
 // Make resetOdometry available globally
 window.resetOdometry = function() {
-  // Completely reset state
+  // Send reset command to Teensy (via WebSocket -> server -> ESP32 -> Teensy)
+  if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'command', data: 'RESET_ODOM' }));
+    console.log('[ODOM] Sent RESET_ODOM command to robot');
+  } else {
+    console.warn('[ODOM] WebSocket not connected - cannot send reset to robot');
+  }
+
+  // Also reset local state
   odomState = {
     lastPosL: null,  // Will be set from next encoder reading
     lastPosR: null,
@@ -601,11 +609,15 @@ window.resetOdometry = function() {
     initialized: false  // Force re-initialization from current encoder position
   };
 
-  // Update UI
+  // Update UI immediately
   const tripDist = document.getElementById('odomTripDist');
   if (tripDist) tripDist.textContent = '0.0';
   const headingEl = document.getElementById('odomHeading');
   if (headingEl) headingEl.textContent = '0';
+  const encL = document.getElementById('encL');
+  if (encL) encL.textContent = '0';
+  const encR = document.getElementById('encR');
+  if (encR) encR.textContent = '0';
 
   // Force complete canvas redraw with empty trail
   if (odomCtx && odomCanvas) {
@@ -614,7 +626,7 @@ window.resetOdometry = function() {
     odomCtx.clearRect(0, 0, w, h);
   }
   drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [] });
-  console.log('[ODOM] Reset complete - trail cleared, waiting for new baseline');
+  console.log('[ODOM] Reset complete - trail cleared, waiting for new baseline from robot');
 };
 
 function updateOdometryFromEncoders(posL, posR) {
