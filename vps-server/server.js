@@ -627,10 +627,20 @@ wss.on("connection", (ws, req) => {
         console.log('[TALKBACK]', data.type, 'camera:', data.camera);
       }
 
-      // Forward V380 light control to camera relay
-      if(data.type === "v380_light" && cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
-        cameraSocket.send(JSON.stringify(data));
-        console.log('[V380] Light command:', data.state);
+      // Forward V380 light control to PTZ relay (more reliable than main camera socket)
+      if(data.type === "v380_light") {
+        console.log('[V380-DEBUG] ptzRelaySocket exists:', !!ptzRelaySocket);
+        if (ptzRelaySocket) {
+          console.log('[V380-DEBUG] ptz readyState:', ptzRelaySocket.readyState, '(OPEN=1)');
+        }
+        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+          const msg = JSON.stringify(data);
+          console.log('[V380] Sending to ptzRelaySocket:', msg);
+          ptzRelaySocket.send(msg);
+          console.log('[V380] Sent light command via PTZ channel:', data.state);
+        } else {
+          console.log('[V380] Cannot send - ptzRelaySocket not ready');
+        }
       }
 
     } catch (err) {

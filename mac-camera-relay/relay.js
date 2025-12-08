@@ -164,10 +164,19 @@ function connectToVPS() {
   });
 
   vpsSocket.on('message', async (data, isBinary) => {
-    // Ignore binary (video frames)
-    if (isBinary || Buffer.isBuffer(data)) return;
+    // DEBUG: Log ALL messages, even binary
+    if (isBinary || Buffer.isBuffer(data)) {
+      // console.log('[VPS-MSG-BIN] Binary data:', data.length, 'bytes'); // Uncomment to see all binary
+      return;
+    }
 
     const str = data.toString();
+    // DEBUG: Log ALL non-binary messages
+    console.log('[VPS-MSG-ALL] Type:', str.substring(0, 100));
+    // Log ALL text messages for debugging
+    if (str.includes('v380') || str.includes('V380')) {
+      console.log('[VPS-MSG] V380 message:', str.substring(0, 200));
+    }
     // Log all text messages that might be PTZ
     if (str.includes('ptz') || str.includes('cam')) {
       console.log('[VPS-MSG] Received:', str.substring(0, 200));
@@ -268,6 +277,11 @@ function connectToPtzChannel() {
       if (msg.type === 'cam_ptz') {
         const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
         if (cam) await handlePTZ(cam, msg, true);
+      }
+      // Handle V380 light commands on PTZ channel (more reliable than main channel)
+      if (msg.type === 'v380_light') {
+        console.log('[V380] Light command via PTZ channel:', msg.state);
+        handleV380Light(msg.state);
       }
     } catch (err) {}
   });
@@ -591,54 +605,45 @@ async function sendSnapshot(cam) {
 
 // ============================================
 // V380 LIGHT CONTROL
-// Uses v380 tool at /tmp/v380/v380/v380
+// Uses Node.js implementation via v380-light-control.js
 // ============================================
-const V380_TOOL = '/tmp/v380/v380/v380';
-const V380_IP = '192.168.1.200';
-const V380_ID = '46337958';
-const V380_USER = '46337958';
-const V380_PASS = 'Kookster#420';
+const V380_LIGHT_SCRIPT = path.join(__dirname, 'v380-light.js');
 
 function handleV380Light(state) {
   // state: 0 = off, 1 = on, 2 = auto
-  const lightArg = state;
+  const actions = ['off', 'on', 'auto'];
+  const action = actions[state] || 'on';
 
-  console.log(`[V380] Sending light command: ${state} (0=off, 1=on, 2=auto)`);
+  console.log(`[V380] Sending light command: ${action}`);
 
-  // Spawn the v380 tool with light control
-  const v380 = spawn(V380_TOOL, [
-    '-addr', V380_IP,
-    '-id', V380_ID,
-    '-u', V380_USER,
-    '-p', V380_PASS,
-    `--light=${lightArg}`
-  ], {
+  // Use the Node.js implementation
+  const v380 = spawn('/opt/homebrew/bin/node', [V380_LIGHT_SCRIPT, action], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 10000
+    timeout: 15000
   });
 
   v380.stdout.on('data', (data) => {
-    console.log('[V380] stdout:', data.toString().substring(0, 100));
+    console.log('[V380] stdout:', data.toString().trim());
   });
 
   v380.stderr.on('data', (data) => {
-    console.log('[V380] stderr:', data.toString().substring(0, 100));
+    console.log('[V380] stderr:', data.toString().trim());
   });
 
   v380.on('error', (err) => {
     console.error('[V380] Error:', err.message);
   });
 
-  // Kill after 5 seconds (command should complete quickly)
+  // Kill after 10 seconds (command should complete quickly)
   setTimeout(() => {
     if (!v380.killed) {
       v380.kill('SIGTERM');
       console.log('[V380] Killed after timeout');
     }
-  }, 5000);
+  }, 10000);
 
   v380.on('close', (code) => {
-    console.log('[V380] Process exited with code:', code);
+    console.log('[V380] Light command completed, exit code:', code);
   });
 }
 

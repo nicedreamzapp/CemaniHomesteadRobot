@@ -473,23 +473,23 @@ function toggleMute2() {
 function v380Light(state) {
   // state: 0 = off, 1 = on, 2 = auto
   v380LightState = state;
+  console.log('[V380] Light command:', state, '(0=off, 1=on, 2=auto)');
 
-  // Update button states
-  document.getElementById('lightOnBtn').classList.toggle('active', state === 1);
-  document.getElementById('lightAutoBtn').classList.toggle('active', state === 2);
-  document.getElementById('lightOffBtn').classList.toggle('active', state === 0);
+  // Update button states if they exist
+  const lightOnBtn = document.getElementById('lightOnBtn');
+  const lightAutoBtn = document.getElementById('lightAutoBtn');
+  const lightOffBtn = document.getElementById('lightOffBtn');
+  if (lightOnBtn) lightOnBtn.classList.toggle('active', state === 1);
+  if (lightAutoBtn) lightAutoBtn.classList.toggle('active', state === 2);
+  if (lightOffBtn) lightOffBtn.classList.toggle('active', state === 0);
 
   // Send to server via WebSocket
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'v380_light', state: state }));
+    console.log('[V380] Sent via WebSocket');
+  } else {
+    console.log('[V380] WebSocket not ready, state:', ws ? ws.readyState : 'null');
   }
-
-  // Also try direct HTTP API to mac-camera-relay
-  fetch('/api/v380/light', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ state: state })
-  }).catch(err => console.log('V380 light API error:', err));
 }
 
 // Initialize V380 cam on load

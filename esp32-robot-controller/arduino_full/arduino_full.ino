@@ -72,7 +72,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.4.0 - WIRELESS OTA!");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.5.0 - B BUTTON LIGHT!");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -86,7 +86,7 @@ void setup() {
   BP32.setup(&onConnectedGamepad, &onDisconnectedGamepad);
   BP32.forgetBluetoothKeys();
   BP32.enableNewBluetoothConnections(true);
-  BP32.enableVirtualDevice(false);
+  // BP32.enableVirtualDevice(false);  // Not available in older Bluepad32 versions
 
   delay(500);
   for (int i = 0; i < 5; i++) {
@@ -287,6 +287,18 @@ void handleGamepad() {
             webSocket.sendTXT(msg);
           }
         }
+
+        // B button (button 1) toggles V380 light on press
+        if (b == 1 && state == 1) {
+          static bool lightOn = false;
+          lightOn = !lightOn;
+          Serial.printf("[LIGHT] V380 Light: %s\n", lightOn ? "ON" : "OFF");
+          if (wsConnected) {
+            String lightMsg = "{\"type\":\"v380_light\",\"state\":" + String(lightOn ? 1 : 0) + "}";
+            webSocket.sendTXT(lightMsg);
+            webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"V380 Light: " + String(lightOn ? "ON" : "OFF") + "\"}");
+          }
+        }
       }
     }
     pbtn = btn;
@@ -363,7 +375,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.4.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.5.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
