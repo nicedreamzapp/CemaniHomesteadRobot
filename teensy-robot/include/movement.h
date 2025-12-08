@@ -21,6 +21,9 @@ extern bool controllerConnected;
 extern long currentLX, currentLY;
 extern int16_t targetLeftSpeed, targetRightSpeed;
 
+// Aerospace-grade input filtering
+void filterJoystickInput(long rawLX, long rawLY, long& outLX, long& outLY);
+
 // Joystick control
 float applyJoystickCurve(float input);
 void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpeed, bool turboActive = false);

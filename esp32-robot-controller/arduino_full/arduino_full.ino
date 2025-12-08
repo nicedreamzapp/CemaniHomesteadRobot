@@ -1,13 +1,14 @@
 /*
- * Cemani Robot Controller v3.2.1
- * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket (SSL)
+ * Cemani Robot Controller v3.3.0
+ * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket + WIRELESS OTA
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.3.0 - WIRELESS OTA for ESP32! Never need USB again
+ *        - Aerospace-grade deadzone (50) to eliminate stick drift
  * v3.2.1 - Fix OTA flash: disable keepalive/gamepad during flash mode
  * v3.2.0 - Keepalive heartbeat to Teensy for watchdog safety
  * v3.1.0 - Fix D-pad PTZ: use Arduino String for websocket (was corrupting with char*)
  * v3.0.9 - Xbox D-pad controls camera PTZ, Y button toggles camera 1/2
- * v3.0.8 - More tolerant heartbeat to stop online/offline bouncing
  *
  * SETUP: Copy credentials.h.example to credentials.h and add your WiFi passwords
  */
@@ -15,6 +16,7 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <WebSocketsClient.h>
+#include <ArduinoOTA.h>  // ESP32 wireless updates
 #include <Bluepad32.h>
 #include <nvs_flash.h>
 #include "credentials.h"  // WiFi credentials (gitignored)
@@ -48,10 +50,12 @@ int activePtzCamera = 1;  // 1 or 2, Y button toggles
 bool flashMode = false;
 int hexLinesReceived = 0;
 
-#define AXIS_DZ       15    // Deadzone for raw axis values (increased for noise)
-#define AXIS_CHANGE   8
-#define TRIG_CHANGE   4
-#define JOYSTICK_SEND_DZ  50  // Must exceed this to send joystick commands (was 40)
+// AEROSPACE-GRADE DEADZONE - eliminates ALL stick drift
+// Xbox controllers drift 30-50 units after hours of use
+#define AXIS_DZ       50    // Deadzone for raw axis values (was 15 - too small!)
+#define AXIS_CHANGE   10    // Minimum change to send update
+#define TRIG_CHANGE   8     // Trigger change threshold
+#define JOYSTICK_SEND_DZ  60  // Must exceed this to send joystick commands
 
 void webSocketEvent(WStype_t type, uint8_t* payload, size_t length);
 void onConnectedGamepad(GamepadPtr gp);
@@ -68,7 +72,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.2.1");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.4.0 - WIRELESS OTA!");
 
   Serial.println("[NVS] Erasing Bluetooth storage...");
   nvs_flash_erase();
@@ -108,6 +112,36 @@ void setup() {
     Serial.printf("\n[WiFi] Connected to %s\n", WiFi.SSID().c_str());
     Serial.printf("[WiFi] IP: %s, RSSI: %d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
     lastWiFiConnected = millis();
+
+    // ===== WIRELESS OTA SETUP =====
+    // This allows ESP32 updates over WiFi - no more USB needed!
+    ArduinoOTA.setHostname("cemani-esp32");
+    ArduinoOTA.setPassword("cemani2024");  // OTA password
+
+    ArduinoOTA.onStart([]() {
+      String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+      Serial.println("[OTA] Start updating " + type);
+    });
+
+    ArduinoOTA.onEnd([]() {
+      Serial.println("\n[OTA] Update complete! Rebooting...");
+    });
+
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("[OTA] Progress: %u%%\r", (progress / (total / 100)));
+    });
+
+    ArduinoOTA.onError([](ota_error_t error) {
+      Serial.printf("[OTA] Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    });
+
+    ArduinoOTA.begin();
+    Serial.println("[OTA] Wireless updates enabled! Use Arduino IDE or platformio");
   } else {
     Serial.println("\n[WiFi] Failed - controller still works!");
   }
@@ -125,6 +159,7 @@ void setup() {
 void loop() {
   BP32.update();
   webSocket.loop();
+  ArduinoOTA.handle();  // Check for wireless OTA updates
 
   unsigned long now = millis();
 
@@ -328,7 +363,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.2.1\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.4.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +

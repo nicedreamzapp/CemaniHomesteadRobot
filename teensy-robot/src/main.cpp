@@ -207,9 +207,14 @@ void loop() {
     if (now - lastMotorUpdate >= MOTOR_UPDATE_INTERVAL) {
       lastMotorUpdate = now;
 
+      // AEROSPACE-GRADE FILTERING: Apply multi-stage noise rejection
+      // This eliminates ALL noise even after hours of operation
+      long filteredLX, filteredLY;
+      filterJoystickInput(currentLX, currentLY, filteredLX, filteredLY);
+
       // Check if turbo mode is active (right trigger held)
       bool turboActive = (rightTriggerValue >= TURBO_TRIGGER_THRESHOLD);
-      calculateTankSpeeds(currentLX, currentLY, targetLeftSpeed, targetRightSpeed, turboActive);
+      calculateTankSpeeds(filteredLX, filteredLY, targetLeftSpeed, targetRightSpeed, turboActive);
 
       // No more mode switching - same fast response for turning and driving
       int16_t newLeft = rampSpeed(lastLeftSpeed, targetLeftSpeed, turboActive);

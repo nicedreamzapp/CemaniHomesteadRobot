@@ -20,6 +20,89 @@ bool controllerConnected = false;
 long currentLX = 0, currentLY = 0;
 int16_t targetLeftSpeed = 0, targetRightSpeed = 0;
 
+// ===== AEROSPACE-GRADE INPUT FILTERING STATE =====
+// Moving average buffers for joystick inputs
+static long lxBuffer[INPUT_FILTER_SAMPLES] = {0};
+static long lyBuffer[INPUT_FILTER_SAMPLES] = {0};
+static int filterIndex = 0;
+static long filteredLX = 0, filteredLY = 0;
+
+// Zero-state lockout (prevents oscillation around neutral)
+static bool inZeroStateX = true;
+static bool inZeroStateY = true;
+
+// Previous filtered values for slew rate limiting
+static long prevFilteredLX = 0, prevFilteredLY = 0;
+
+// ===== AEROSPACE-GRADE INPUT FILTER =====
+// Combines: moving average, slew rate limiting, zero-state hysteresis
+void filterJoystickInput(long rawLX, long rawLY, long& outLX, long& outLY) {
+  // 1. Add to moving average buffer
+  lxBuffer[filterIndex] = rawLX;
+  lyBuffer[filterIndex] = rawLY;
+  filterIndex = (filterIndex + 1) % INPUT_FILTER_SAMPLES;
+
+  // 2. Calculate moving average
+  long avgLX = 0, avgLY = 0;
+  for (int i = 0; i < INPUT_FILTER_SAMPLES; i++) {
+    avgLX += lxBuffer[i];
+    avgLY += lyBuffer[i];
+  }
+  avgLX /= INPUT_FILTER_SAMPLES;
+  avgLY /= INPUT_FILTER_SAMPLES;
+
+  // 3. Slew rate limiting (prevents noise spikes from causing sudden jumps)
+  long deltaX = avgLX - prevFilteredLX;
+  long deltaY = avgLY - prevFilteredLY;
+
+  if (deltaX > MAX_INPUT_CHANGE_PER_CYCLE) deltaX = MAX_INPUT_CHANGE_PER_CYCLE;
+  if (deltaX < -MAX_INPUT_CHANGE_PER_CYCLE) deltaX = -MAX_INPUT_CHANGE_PER_CYCLE;
+  if (deltaY > MAX_INPUT_CHANGE_PER_CYCLE) deltaY = MAX_INPUT_CHANGE_PER_CYCLE;
+  if (deltaY < -MAX_INPUT_CHANGE_PER_CYCLE) deltaY = -MAX_INPUT_CHANGE_PER_CYCLE;
+
+  filteredLX = prevFilteredLX + deltaX;
+  filteredLY = prevFilteredLY + deltaY;
+
+  // 4. Zero-state hysteresis (prevents oscillation around neutral)
+  // Once in zero state, must exceed lockout threshold to leave
+  // Once outside zero, must drop below return threshold to go back to zero
+  float normX = abs(filteredLX) / 511.0f;
+  float normY = abs(filteredLY) / 511.0f;
+
+  if (inZeroStateX) {
+    if (normX > ZERO_LOCKOUT_THRESHOLD) {
+      inZeroStateX = false;  // Leaving zero state
+    } else {
+      filteredLX = 0;  // Stay locked at zero
+    }
+  } else {
+    if (normX < ZERO_RETURN_THRESHOLD) {
+      inZeroStateX = true;  // Return to zero state
+      filteredLX = 0;
+    }
+  }
+
+  if (inZeroStateY) {
+    if (normY > ZERO_LOCKOUT_THRESHOLD) {
+      inZeroStateY = false;
+    } else {
+      filteredLY = 0;
+    }
+  } else {
+    if (normY < ZERO_RETURN_THRESHOLD) {
+      inZeroStateY = true;
+      filteredLY = 0;
+    }
+  }
+
+  // 5. Store for next cycle
+  prevFilteredLX = filteredLX;
+  prevFilteredLY = filteredLY;
+
+  outLX = filteredLX;
+  outLY = filteredLY;
+}
+
 // Aircraft-grade full stop - sends multiple zero commands to ensure complete stop
 void fullStopMotors() {
   Serial.println("[STOP] Aircraft-grade motor stop - triple zero command");
