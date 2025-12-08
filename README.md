@@ -93,7 +93,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 **Control and monitor your robot from ANYWHERE in the world!**
 
-![Web Dashboard](docs/screenshots/web-dashboard.webp)
+![Web Dashboard](docs/images/new-ui-robot.png)
 
 *Command Center with dual camera feeds, PTZ controls, robot movement queue, and real-time telemetry*
 
