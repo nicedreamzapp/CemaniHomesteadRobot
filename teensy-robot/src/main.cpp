@@ -21,6 +21,7 @@ static uint32_t lastMotorUpdate = 0;
 static uint32_t lastComm = 0;
 static uint32_t lastTelemetryUpdate = 0;
 static bool watchdogTriggered = false;  // Tracks if watchdog stopped motors
+static bool lastTurnState = false;      // Track turn state for accel/torque switching
 
 // ===== SETUP =====
 void setup() {
@@ -216,7 +217,20 @@ void loop() {
       bool turboActive = (rightTriggerValue >= TURBO_TRIGGER_THRESHOLD);
       calculateTankSpeeds(filteredLX, filteredLY, targetLeftSpeed, targetRightSpeed, turboActive);
 
-      // No more mode switching - same fast response for turning and driving
+      // Dynamic accel/torque switching for smooth turns
+      // Only update when turn state changes to avoid Modbus spam
+      if (isTurning != lastTurnState) {
+        if (isTurning) {
+          setAccelTimes(DRIVER_ACCEL_TURN, DRIVER_ACCEL_TURN);
+          setTorqueLimits(TORQUE_TURN);
+        } else {
+          setAccelTimes(DRIVER_ACCEL_NORMAL, DRIVER_ACCEL_NORMAL);
+          setTorqueLimits(TORQUE_NORMAL);
+        }
+        lastTurnState = isTurning;
+      }
+
+      // Ramp speeds with turn-aware acceleration
       int16_t newLeft = rampSpeed(lastLeftSpeed, targetLeftSpeed, turboActive);
       int16_t newRight = rampSpeed(lastRightSpeed, targetRightSpeed, turboActive);
 
@@ -243,13 +257,21 @@ void loop() {
         lastLeftSpeed = newLeft;
         lastRightSpeed = newRight;
 
+        // Only log significant movements, not every tiny change (reduces noise)
+        static int16_t lastLoggedLeft = 0, lastLoggedRight = 0;
+        bool bigChange = (abs(newLeft - lastLoggedLeft) > 10 || abs(newRight - lastLoggedRight) > 10);
+
         if (shouldStop) {
-          Serial.println("[MOTOR] Joystick centered - motors STOPPED");
-        } else if (abs(newLeft) > 5 || abs(newRight) > 5) {
+          Serial.println("[MOTOR] STOPPED");
+          lastLoggedLeft = 0;
+          lastLoggedRight = 0;
+        } else if (bigChange && (abs(newLeft) > 5 || abs(newRight) > 5)) {
           bool turbo = (rightTriggerValue >= TURBO_TRIGGER_THRESHOLD);
-          Serial.printf("L:%+4d  R:%+4d RPM  %s%s\n", newLeft, newRight,
+          Serial.printf("L:%+4d  R:%+4d RPM %s%s\n", newLeft, newRight,
             isTurning ? "[TURN]" : "", turbo ? "[TURBO]" : "");
           Serial1.printf("SPEED,L:%d,R:%d%s\n", newLeft, newRight, turbo ? ",TURBO" : "");
+          lastLoggedLeft = newLeft;
+          lastLoggedRight = newRight;
         }
       }
     }

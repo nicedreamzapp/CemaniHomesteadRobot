@@ -3033,16 +3033,16 @@ input[type="text"] {
 }
 
 
-/* Light Switch - Overlay on Light Cam */
+/* Light Switch - Overlay on Light Cam (Light Bulb Icon) */
 .light-switch {
   position: absolute;
   top: 10px;
   left: 10px;
-  width: 32px;
-  height: 32px;
-  background: rgba(0, 0, 0, 0.4);
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 0, 0, 0.5);
   border: 2px solid rgba(255, 100, 100, 0.6);
-  border-radius: 50%;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3051,23 +3051,21 @@ input[type="text"] {
   z-index: 10;
 }
 .light-switch:hover {
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   transform: scale(1.1);
 }
 .light-switch-indicator {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: rgba(255, 80, 80, 0.8);
-  box-shadow: 0 0 8px rgba(255, 80, 80, 0.6);
+  font-size: 20px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(255, 80, 80, 0.6));
   transition: all 0.2s;
 }
 .light-switch.on {
-  border-color: rgba(100, 255, 100, 0.8);
+  border-color: rgba(255, 220, 100, 0.9);
+  background: rgba(60, 50, 20, 0.7);
 }
 .light-switch.on .light-switch-indicator {
-  background: rgba(80, 255, 80, 0.9);
-  box-shadow: 0 0 15px rgba(80, 255, 80, 0.8);
+  filter: drop-shadow(0 0 8px rgba(255, 220, 100, 0.9));
 }
 
 /* Code Popup Content */
