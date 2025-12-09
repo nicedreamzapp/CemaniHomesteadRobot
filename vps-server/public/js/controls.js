@@ -175,7 +175,14 @@ function emergencyStop() {
 
 // ============ LIGHT TOGGLE ============
 let lightOn = false;
+let strobeInterval = null;
+let strobeActive = false;
+
 function toggleLight() {
+  // Stop strobe if running
+  if (strobeActive) {
+    stopStrobe();
+  }
   lightOn = !lightOn;
   // Update old button if exists
   const btn = document.getElementById('lightToggleBtn');
@@ -195,6 +202,60 @@ function toggleLight() {
     ws.send(JSON.stringify({ type: 'v380_light', state: lightOn ? 1 : 0 }));
   }
   console.log('[LIGHT] Toggled:', lightOn ? 'ON' : 'OFF');
+}
+
+function toggleStrobe() {
+  if (strobeActive) {
+    stopStrobe();
+  } else {
+    startStrobe();
+  }
+}
+
+function startStrobe() {
+  strobeActive = true;
+  const strobeBtn = document.getElementById('strobeBtn');
+  if (strobeBtn) strobeBtn.classList.add('active');
+
+  console.log('[STROBE] Started');
+
+  // Strobe at 500ms intervals (2Hz) - slow enough for relay to keep up
+  strobeInterval = setInterval(() => {
+    lightOn = !lightOn;
+    if (typeof v380Light === 'function') {
+      v380Light(lightOn ? 1 : 0);
+    } else if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'v380_light', state: lightOn ? 1 : 0 }));
+    }
+  }, 500);
+}
+
+function stopStrobe() {
+  strobeActive = false;
+  if (strobeInterval) {
+    clearInterval(strobeInterval);
+    strobeInterval = null;
+  }
+  const strobeBtn = document.getElementById('strobeBtn');
+  if (strobeBtn) strobeBtn.classList.remove('active');
+
+  // Turn light off when stopping strobe - send multiple times to ensure it stops
+  lightOn = false;
+  const sendOff = () => {
+    if (typeof v380Light === 'function') {
+      v380Light(0);
+    } else if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'v380_light', state: 0 }));
+    }
+  };
+  sendOff();
+  setTimeout(sendOff, 200);
+  setTimeout(sendOff, 400);
+
+  const lightSwitch = document.getElementById('lightSwitch');
+  if (lightSwitch) lightSwitch.classList.remove('on');
+
+  console.log('[STROBE] Stopped');
 }
 
 // ============ CODE POPUP ============

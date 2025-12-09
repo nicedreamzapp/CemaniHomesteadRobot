@@ -37,8 +37,8 @@ connectPtzWs();
 
 // ============ AUDIO PLAYER ============
 let audioContext = null;
-let isMuted = false;
-let isMuted2 = false;
+let isMuted = false;   // Default to unmuted
+let isMuted2 = false;  // Default to unmuted
 
 function initAudio() {
   if (audioContext) return;
@@ -46,14 +46,16 @@ function initAudio() {
 }
 
 async function playAudioChunk(data) {
-  if (!audioContext || isMuted) return;
+  if (!audioContext) return;
   try {
     const audioBuffer = await audioContext.decodeAudioData(data.buffer.slice(0));
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
     source.start(0);
-  } catch (err) {}
+  } catch (err) {
+    console.log('[AUDIO] Error playing chunk:', err);
+  }
 }
 
 // ============ CAMERA PLAYERS ============
@@ -283,10 +285,13 @@ ws.onmessage = function(e) {
       const isVideo = packetType % 2 === 0;
       if (isVideo) {
         displayFrame(new Blob([payload], {type: 'image/jpeg'}), cameraId);
-      } else if (cameraId === 1 && !isMuted) {
-        playAudioChunk(payload);
-      } else if (cameraId === 2 && !isMuted2) {
-        playAudioChunk(payload);
+      } else {
+        // Audio packet
+        if (cameraId === 2 && !isMuted2) {
+          playAudioChunk(payload);
+        } else if (cameraId === 1 && !isMuted) {
+          playAudioChunk(payload);
+        }
       }
     });
     return;
@@ -461,12 +466,13 @@ function toggleMute2() {
   isMuted2 = !isMuted2;
   const btn = document.getElementById("speakerBtn2");
   if (isMuted2) {
-    btn.innerHTML = "MUTE";
+    btn.innerHTML = "🔇";
     btn.classList.add("muted");
   } else {
-    btn.innerHTML = "SOUND";
+    btn.innerHTML = "🔊";
     btn.classList.remove("muted");
   }
+  console.log('[AUDIO] Cam2 muted:', isMuted2);
 }
 
 // ============ V380 LIGHT CONTROL ============

@@ -3068,6 +3068,38 @@ input[type="text"] {
   filter: drop-shadow(0 0 8px rgba(255, 220, 100, 0.9));
 }
 
+/* Strobe Button */
+.strobe-btn {
+  position: absolute;
+  top: 10px;
+  left: 56px;
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(100, 150, 255, 0.6);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 10;
+  font-size: 20px;
+}
+.strobe-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+  transform: scale(1.1);
+}
+.strobe-btn.active {
+  border-color: rgba(255, 100, 100, 0.9);
+  background: rgba(80, 20, 20, 0.7);
+  animation: strobe-pulse 0.2s infinite;
+}
+@keyframes strobe-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 100, 100, 0.8); }
+  50% { box-shadow: 0 0 20px rgba(255, 255, 100, 0.9); }
+}
+
 /* Code Popup Content */
 .code-popup-content {
   padding: 10px;

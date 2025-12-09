@@ -124,13 +124,10 @@ void fullStopMotors() {
   Serial.println("[STOP] Motors confirmed stopped");
 }
 
-// Apply strong exponential curve - stays slow until ~75% joystick
-// Uses cubic curve (x³) for very gradual low-end, fast high-end
+// Apply exponential curve to joystick input for finer control at low values
 float applyJoystickCurve(float input) {
   float sign = (input >= 0) ? 1.0f : -1.0f;
-  float absInput = abs(input);
-  // Cubic curve: 50% joystick = only 12.5% output, 75% = 42% output
-  return sign * absInput * absInput * absInput;
+  return sign * input * input;
 }
 
 void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpeed, bool turboActive) {
@@ -153,38 +150,18 @@ void calculateTankSpeeds(long lx, long ly, int16_t& leftSpeed, int16_t& rightSpe
   float turnRatio = (abs(y) < 0.1f) ? 1.0f : abs(x) / (abs(y) + 0.01f);
   isTurning = (abs(x) > 0.2f && turnRatio > 0.8f);
 
-  float leftPower, rightPower;
+  // When reversing, invert steering so left stick = left turn (intuitive driving)
+  // Without this, steering feels backwards when going in reverse
+  float steer = (y < 0) ? -x : x;
 
-  if (isTurning && abs(y) < 0.15f) {
-    // PIVOT TURN: For in-place turning, one wheel drives forward,
-    // the other stays stopped (0%). Robot pivots around the stopped wheel.
-    // This eliminates wheel scrub - only one wheel moves, no fighting.
-    float outerSpeed = abs(x);
-    float innerSpeed = 0.0f;  // Inner wheel stopped - pure pivot
+  float leftPower = y + steer;
+  float rightPower = y - steer;
 
-    if (x > 0) {
-      // Turning right: left wheel forward, right wheel slow backward
-      leftPower = outerSpeed;
-      rightPower = innerSpeed;
-    } else {
-      // Turning left: right wheel forward, left wheel slow backward
-      leftPower = innerSpeed;
-      rightPower = outerSpeed;
-    }
-  } else {
-    // NORMAL DRIVING: Standard tank mixing for driving with steering
-    // When reversing, invert steering so left stick = left turn (intuitive driving)
-    float steer = (y < 0) ? -x : x;
-
-    leftPower = y + steer;
-    rightPower = y - steer;
-
-    // Normalize power to -1 to 1
-    float maxPower = max(abs(leftPower), abs(rightPower));
-    if (maxPower > 1.0f) {
-      leftPower /= maxPower;
-      rightPower /= maxPower;
-    }
+  // Normalize power to -1 to 1
+  float maxPower = max(abs(leftPower), abs(rightPower));
+  if (maxPower > 1.0f) {
+    leftPower /= maxPower;
+    rightPower /= maxPower;
   }
 
   // Turbo only works for forward/backward, not turning

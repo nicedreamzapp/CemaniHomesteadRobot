@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.36"
+#define TEENSY_VERSION "3.39"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -20,21 +20,21 @@
 
 // SAFETY: Max speeds - keep LOW to prevent crashes!
 #define MAX_SPEED_RPM 75         // Normal max speed for forward/backward
-#define TURBO_SPEED_RPM 200      // Turbo mode (~4.8 mph) - requires right trigger
-#define MAX_TURN_RPM 12          // Turn speed - ultra slow for smoothest skid-steer
+#define TURBO_SPEED_RPM 200      // Turbo mode (~4.8 mph) - reduced from 240 for driver safety
+#define MAX_TURN_RPM 30          // Turn speed - smooth turning
 #define TURBO_TRIGGER_THRESHOLD 100  // Trigger value to activate turbo (0-1023)
 
-// Software acceleration (RPM change per update cycle at 30ms intervals)
-#define ACCEL_RATE_NORMAL 2      // Gentle ramp for smooth feel (~1 sec 0-75 RPM)
-#define ACCEL_RATE_TURN 1        // Very slow ramp for turns - prevents jerking
-#define ACCEL_RATE_TURBO 6       // Moderate ramp for turbo mode
+// Software acceleration (RPM change per update cycle)
+#define ACCEL_RATE_NORMAL 4      // Fast ramp for responsive feel
+#define ACCEL_RATE_TURN 4        // Same as normal - no slow turn mode
+#define ACCEL_RATE_TURBO 15      // Faster ramp for turbo mode
 
 // Hardware acceleration (ms to reach target - higher = slower)
-#define DRIVER_ACCEL_NORMAL 600  // Smooth hardware accel
-#define DRIVER_ACCEL_TURN 1000   // Very slow hardware accel for smooth turns
+#define DRIVER_ACCEL_NORMAL 400  // Fast hardware accel
+#define DRIVER_ACCEL_TURN 400    // Same as normal - no slow turn mode
 
 #define TORQUE_NORMAL 1000       // Original value
-#define TORQUE_TURN 100          // Very low torque for turns - lets wheels slip smoothly
+#define TORQUE_TURN 150          // Keep low for turns
 
 // ===== INPUT FILTERING =====
 // Video game responsive - minimal filtering, instant response
