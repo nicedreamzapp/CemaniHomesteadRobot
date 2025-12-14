@@ -71,29 +71,29 @@ static inline int16_t deadzone(int v) {
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.5.0 - B BUTTON LIGHT!");
+  delay(100);  // Minimal delay for serial init
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.7.0 - INSTANT XBOX!");
 
-  Serial.println("[NVS] Erasing Bluetooth storage...");
-  nvs_flash_erase();
+  // Initialize NVS - keeps paired Bluetooth devices for instant reconnection
   nvs_flash_init();
-  Serial.println("[NVS] Done");
 
   teensySerial.begin(115200, SERIAL_8N1, TEENSY_RX, TEENSY_TX);
-  Serial.println("[TEENSY] Serial ready");
 
-  Serial.println("[BP32] Initializing...");
+  // Initialize Bluepad32 IMMEDIATELY - no delays
   BP32.setup(&onConnectedGamepad, &onDisconnectedGamepad);
-  BP32.forgetBluetoothKeys();
   BP32.enableNewBluetoothConnections(true);
-  // BP32.enableVirtualDevice(false);  // Not available in older Bluepad32 versions
 
-  delay(500);
-  for (int i = 0; i < 5; i++) {
+  // Aggressive Xbox scan - poll every 25ms for up to 3 seconds
+  // Paired controllers typically reconnect in <500ms
+  Serial.println("[BP32] Scanning for Xbox...");
+  for (int i = 0; i < 120; i++) {  // 3 seconds max (120 x 25ms)
     BP32.update();
-    delay(100);
+    if (myGamepad) {
+      Serial.printf("[BP32] Xbox connected in %dms!\n", i * 25);
+      break;
+    }
+    delay(25);
   }
-  Serial.println("[BP32] Ready - hold Xbox+Sync to pair!");
 
   Serial.println("[WiFi] Connecting...");
   wifiMulti.addAP(WIFI_SSID_1, WIFI_PASS_1);
@@ -375,7 +375,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.5.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.7.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +

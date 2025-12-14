@@ -160,6 +160,8 @@ function updateCamStatus(camId, connected, streaming) {
   const txt = document.getElementById('cam' + camId + 'StatusText');
   const card = document.getElementById('cam' + camId + 'Card');
 
+  if (!el) return;  // Element not found, skip update
+
   // V380 uses different badge class
   const badgeClass = (camId === 3) ? 'v380-status-badge' : 'cam-status-badge';
 
