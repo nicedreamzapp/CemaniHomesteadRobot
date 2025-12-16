@@ -1,8 +1,12 @@
 /*
- * Cemani Robot Controller v3.3.0
+ * Cemani Robot Controller v3.8.0
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket + WIRELESS OTA
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.8.0 - AGGRESSIVE XBOX SCANNING - polls 5x per loop until connected
+ *        - Re-enables Bluetooth scan every 2s when no controller
+ *        - Instant re-scan on disconnect for fast reconnection
+ * v3.7.0 - Instant Xbox controller connection at boot
  * v3.3.0 - WIRELESS OTA for ESP32! Never need USB again
  *        - Aerospace-grade deadzone (50) to eliminate stick drift
  * v3.2.1 - Fix OTA flash: disable keepalive/gamepad during flash mode
@@ -34,11 +38,13 @@ unsigned long lastWiFiCheck = 0;
 unsigned long lastHeartbeat = 0;
 unsigned long lastWiFiConnected = 0;
 unsigned long lastTeensyKeepalive = 0;
+unsigned long lastXboxScanLog = 0;
 int wifiDropCount = 0;
 const unsigned long WIFI_CHECK_INTERVAL = 2000;   // Check WiFi more often (was 10s)
 const unsigned long HEARTBEAT_INTERVAL = 10000;   // Send telemetry every 10s (was 15s)
 const unsigned long WIFI_RECONNECT_TIMEOUT = 3000; // Force reconnect if down >3s
 const unsigned long TEENSY_KEEPALIVE_INTERVAL = 1000; // Send keepalive to Teensy every 1s
+const unsigned long XBOX_SCAN_LOG_INTERVAL = 5000; // Log Xbox scan status every 5s
 
 int16_t plx = 0, ply = 0, prx = 0, pry = 0;
 int16_t plt = 0, prt = 0;
@@ -72,7 +78,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(100);  // Minimal delay for serial init
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.7.0 - INSTANT XBOX!");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.8.0 - AGGRESSIVE XBOX SCAN!");
 
   // Initialize NVS - keeps paired Bluetooth devices for instant reconnection
   nvs_flash_init();
@@ -157,11 +163,37 @@ void setup() {
 }
 
 void loop() {
-  BP32.update();
+  unsigned long now = millis();
+
+  // XBOX PRIORITY: If no controller, poll Bluetooth aggressively
+  // This is the key to fast Xbox connection - don't let WiFi slow us down
+  if (!myGamepad) {
+    // Aggressive Bluetooth polling - multiple updates per loop iteration
+    for (int i = 0; i < 5; i++) {
+      BP32.update();
+      if (myGamepad) break;  // Connected! Stop polling
+      delayMicroseconds(500);  // 0.5ms between polls
+    }
+
+    // Re-enable scanning periodically in case it got disabled
+    static unsigned long lastScanEnable = 0;
+    if (now - lastScanEnable > 2000) {
+      BP32.enableNewBluetoothConnections(true);
+      lastScanEnable = now;
+    }
+
+    // Log scanning status every 5 seconds
+    if (now - lastXboxScanLog > XBOX_SCAN_LOG_INTERVAL) {
+      Serial.println("[BP32] Scanning for Xbox controller...");
+      lastXboxScanLog = now;
+    }
+  } else {
+    // Controller connected - normal single update
+    BP32.update();
+  }
+
   webSocket.loop();
   ArduinoOTA.handle();  // Check for wireless OTA updates
-
-  unsigned long now = millis();
 
   // More aggressive WiFi monitoring
   if (now - lastWiFiCheck > WIFI_CHECK_INTERVAL) {
@@ -204,7 +236,11 @@ void loop() {
     handleGamepad();
   }
   forwardTeensySerial();
-  delay(1);
+
+  // Only delay when controller is connected - maximize scan speed otherwise
+  if (myGamepad) {
+    delay(1);
+  }
 }
 
 void onConnectedGamepad(GamepadPtr gp) {
@@ -219,12 +255,16 @@ void onConnectedGamepad(GamepadPtr gp) {
 void onDisconnectedGamepad(GamepadPtr gp) {
   if (myGamepad == gp) {
     myGamepad = nullptr;
-    Serial.println("[BP32] XBOX DISCONNECTED");
+    Serial.println("[BP32] XBOX DISCONNECTED - Restarting scan immediately");
     teensySerial.println("STATE,DISCONNECTED");
     teensySerial.println("AX,LX,0,0");
     teensySerial.println("AX,LY,0,0");
+
+    // Immediately re-enable scanning for fast reconnection
+    BP32.enableNewBluetoothConnections(true);
+
     if (wsConnected) {
-      webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"Xbox Disconnected\"}");
+      webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"Xbox Disconnected - Scanning...\"}");
     }
   }
 }
@@ -375,7 +415,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.7.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.8.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +

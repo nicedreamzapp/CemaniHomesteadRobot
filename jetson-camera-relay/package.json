@@ -1,0 +1,15 @@
+{
+  "name": "jetson-camera-relay",
+  "version": "1.0.0",
+  "description": "Camera relay for Jetson Orin Nano - streams robot cameras to VPS from anywhere",
+  "main": "relay.js",
+  "scripts": {
+    "start": "node relay.js",
+    "test": "echo \"No tests yet\""
+  },
+  "author": "Matt Macosko",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

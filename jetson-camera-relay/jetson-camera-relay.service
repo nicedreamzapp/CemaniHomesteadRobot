@@ -1,0 +1,20 @@
+[Unit]
+Description=Jetson Camera Relay - Streams robot cameras to VPS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/jetson-camera-relay
+ExecStart=/usr/bin/node relay.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

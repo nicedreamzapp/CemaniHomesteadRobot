@@ -1,0 +1,44 @@
+{
+  "cameras": [
+    {
+      "id": 1,
+      "name": "Front",
+      "ip": "192.168.1.191",
+      "rtspPort": 554,
+      "rtspPath": "/onvif1",
+      "onvifPort": 5000,
+      "username": "admin",
+      "password": "YOUR_PASSWORD"
+    },
+    {
+      "id": 2,
+      "name": "Rear",
+      "ip": "192.168.1.27",
+      "rtspPort": 554,
+      "rtspPath": "/onvif1",
+      "onvifPort": 5000,
+      "username": "admin",
+      "password": "YOUR_PASSWORD"
+    },
+    {
+      "id": 3,
+      "name": "V380 Light",
+      "ip": "192.168.1.200",
+      "rtspPort": 554,
+      "rtspPath": "/live/ch00_0",
+      "onvifPort": null,
+      "username": "",
+      "password": ""
+    }
+  ],
+  "vps": {
+    "wsUrl": "ws://72.60.124.34:3001",
+    "streamPort": 9999
+  },
+  "stream": {
+    "fps": 30,
+    "quality": 95,
+    "scale": "960:540",
+    "useWebSocket": true
+  }
+}
