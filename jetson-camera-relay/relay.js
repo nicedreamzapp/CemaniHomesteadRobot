@@ -196,6 +196,18 @@ function connectToVPS() {
         console.log('[V380] Light command received:', msg.state);
         handleV380Light(msg.state);
       }
+
+      if (msg.type === 'v380_music') {
+        handleV380Music(msg.action, msg.volume || 25);
+      }
+
+      if (msg.type === 'v380_talk_start') {
+        handleV380Talk('start');
+      }
+
+      if (msg.type === 'v380_talk_stop') {
+        handleV380Talk('stop');
+      }
     } catch (err) {}
   });
 
@@ -264,6 +276,21 @@ function connectToPtzChannel() {
       if (msg.type === 'v380_light') {
         console.log('[V380] Light command via PTZ channel:', msg.state);
         handleV380Light(msg.state);
+      }
+
+      if (msg.type === 'v380_music') {
+        console.log('[V380] Music command via PTZ channel:', msg.action);
+        handleV380Music(msg.action, msg.volume || 25);
+      }
+
+      if (msg.type === 'v380_talk_start') {
+        console.log('[V380] Talk start via PTZ channel');
+        handleV380Talk('start');
+      }
+
+      if (msg.type === 'v380_talk_stop') {
+        console.log('[V380] Talk stop via PTZ channel');
+        handleV380Talk('stop');
       }
     } catch (err) {}
   });
@@ -586,6 +613,61 @@ function handleV380Light(state) {
   v380.on('close', (code) => {
     console.log('[V380] Light command completed, exit code:', code);
   });
+}
+
+// V380 Music Control
+const V380_PLAY_SCRIPT = path.join(__dirname, 'v380-play.js');
+const V380_TALK_SCRIPT = path.join(__dirname, 'v380-talk.js');
+const MUSIC_FILE = '/home/nvidia/music/Chrome_Sparks_-_Send_the_Pain_On.mp3';  // Put music file on Jetson
+let musicProcess = null;
+
+function handleV380Music(action, volume = 25) {
+  console.log(`[V380] Music command: ${action} at ${volume}%`);
+
+  if (action === 'stop' && musicProcess) {
+    musicProcess.kill('SIGTERM');
+    musicProcess = null;
+    console.log('[V380] Music stopped');
+    return;
+  }
+
+  if (action === 'play') {
+    // Kill any existing music process
+    if (musicProcess) {
+      musicProcess.kill('SIGTERM');
+      musicProcess = null;
+    }
+
+    // Start playing music
+    musicProcess = spawn('node', [V380_PLAY_SCRIPT, MUSIC_FILE, String(volume)], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    musicProcess.stdout.on('data', (data) => {
+      console.log('[V380-MUSIC]', data.toString().trim());
+    });
+
+    musicProcess.stderr.on('data', (data) => {
+      console.log('[V380-MUSIC] Error:', data.toString().trim());
+    });
+
+    musicProcess.on('close', (code) => {
+      console.log('[V380] Music finished, exit code:', code);
+      musicProcess = null;
+    });
+  }
+}
+
+function handleV380Talk(action) {
+  console.log(`[V380] Talk command: ${action}`);
+  // TODO: Implement real-time audio streaming from browser to camera
+  // For now, just play a beep to indicate talk button pressed
+  if (action === 'start') {
+    const v380 = spawn('node', [V380_TALK_SCRIPT, 'beep', '30'], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    v380.on('close', () => console.log('[V380] Talk beep sent'));
+  }
 }
 
 // STARTUP

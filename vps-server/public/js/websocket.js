@@ -138,6 +138,7 @@ function displayFrame(blob, camId) {
     if (!cam2Active) {
       cam2Active = true;
       updateCamStatus(2, true, true);
+      updateJetsonStatus(true);
     }
   } else if (camId === 3) {
     if (!cam3Image) initCam3();
@@ -182,6 +183,16 @@ function updateCamStatus(camId, connected, streaming) {
 
 function updateCam1Status(connected, streaming) {
   updateCamStatus(1, connected, streaming);
+}
+
+function updateJetsonStatus(online) {
+  const statusEl = document.getElementById('jetsonStatus');
+  const versionEl = document.getElementById('jetsonVersion');
+  const cardEl = document.getElementById('jetsonCard');
+
+  if (statusEl) statusEl.textContent = online ? 'Online' : 'Offline';
+  if (cardEl) cardEl.className = 'device-chip' + (online ? ' online' : '');
+  if (versionEl && online) versionEl.textContent = 'Ubuntu 22.04';
 }
 
 // ============ PTZ ============
@@ -411,6 +422,7 @@ ws.onmessage = function(e) {
       if(d.cameras[2] && !d.cameras[2].streaming) {
         cam2Active = false;
         updateCamStatus(2, false, false);
+        updateJetsonStatus(false);
       }
     }
   }
@@ -438,6 +450,7 @@ ws.onclose = () => {
   if (teensyMini) teensyMini.textContent = '--';
 
   updateCam1Status(false, false);
+  updateJetsonStatus(false);
 };
 
 // ============ AUDIO TOGGLE ============
@@ -504,3 +517,137 @@ function v380Light(state) {
 setTimeout(() => {
   if (!cam3Active) initCam3();
 }, 1500);
+
+// ============ V380 TALK (MIC) ============
+let talkActive = false;
+let mediaRecorder = null;
+let audioStream = null;
+
+function startTalk() {
+  if (talkActive) return;
+  talkActive = true;
+
+  const btn = document.getElementById('talkBtn');
+  if (btn) btn.classList.add('active');
+
+  // Request microphone access
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      audioStream = stream;
+
+      // Tell VPS to start talk session
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'v380_talk_start' }));
+      }
+
+      // Create MediaRecorder to capture audio chunks
+      const options = { mimeType: 'audio/webm;codecs=opus' };
+      try {
+        mediaRecorder = new MediaRecorder(stream, options);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+          // Send audio chunk as binary with 0x10 prefix (talk audio)
+          event.data.arrayBuffer().then(buffer => {
+            const audioData = new Uint8Array(buffer);
+            const packet = new Uint8Array(1 + audioData.length);
+            packet[0] = 0x10;  // Talk audio marker
+            packet.set(audioData, 1);
+            ws.send(packet);
+          });
+        }
+      };
+
+      mediaRecorder.start(100);  // Send chunks every 100ms
+      console.log('[TALK] Started recording');
+    })
+    .catch(err => {
+      console.error('[TALK] Mic access denied:', err);
+      talkActive = false;
+      const btn = document.getElementById('talkBtn');
+      if (btn) btn.classList.remove('active');
+    });
+}
+
+function stopTalk() {
+  if (!talkActive) return;
+  talkActive = false;
+
+  const btn = document.getElementById('talkBtn');
+  if (btn) btn.classList.remove('active');
+
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+
+  if (audioStream) {
+    audioStream.getTracks().forEach(track => track.stop());
+    audioStream = null;
+  }
+
+  // Tell VPS to end talk session
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'v380_talk_stop' }));
+  }
+
+  console.log('[TALK] Stopped');
+}
+
+// ============ V380 MUSIC PLAYER ============
+let musicPlaying = false;
+let currentVolume = 25;
+
+function playMusic() {
+  musicPlaying = !musicPlaying;
+
+  const btn = document.getElementById('musicBtn');
+  if (btn) {
+    if (musicPlaying) {
+      btn.classList.add('playing');
+    } else {
+      btn.classList.remove('playing');
+    }
+  }
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'v380_music',
+      action: musicPlaying ? 'play' : 'stop',
+      volume: currentVolume
+    }));
+  }
+
+  console.log('[MUSIC]', musicPlaying ? 'Playing' : 'Stopped', 'at', currentVolume + '%');
+}
+
+function updateVolume(value) {
+  currentVolume = parseInt(value);
+  const volumeValue = document.getElementById('volumeValue');
+  const volumeIcon = document.querySelector('.volume-icon');
+
+  if (volumeValue) volumeValue.textContent = currentVolume + '%';
+
+  // Update icon based on volume level
+  if (volumeIcon) {
+    if (currentVolume <= 10) {
+      volumeIcon.textContent = '🔈';
+    } else if (currentVolume <= 50) {
+      volumeIcon.textContent = '🔉';
+    } else {
+      volumeIcon.textContent = '🔊';
+    }
+  }
+
+  // Send volume update if music is playing
+  if (musicPlaying && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'v380_volume',
+      volume: currentVolume
+    }));
+  }
+
+  console.log('[VOLUME]', currentVolume + '%');
+}

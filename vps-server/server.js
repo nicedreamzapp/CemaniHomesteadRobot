@@ -643,6 +643,23 @@ wss.on("connection", (ws, req) => {
         }
       }
 
+      // Forward V380 music command to Jetson
+      if(data.type === "v380_music") {
+        console.log('[V380] Music command:', data.action);
+        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+          ptzRelaySocket.send(JSON.stringify(data));
+          console.log('[V380] Sent music command via PTZ channel');
+        }
+      }
+
+      // Forward V380 talk start/stop to Jetson
+      if(data.type === "v380_talk_start" || data.type === "v380_talk_stop") {
+        console.log('[V380] Talk command:', data.type);
+        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+          ptzRelaySocket.send(JSON.stringify(data));
+        }
+      }
+
     } catch (err) {
       const rawMsg = typeof msg === 'string' ? msg : msg.toString();
       // Log failed PTZ messages in detail

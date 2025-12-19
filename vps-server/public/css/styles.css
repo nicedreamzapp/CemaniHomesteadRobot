@@ -2634,10 +2634,23 @@ input[type="text"] {
 }
 .sidebar-triggers {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
   padding: 8px 10px;
   margin-top: 8px;
+}
+.sidebar-battery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: linear-gradient(145deg, #1a2535, #0d1520);
+  border-radius: 8px;
+  border: 1px solid #2a4a6a;
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
 }
 .coming-soon-row > .coming-soon-cams {
   flex: 1;
@@ -3066,6 +3079,134 @@ input[type="text"] {
 }
 .light-switch.on .light-switch-indicator {
   filter: drop-shadow(0 0 8px rgba(255, 220, 100, 0.9));
+}
+
+/* Round Camera Buttons - Three Corners */
+.cam-round-btn {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+  backdrop-filter: blur(5px);
+}
+.cam-round-btn:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.cam-round-btn .btn-icon {
+  font-size: 24px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.5));
+}
+
+/* Button positions */
+.cam-round-btn.top-left { top: 15px; left: 15px; }
+.cam-round-btn.bottom-left { bottom: 15px; left: 15px; }
+.cam-round-btn.bottom-right { bottom: 15px; right: 15px; }
+.cam-round-btn.top-right { top: 15px; right: 15px; }
+
+/* Light button ON state (yellow glow) */
+.cam-round-btn#lightSwitch.on {
+  border-color: rgba(255, 220, 100, 0.9);
+  background: rgba(60, 50, 20, 0.6);
+  box-shadow: 0 0 20px rgba(255, 220, 100, 0.5);
+}
+.cam-round-btn#lightSwitch.on .btn-icon {
+  filter: drop-shadow(0 0 8px rgba(255, 220, 100, 0.9));
+}
+
+/* Mic button ACTIVE state (red = recording) */
+.cam-round-btn#talkBtn.active {
+  border-color: rgba(255, 80, 80, 0.9);
+  background: rgba(80, 20, 20, 0.6);
+  box-shadow: 0 0 20px rgba(255, 80, 80, 0.5);
+  animation: recording-pulse 0.5s infinite;
+}
+@keyframes recording-pulse {
+  0%, 100% { box-shadow: 0 0 15px rgba(255, 80, 80, 0.4); }
+  50% { box-shadow: 0 0 25px rgba(255, 80, 80, 0.7); }
+}
+
+/* Music button PLAYING state (green glow) */
+.cam-round-btn#musicBtn.playing {
+  border-color: rgba(80, 255, 120, 0.9);
+  background: rgba(20, 60, 30, 0.6);
+  box-shadow: 0 0 20px rgba(80, 255, 120, 0.5);
+  animation: music-pulse 1s infinite;
+}
+@keyframes music-pulse {
+  0%, 100% { box-shadow: 0 0 15px rgba(80, 255, 120, 0.3); }
+  50% { box-shadow: 0 0 25px rgba(80, 255, 120, 0.6); }
+}
+
+/* Volume Control Slider */
+.volume-control {
+  position: absolute;
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8px 15px;
+  border-radius: 25px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(5px);
+  z-index: 10;
+}
+.volume-icon {
+  font-size: 18px;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.4));
+}
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, #00ff88, #00cc66);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+  transition: transform 0.1s;
+}
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.volume-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, #00ff88, #00cc66);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+.volume-value {
+  font-size: 12px;
+  color: #00ff88;
+  min-width: 35px;
+  text-align: right;
+  font-weight: bold;
 }
 
 /* Strobe Button */
