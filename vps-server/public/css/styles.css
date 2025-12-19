@@ -1264,12 +1264,10 @@ input[type="text"] {
 }
 .light-cam-container.large {
   position: relative;
-  width: 100%;
+  aspect-ratio: 1;
   height: 100%;
-  max-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  max-width: 100%;
+  margin: auto;
 }
 .light-cam-container.large .light-cam-video {
   width: 100%;
@@ -1289,6 +1287,26 @@ input[type="text"] {
   left: 20px;
   width: 45px;
   height: 45px;
+}
+
+/* Position buttons relative to the centered video */
+.light-cam-container.large .cam-round-btn {
+  position: absolute;
+}
+.light-cam-container.large .cam-round-btn.top-left {
+  top: 5px;
+  left: 5px;
+}
+.light-cam-container.large .cam-round-btn.bottom-left {
+  bottom: 5px;
+  left: 5px;
+}
+.light-cam-container.large .cam-round-btn.bottom-right {
+  bottom: 5px;
+  right: 5px;
+}
+.light-cam-container.large .volume-control {
+  bottom: 5px;
 }
 .light-toggle-btn {
   position: static;
