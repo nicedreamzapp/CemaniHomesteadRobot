@@ -57,7 +57,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 10px;
-  overflow: hidden;
+  overflow: visible;
 }
 /* Light cam now goes inside sidebar */
 .light-cam-inline {
