@@ -156,6 +156,18 @@ ptzWss.on('connection', (ws, req) => {
         return;
       }
 
+      // V380 music ended notification from Jetson -> forward to all browsers
+      if (data.type === 'v380_music_ended' && ws.isPtzRelay) {
+        console.log('[V380] Music ended, notifying browsers');
+        // Broadcast to all main websocket clients
+        wss.clients.forEach(c => {
+          if (c.readyState === WebSocket.OPEN) {
+            c.send(JSON.stringify({ type: 'v380_music_ended' }));
+          }
+        });
+        return;
+      }
+
     } catch (err) {
       console.error('[PTZ-WS] Error:', err.message);
     }
@@ -657,6 +669,15 @@ wss.on("connection", (ws, req) => {
         console.log('[V380] Talk command:', data.type);
         if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
           ptzRelaySocket.send(JSON.stringify(data));
+        }
+      }
+
+      // Forward V380 talk audio to Jetson
+      if(data.type === "v380_talk_audio") {
+        console.log('[V380] Talk audio received:', data.audio ? data.audio.length : 0, 'chars base64');
+        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+          ptzRelaySocket.send(JSON.stringify(data));
+          console.log('[V380] Talk audio forwarded to Jetson');
         }
       }
 

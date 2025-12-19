@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/styles.css?v=24">
+<link rel="stylesheet" href="css/styles.css?v=1219i">
 </head>
 <body>
 <div class="container">
@@ -45,20 +45,6 @@
           <span class="dev-label">Jetson</span>
           <span class="dev-status" id="jetsonStatus">--</span>
           <span class="dev-version" id="jetsonVersion"></span>
-        </div>
-      </div>
-      <div class="device-chip" id="cam1Card">
-        <span class="dev-icon">&#127909;</span>
-        <div class="dev-info">
-          <span class="dev-label">Cam 1</span>
-          <span class="dev-status" id="cam1StatusText">--</span>
-        </div>
-      </div>
-      <div class="device-chip" id="cam2Card">
-        <span class="dev-icon">&#127909;</span>
-        <div class="dev-info">
-          <span class="dev-label">Cam 2</span>
-          <span class="dev-status" id="cam2StatusText">--</span>
         </div>
       </div>
     </div>
@@ -253,23 +239,37 @@
   <div class="light-cam-wide glass">
     <div class="light-cam-container large">
       <div id="cam3-video" class="light-cam-video"></div>
+      <!-- Camera label - top center -->
+      <div class="light-cam-label">Light Cam</div>
+      <!-- LIVE indicator -->
+      <div class="cam-status-badge light-cam-live" id="cam3-status">OFFLINE</div>
       <!-- Light button - top left -->
       <div class="cam-round-btn top-left" id="lightSwitch" onclick="toggleLight()">
         <span class="btn-icon" id="lightIndicator">💡</span>
       </div>
       <!-- Mic button - bottom left -->
-      <div class="cam-round-btn bottom-left" id="talkBtn" onmousedown="startTalk()" onmouseup="stopTalk()" ontouchstart="startTalk()" ontouchend="stopTalk()" title="Hold to Talk">
-        <span class="btn-icon">🎤</span>
+      <div class="mic-btn-wrapper bottom-left">
+        <div class="mic-status" id="micStatus">
+          <span class="mic-countdown" id="micCountdown">5</span>
+          <span class="mic-hint">Hold to talk (5s max, expect delay)</span>
+        </div>
+        <div class="cam-round-btn" id="talkBtn" onmousedown="startTalk()" onmouseup="stopTalk()" ontouchstart="startTalk()" ontouchend="stopTalk()" title="Hold to Talk (5s max)">
+          <span class="btn-icon" id="micIcon">🎤</span>
+        </div>
       </div>
       <!-- Music button - bottom right -->
       <div class="cam-round-btn bottom-right" id="musicBtn" onclick="playMusic()" title="Play Music">
         <span class="btn-icon">🎵</span>
       </div>
-      <!-- Volume slider - bottom center -->
-      <div class="volume-control" id="volumeControl">
-        <span class="volume-icon">🔊</span>
-        <input type="range" id="volumeSlider" min="5" max="100" value="25" class="volume-slider" oninput="updateVolume(this.value)">
-        <span class="volume-value" id="volumeValue">25%</span>
+      <!-- Volume button - top right (controls both mic and music) -->
+      <div class="volume-btn-wrapper top-right">
+        <div class="volume-popup" id="volumePopup">
+          <span class="volume-value" id="volumeValue">25%</span>
+          <input type="range" id="volumeSlider" min="5" max="100" value="25" class="volume-slider-vertical" oninput="updateVolume(this.value)" onchange="applyVolume()">
+        </div>
+        <div class="cam-round-btn" id="volumeBtn" title="Volume">
+          <span class="btn-icon">🔊</span>
+        </div>
       </div>
     </div>
   </div>

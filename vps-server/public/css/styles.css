@@ -18,7 +18,7 @@ body {
 .container {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) minmax(280px, 320px) minmax(260px, 300px);
-  grid-template-rows: 50px auto 1fr;
+  grid-template-rows: 50px 1fr auto;
   grid-template-areas:
     "header header header"
     "cams middle sidebar"
@@ -58,6 +58,7 @@ body {
   justify-content: center;
   padding: 10px;
   overflow: visible;
+  max-height: 370px;
 }
 /* Light cam now goes inside sidebar */
 .light-cam-inline {
@@ -1264,9 +1265,9 @@ input[type="text"] {
 }
 .light-cam-container.large {
   position: relative;
-  aspect-ratio: 1;
-  height: 100%;
-  max-width: 100%;
+  width: 350px;
+  height: 350px;
+  aspect-ratio: 1 / 1;
   margin: auto;
 }
 .light-cam-container.large .light-cam-video {
@@ -1305,8 +1306,119 @@ input[type="text"] {
   bottom: 5px;
   right: 5px;
 }
-.light-cam-container.large .volume-control {
+/* Light cam status - centered at bottom */
+.light-cam-container.large .cam-status-badge.light-cam-live {
+  left: 50% !important;
+  transform: translateX(-50%);
+  z-index: 15;
+}
+/* When live - same style, green colors */
+.light-cam-container.large .cam-status-badge.light-cam-live.live {
+  background: rgba(80, 200, 100, 0.15);
+  color: rgba(150, 255, 150, 0.6);
+  border-color: rgba(81, 207, 102, 0.2);
+}
+
+/* Light cam label - top center */
+.light-cam-container.large .light-cam-label {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  font-size: 9px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(60, 80, 100, 0.3);
+  color: rgba(200, 220, 255, 0.6);
+  font-weight: bold;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(150, 180, 210, 0.2);
+  pointer-events: none;
+}
+
+/* Mic button wrapper - bottom left */
+.light-cam-container.large .mic-btn-wrapper {
+  position: absolute;
   bottom: 5px;
+  left: 5px;
+}
+.light-cam-container.large .mic-btn-wrapper .cam-round-btn {
+  position: relative;
+}
+.mic-status {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 10px;
+  border-radius: 15px;
+  border: 2px solid rgba(255, 100, 100, 0.5);
+  backdrop-filter: blur(8px);
+  z-index: 20;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all 0.2s ease;
+  min-width: 80px;
+}
+.mic-btn-wrapper.recording .mic-status {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  border-color: #ff4444;
+  box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+}
+.mic-countdown {
+  font-size: 24px;
+  font-weight: bold;
+  color: #ff4444;
+  text-shadow: 0 0 10px rgba(255, 68, 68, 0.8);
+}
+.mic-hint {
+  font-size: 9px;
+  color: #ffaa88;
+  text-align: center;
+  white-space: nowrap;
+}
+.mic-btn-wrapper.recording .cam-round-btn {
+  background: rgba(255, 0, 0, 0.6);
+  border-color: #ff4444;
+  animation: mic-pulse 0.5s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+.mic-btn-wrapper.sending .cam-round-btn {
+  background: rgba(255, 165, 0, 0.6);
+  border-color: #ffa500;
+}
+.mic-btn-wrapper.sending .mic-status {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  border-color: #ffa500;
+}
+.mic-btn-wrapper.sending .mic-countdown {
+  color: #ffa500;
+}
+.mic-btn-wrapper.sending .mic-hint {
+  color: #ffa500;
+}
+
+/* Volume button wrapper - top right */
+.light-cam-container.large .volume-btn-wrapper {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+}
+.light-cam-container.large .volume-btn-wrapper .cam-round-btn {
+  position: relative;
 }
 .light-toggle-btn {
   position: static;
@@ -3167,24 +3279,70 @@ input[type="text"] {
 }
 
 /* Volume Control Slider */
-.volume-control {
-  position: absolute;
-  bottom: 15px;
-  left: 50%;
-  transform: translateX(-50%);
+/* Volume Button Wrapper - top right */
+.volume-btn-wrapper {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 8px 15px;
+}
+.volume-popup {
+  position: absolute;
+  top: 60px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px 8px;
   border-radius: 25px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(5px);
-  z-index: 10;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(8px);
+  z-index: 20;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.2s ease;
+}
+.volume-btn-wrapper:hover .volume-popup,
+.volume-popup:hover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 .volume-icon {
-  font-size: 18px;
+  font-size: 16px;
   filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.4));
+}
+.volume-value {
+  font-size: 11px;
+  color: #00ff88;
+  font-weight: bold;
+  text-shadow: 0 0 5px rgba(0, 255, 136, 0.5);
+}
+.volume-slider-vertical {
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  width: 20px;
+  height: 80px;
+  background: transparent;
+  cursor: pointer;
+  writing-mode: bt-lr;
+}
+.volume-slider-vertical::-webkit-slider-runnable-track {
+  width: 6px;
+  background: linear-gradient(to top, #00ff88, #00aa55);
+  border-radius: 3px;
+}
+.volume-slider-vertical::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #00ff88;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
 }
 .volume-slider {
   -webkit-appearance: none;

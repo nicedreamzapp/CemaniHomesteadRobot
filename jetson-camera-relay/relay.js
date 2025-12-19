@@ -292,6 +292,11 @@ function connectToPtzChannel() {
         console.log('[V380] Talk stop via PTZ channel');
         handleV380Talk('stop');
       }
+
+      if (msg.type === 'v380_talk_audio') {
+        console.log('[V380] Talk audio received via PTZ channel:', msg.audio ? msg.audio.length : 0, 'chars');
+        handleV380TalkAudio(msg.audio, msg.volume || 25);
+      }
     } catch (err) {}
   });
 
@@ -618,7 +623,7 @@ function handleV380Light(state) {
 // V380 Music Control
 const V380_PLAY_SCRIPT = path.join(__dirname, 'v380-play.js');
 const V380_TALK_SCRIPT = path.join(__dirname, 'v380-talk.js');
-const MUSIC_FILE = '/home/nvidia/music/Chrome_Sparks_-_Send_the_Pain_On.mp3';  // Put music file on Jetson
+const MUSIC_FILE = '/home/jetson/music/Chrome_Sparks_-_Send_the_Pain_On.mp3';  // Music file on Jetson
 let musicProcess = null;
 
 function handleV380Music(action, volume = 25) {
@@ -654,19 +659,90 @@ function handleV380Music(action, volume = 25) {
     musicProcess.on('close', (code) => {
       console.log('[V380] Music finished, exit code:', code);
       musicProcess = null;
+      // Notify VPS that music ended so UI can update
+      if (ptzSocket && ptzSocket.readyState === 1) {
+        ptzSocket.send(JSON.stringify({ type: 'v380_music_ended' }));
+        console.log('[V380] Sent music_ended notification');
+      }
     });
   }
 }
 
 function handleV380Talk(action) {
   console.log(`[V380] Talk command: ${action}`);
-  // TODO: Implement real-time audio streaming from browser to camera
-  // For now, just play a beep to indicate talk button pressed
+  // Just a beep for button feedback (old behavior)
   if (action === 'start') {
-    const v380 = spawn('node', [V380_TALK_SCRIPT, 'beep', '30'], {
+    const v380 = spawn('node', [V380_TALK_SCRIPT, 'beep', '15'], {
       stdio: ['ignore', 'pipe', 'pipe']
     });
     v380.on('close', () => console.log('[V380] Talk beep sent'));
+  }
+}
+
+// Handle recorded voice audio from browser
+function handleV380TalkAudio(base64Audio, volume = 25) {
+  if (!base64Audio) {
+    console.log('[V380] No audio data received');
+    return;
+  }
+
+  console.log(`[V380] Processing talk audio (${base64Audio.length} chars base64) at ${volume}%`);
+
+  const tempDir = '/tmp';
+  const webmFile = path.join(tempDir, 'talk_audio.webm');
+  const wavFile = path.join(tempDir, 'talk_audio.wav');
+
+  try {
+    // Decode base64 to binary
+    const audioBuffer = Buffer.from(base64Audio, 'base64');
+    fs.writeFileSync(webmFile, audioBuffer);
+    console.log('[V380] Saved webm file:', audioBuffer.length, 'bytes');
+
+    // Convert webm to wav using ffmpeg (8kHz mono for V380)
+    const ffmpeg = spawn('ffmpeg', [
+      '-y',                    // Overwrite output
+      '-i', webmFile,          // Input webm
+      '-ar', '8000',           // 8kHz sample rate
+      '-ac', '1',              // Mono
+      '-acodec', 'pcm_s16le',  // 16-bit PCM
+      wavFile
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        console.log('[V380] Converted to wav, now playing through camera');
+        // Play the converted audio through the V380 camera
+        const v380Play = spawn('node', [V380_PLAY_SCRIPT, wavFile, String(volume)], {
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        v380Play.stdout.on('data', (data) => {
+          console.log('[V380-TALK]', data.toString().trim());
+        });
+
+        v380Play.stderr.on('data', (data) => {
+          console.log('[V380-TALK] Error:', data.toString().trim());
+        });
+
+        v380Play.on('close', (playCode) => {
+          console.log('[V380] Talk audio playback finished, code:', playCode);
+          // Cleanup temp files
+          try {
+            fs.unlinkSync(webmFile);
+            fs.unlinkSync(wavFile);
+          } catch (e) {}
+        });
+      } else {
+        console.log('[V380] ffmpeg conversion failed, code:', code);
+      }
+    });
+
+    ffmpeg.stderr.on('data', (data) => {
+      // ffmpeg outputs to stderr normally
+    });
+
+  } catch (err) {
+    console.error('[V380] Talk audio error:', err.message);
   }
 }
 

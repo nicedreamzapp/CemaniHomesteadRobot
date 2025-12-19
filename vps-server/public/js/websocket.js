@@ -163,8 +163,8 @@ function updateCamStatus(camId, connected, streaming) {
 
   if (!el) return;  // Element not found, skip update
 
-  // V380 uses different badge class
-  const badgeClass = (camId === 3) ? 'v380-status-badge' : 'cam-status-badge';
+  // V380 (cam3) keeps light-cam-live class for CSS targeting
+  const badgeClass = (camId === 3) ? 'cam-status-badge light-cam-live' : 'cam-status-badge';
 
   if (streaming) {
     el.textContent = 'LIVE';
@@ -431,6 +431,14 @@ ws.onmessage = function(e) {
   if(d.type === 'telemetry' || d.type === 'driver_status' || d.type === 'teensy_telemetry') {
     updateDriverTelemetry(d);
   }
+
+  // V380 music ended - reset button state
+  if(d.type === 'v380_music_ended') {
+    console.log('[MUSIC] Song ended, resetting button');
+    musicPlaying = false;
+    const btn = document.getElementById('musicBtn');
+    if (btn) btn.classList.remove('playing');
+  }
 };
 
 ws.onclose = () => {
@@ -522,25 +530,40 @@ setTimeout(() => {
 let talkActive = false;
 let mediaRecorder = null;
 let audioStream = null;
+let audioChunks = [];
+let talkCountdown = 5;
+let countdownInterval = null;
+const MAX_TALK_SECONDS = 5;
 
 function startTalk() {
   if (talkActive) return;
   talkActive = true;
+  audioChunks = [];
+  talkCountdown = MAX_TALK_SECONDS;
 
-  const btn = document.getElementById('talkBtn');
-  if (btn) btn.classList.add('active');
+  const wrapper = document.querySelector('.mic-btn-wrapper');
+  const countdownEl = document.getElementById('micCountdown');
+  const hintEl = document.querySelector('.mic-hint');
+
+  if (wrapper) wrapper.classList.add('recording');
+  if (countdownEl) countdownEl.textContent = talkCountdown;
+  if (hintEl) hintEl.textContent = 'Recording...';
+
+  // Start countdown
+  countdownInterval = setInterval(() => {
+    talkCountdown--;
+    if (countdownEl) countdownEl.textContent = talkCountdown;
+    if (talkCountdown <= 0) {
+      stopTalk();  // Auto-stop at 5 seconds
+    }
+  }, 1000);
 
   // Request microphone access
   navigator.mediaDevices.getUserMedia({ audio: true })
     .then(stream => {
       audioStream = stream;
 
-      // Tell VPS to start talk session
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'v380_talk_start' }));
-      }
-
-      // Create MediaRecorder to capture audio chunks
+      // Create MediaRecorder to capture audio
       const options = { mimeType: 'audio/webm;codecs=opus' };
       try {
         mediaRecorder = new MediaRecorder(stream, options);
@@ -549,26 +572,23 @@ function startTalk() {
       }
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
-          // Send audio chunk as binary with 0x10 prefix (talk audio)
-          event.data.arrayBuffer().then(buffer => {
-            const audioData = new Uint8Array(buffer);
-            const packet = new Uint8Array(1 + audioData.length);
-            packet[0] = 0x10;  // Talk audio marker
-            packet.set(audioData, 1);
-            ws.send(packet);
-          });
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
         }
       };
 
-      mediaRecorder.start(100);  // Send chunks every 100ms
-      console.log('[TALK] Started recording');
+      mediaRecorder.onstop = () => {
+        // Combine all chunks into one blob
+        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+        sendTalkAudio(audioBlob);
+      };
+
+      mediaRecorder.start(100);  // Collect chunks every 100ms
+      console.log('[TALK] Started recording (max 5s)');
     })
     .catch(err => {
       console.error('[TALK] Mic access denied:', err);
-      talkActive = false;
-      const btn = document.getElementById('talkBtn');
-      if (btn) btn.classList.remove('active');
+      resetTalkUI();
     });
 }
 
@@ -576,24 +596,74 @@ function stopTalk() {
   if (!talkActive) return;
   talkActive = false;
 
-  const btn = document.getElementById('talkBtn');
-  if (btn) btn.classList.remove('active');
+  // Stop countdown
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
 
+  // Stop recording
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
   }
 
+  // Stop mic stream
   if (audioStream) {
     audioStream.getTracks().forEach(track => track.stop());
     audioStream = null;
   }
 
-  // Tell VPS to end talk session
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'v380_talk_stop' }));
-  }
+  console.log('[TALK] Stopped recording');
+}
 
-  console.log('[TALK] Stopped');
+function sendTalkAudio(audioBlob) {
+  const wrapper = document.querySelector('.mic-btn-wrapper');
+  const countdownEl = document.getElementById('micCountdown');
+  const hintEl = document.querySelector('.mic-hint');
+
+  // Show sending state
+  if (wrapper) {
+    wrapper.classList.remove('recording');
+    wrapper.classList.add('sending');
+  }
+  if (countdownEl) countdownEl.textContent = '...';
+  if (hintEl) hintEl.textContent = 'Sending, expect delay...';
+
+  console.log('[TALK] Sending audio blob:', audioBlob.size, 'bytes');
+
+  // Convert blob to base64 and send
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    const base64data = reader.result.split(',')[1];  // Remove data:audio/webm;base64, prefix
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'v380_talk_audio',
+        audio: base64data,
+        mimeType: audioBlob.type,
+        volume: currentVolume
+      }));
+      console.log('[TALK] Audio sent to server');
+    }
+
+    // Reset UI after short delay
+    setTimeout(resetTalkUI, 2000);
+  };
+  reader.readAsDataURL(audioBlob);
+}
+
+function resetTalkUI() {
+  talkActive = false;
+  const wrapper = document.querySelector('.mic-btn-wrapper');
+  const countdownEl = document.getElementById('micCountdown');
+  const hintEl = document.querySelector('.mic-hint');
+
+  if (wrapper) {
+    wrapper.classList.remove('recording');
+    wrapper.classList.remove('sending');
+  }
+  if (countdownEl) countdownEl.textContent = '5';
+  if (hintEl) hintEl.textContent = 'Hold to talk (5s max, expect delay)';
 }
 
 // ============ V380 MUSIC PLAYER ============
@@ -623,6 +693,8 @@ function playMusic() {
   console.log('[MUSIC]', musicPlaying ? 'Playing' : 'Stopped', 'at', currentVolume + '%');
 }
 
+let volumeDebounceTimer = null;
+
 function updateVolume(value) {
   currentVolume = parseInt(value);
   const volumeValue = document.getElementById('volumeValue');
@@ -641,13 +713,12 @@ function updateVolume(value) {
     }
   }
 
-  // Send volume update if music is playing
-  if (musicPlaying && ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'v380_volume',
-      volume: currentVolume
-    }));
-  }
-
   console.log('[VOLUME]', currentVolume + '%');
+}
+
+// Called when slider is released - volume will be used on next play
+function applyVolume() {
+  // Don't restart music while playing - just store volume for next play
+  // This prevents glitchy audio from restarting the stream
+  console.log('[VOLUME] Set to', currentVolume + '% (applies on next play)');
 }
