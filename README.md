@@ -421,6 +421,138 @@ void handleFlashMessage(uint8_t * payload, size_t length) {
 
 ---
 
+## 💻 Mac ↔ Jetson Development
+
+**Develop on Mac, deploy to Jetson over WiFi. Both share the same network.**
+
+### Network Setup
+
+| Device | IP Address | User | Purpose |
+|--------|------------|------|---------|
+| Mac Mini | `192.168.1.xxx` | - | Development machine |
+| Jetson Orin Nano | `192.168.1.xxx` | `jetson` | Robot's AI brain |
+| VPS Server | `72.60.124.34` | `root` | Remote command center |
+
+> **Tip:** Find Jetson's IP with `arp -a | grep -i nvidia` or check your router's DHCP leases
+
+### SSH Access
+
+```bash
+# Connect to Jetson from Mac
+ssh jetson@192.168.1.XXX
+
+# Or add to ~/.ssh/config for easy access:
+# Host robot
+#     HostName 192.168.1.XXX
+#     User jetson
+# Then just: ssh robot
+```
+
+### File Sync: Mac ↔ Jetson ↔ GitHub
+
+All three locations stay in sync:
+
+```
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   Mac Mini      │ ◄─────► │     GitHub      │ ◄─────► │  Jetson Nano    │
+│  (Development)  │  push   │   (Central)     │  pull   │   (On Robot)    │
+│                 │  pull   │                 │  push   │                 │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
+```
+
+#### Option A: Git-Based Sync (Recommended)
+
+```bash
+# On Mac - push changes
+cd ~/Desktop/CemaniHomesteadRobot
+git add . && git commit -m "Update relay code" && git push
+
+# On Jetson - pull changes
+ssh jetson@192.168.1.XXX "cd ~/jetson-camera-relay && git pull"
+```
+
+#### Option B: Direct rsync (Quick Testing)
+
+```bash
+# Sync jetson-camera-relay folder to Jetson
+rsync -avz --exclude 'node_modules' \
+  ~/Desktop/CemaniHomesteadRobot/jetson-camera-relay/ \
+  jetson@192.168.1.XXX:~/jetson-camera-relay/
+
+# Sync back from Jetson to Mac
+rsync -avz --exclude 'node_modules' \
+  jetson@192.168.1.XXX:~/jetson-camera-relay/ \
+  ~/Desktop/CemaniHomesteadRobot/jetson-camera-relay/
+```
+
+#### Option C: SCP Single File
+
+```bash
+# Copy a specific file to Jetson
+scp ~/Desktop/CemaniHomesteadRobot/jetson-camera-relay/relay.js \
+  jetson@192.168.1.XXX:~/jetson-camera-relay/
+
+# Copy from Jetson to Mac
+scp jetson@192.168.1.XXX:~/jetson-camera-relay/config.json \
+  ~/Desktop/CemaniHomesteadRobot/jetson-camera-relay/
+```
+
+### Remote Commands
+
+```bash
+# Restart camera relay on Jetson
+ssh jetson@192.168.1.XXX "sudo systemctl restart jetson-camera-relay"
+
+# View Jetson relay logs
+ssh jetson@192.168.1.XXX "journalctl -u jetson-camera-relay -f"
+
+# Check if relay is running
+ssh jetson@192.168.1.XXX "systemctl status jetson-camera-relay"
+
+# Run relay manually for debugging
+ssh jetson@192.168.1.XXX "cd ~/jetson-camera-relay && node relay.js"
+```
+
+### Development Workflow
+
+```bash
+# 1. Edit code on Mac (VS Code, etc.)
+
+# 2. Quick test - sync and restart
+rsync -avz --exclude 'node_modules' \
+  ~/Desktop/CemaniHomesteadRobot/jetson-camera-relay/ \
+  jetson@192.168.1.XXX:~/jetson-camera-relay/ && \
+ssh jetson@192.168.1.XXX "sudo systemctl restart jetson-camera-relay"
+
+# 3. Watch logs to verify
+ssh jetson@192.168.1.XXX "journalctl -u jetson-camera-relay -f"
+
+# 4. When working, commit to Git
+git add . && git commit -m "Feature: description" && git push
+```
+
+### USB Connection (Alternative)
+
+If WiFi is unavailable, connect USB-C directly:
+
+```bash
+# Jetson appears as USB network device
+# Default IP over USB: 192.168.55.1
+ssh jetson@192.168.55.1
+```
+
+### VPS Deployment
+
+```bash
+# Sync VPS server code and restart
+scp -r ~/Desktop/CemaniHomesteadRobot/vps-server/* \
+  root@72.60.124.34:/root/robot-server/
+
+ssh root@72.60.124.34 "pm2 restart robot && pm2 logs robot --lines 20"
+```
+
+---
+
 ## 🎯 The Vision
 
 **The Problem:** Backyard predators attacking my chickens. Manual homestead labor. Kids want robot rides.
