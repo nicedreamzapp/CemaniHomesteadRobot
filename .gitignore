@@ -47,3 +47,4 @@ bluepad32-template/
 mac-camera-relay/config.json
 !mac-camera-relay/config.example.json
 jetson-camera-relay/config.json
+auth.json

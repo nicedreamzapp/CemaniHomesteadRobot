@@ -9,6 +9,35 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// ============ BASIC AUTH ============
+// Load credentials from auth.json (kept out of git)
+let authConfig = null;
+try {
+  authConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'auth.json'), 'utf8'));
+  console.log('[AUTH] Basic authentication enabled');
+} catch (e) {
+  console.log('[AUTH] No auth.json found - running without authentication');
+}
+
+// Basic auth middleware
+if (authConfig) {
+  app.use((req, res, next) => {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Basic ')) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Robot Control"');
+      return res.status(401).send('Authentication required');
+    }
+    const credentials = Buffer.from(auth.split(' ')[1], 'base64').toString();
+    const [user, pass] = credentials.split(':');
+    if (user === authConfig.username && pass === authConfig.password) {
+      next();
+    } else {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Robot Control"');
+      return res.status(401).send('Invalid credentials');
+    }
+  });
+}
+
 // Disable caching for HTML and JS files
 app.use((req, res, next) => {
   if (req.path.endsWith('.html') || req.path === '/' || req.path.endsWith('.js')) {
