@@ -107,8 +107,7 @@ let cameraStatus = {
 // Per-camera streaming status with timeout detection
 const perCameraStatus = {
   1: { streaming: false, lastFrame: 0 },
-  2: { streaming: false, lastFrame: 0 },
-  3: { streaming: false, lastFrame: 0 }  // V380 Light Bulb Camera
+  2: { streaming: false, lastFrame: 0 }
 };
 const CAMERA_TIMEOUT_MS = 3000; // Mark as not streaming if no frame for 3 seconds
 
@@ -180,18 +179,6 @@ ptzWss.on('connection', (ws, req) => {
         browserPtzClients.forEach(c => {
           if (c.readyState === WebSocket.OPEN) {
             c.send(JSON.stringify(data));
-          }
-        });
-        return;
-      }
-
-      // V380 music ended notification from Jetson -> forward to all browsers
-      if (data.type === 'v380_music_ended' && ws.isPtzRelay) {
-        console.log('[V380] Music ended, notifying browsers');
-        // Broadcast to all main websocket clients
-        wss.clients.forEach(c => {
-          if (c.readyState === WebSocket.OPEN) {
-            c.send(JSON.stringify({ type: 'v380_music_ended' }));
           }
         });
         return;
@@ -666,48 +653,6 @@ wss.on("connection", (ws, req) => {
       if((data.type === "talkback_start" || data.type === "talkback_stop") && cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
         cameraSocket.send(JSON.stringify(data));
         console.log('[TALKBACK]', data.type, 'camera:', data.camera);
-      }
-
-      // Forward V380 light control to PTZ relay (more reliable than main camera socket)
-      if(data.type === "v380_light") {
-        console.log('[V380-DEBUG] ptzRelaySocket exists:', !!ptzRelaySocket);
-        if (ptzRelaySocket) {
-          console.log('[V380-DEBUG] ptz readyState:', ptzRelaySocket.readyState, '(OPEN=1)');
-        }
-        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
-          const msg = JSON.stringify(data);
-          console.log('[V380] Sending to ptzRelaySocket:', msg);
-          ptzRelaySocket.send(msg);
-          console.log('[V380] Sent light command via PTZ channel:', data.state);
-        } else {
-          console.log('[V380] Cannot send - ptzRelaySocket not ready');
-        }
-      }
-
-      // Forward V380 music command to Jetson
-      if(data.type === "v380_music") {
-        console.log('[V380] Music command:', data.action);
-        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
-          ptzRelaySocket.send(JSON.stringify(data));
-          console.log('[V380] Sent music command via PTZ channel');
-        }
-      }
-
-      // Forward V380 talk start/stop to Jetson
-      if(data.type === "v380_talk_start" || data.type === "v380_talk_stop") {
-        console.log('[V380] Talk command:', data.type);
-        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
-          ptzRelaySocket.send(JSON.stringify(data));
-        }
-      }
-
-      // Forward V380 talk audio to Jetson
-      if(data.type === "v380_talk_audio") {
-        console.log('[V380] Talk audio received:', data.audio ? data.audio.length : 0, 'chars base64');
-        if(ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
-          ptzRelaySocket.send(JSON.stringify(data));
-          console.log('[V380] Talk audio forwarded to Jetson');
-        }
       }
 
     } catch (err) {

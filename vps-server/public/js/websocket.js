@@ -61,11 +61,8 @@ async function playAudioChunk(data) {
 // ============ CAMERA PLAYERS ============
 let cam1Image = null;
 let cam2Image = null;
-let cam3Image = null;  // V380 Light Bulb Cam
 let cam1Active = false;
 let cam2Active = false;
-let cam3Active = false;
-let v380LightState = -1;  // -1 = unknown, 0 = off, 1 = on, 2 = auto
 
 function initCam1() {
   const container = document.getElementById('cam1-video');
@@ -93,21 +90,8 @@ function initCam2() {
   }
 }
 
-function initCam3() {
-  const container = document.getElementById('cam3-video');
-  if (!container) return;
-  if (!cam3Image) {
-    cam3Image = document.createElement('img');
-    cam3Image.style.width = '100%';
-    cam3Image.style.height = '100%';
-    cam3Image.style.objectFit = 'cover';  // Cover for circular crop
-    cam3Image.style.background = '#000';
-    container.innerHTML = '';
-    container.appendChild(cam3Image);
-  }
-}
 
-let pendingFrameUrl = { 1: null, 2: null, 3: null };
+let pendingFrameUrl = { 1: null, 2: null };
 
 function displayFrame(blob, camId) {
   if (pendingFrameUrl[camId]) {
@@ -140,19 +124,6 @@ function displayFrame(blob, camId) {
       updateCamStatus(2, true, true);
       updateJetsonStatus(true);
     }
-  } else if (camId === 3) {
-    if (!cam3Image) initCam3();
-    if (cam3Image) {
-      cam3Image.src = url;
-      cam3Image.onload = () => {
-        URL.revokeObjectURL(url);
-        if (pendingFrameUrl[3] === url) pendingFrameUrl[3] = null;
-      };
-      if (!cam3Active) {
-        cam3Active = true;
-        updateCamStatus(3, true, true);
-      }
-    }
   }
 }
 
@@ -163,18 +134,15 @@ function updateCamStatus(camId, connected, streaming) {
 
   if (!el) return;  // Element not found, skip update
 
-  // V380 (cam3) keeps light-cam-live class for CSS targeting
-  const badgeClass = (camId === 3) ? 'cam-status-badge light-cam-live' : 'cam-status-badge';
-
   if (streaming) {
     el.textContent = 'LIVE';
-    el.className = badgeClass + ' live';
+    el.className = 'cam-status-badge live';
     el.style.background = '';  // Use CSS default (green)
     if (txt) txt.textContent = 'Live';
     if (card) card.className = 'device-chip online';
   } else {
     el.textContent = 'OFFLINE';
-    el.className = badgeClass;
+    el.className = 'cam-status-badge';
     el.style.background = '';  // Use CSS default (red)
     if (txt) txt.textContent = 'Offline';
     if (card) card.className = 'device-chip';
@@ -432,13 +400,6 @@ ws.onmessage = function(e) {
     updateDriverTelemetry(d);
   }
 
-  // V380 music ended - reset button state
-  if(d.type === 'v380_music_ended') {
-    console.log('[MUSIC] Song ended, resetting button');
-    musicPlaying = false;
-    const btn = document.getElementById('musicBtn');
-    if (btn) btn.classList.remove('playing');
-  }
 };
 
 ws.onclose = () => {
@@ -498,227 +459,3 @@ function toggleMute2() {
   console.log('[AUDIO] Cam2 muted:', isMuted2);
 }
 
-// ============ V380 LIGHT CONTROL ============
-function v380Light(state) {
-  // state: 0 = off, 1 = on, 2 = auto
-  v380LightState = state;
-  console.log('[V380] Light command:', state, '(0=off, 1=on, 2=auto)');
-
-  // Update button states if they exist
-  const lightOnBtn = document.getElementById('lightOnBtn');
-  const lightAutoBtn = document.getElementById('lightAutoBtn');
-  const lightOffBtn = document.getElementById('lightOffBtn');
-  if (lightOnBtn) lightOnBtn.classList.toggle('active', state === 1);
-  if (lightAutoBtn) lightAutoBtn.classList.toggle('active', state === 2);
-  if (lightOffBtn) lightOffBtn.classList.toggle('active', state === 0);
-
-  // Send to server via WebSocket
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'v380_light', state: state }));
-    console.log('[V380] Sent via WebSocket');
-  } else {
-    console.log('[V380] WebSocket not ready, state:', ws ? ws.readyState : 'null');
-  }
-}
-
-// Initialize V380 cam on load
-setTimeout(() => {
-  if (!cam3Active) initCam3();
-}, 1500);
-
-// ============ V380 TALK (MIC) ============
-let talkActive = false;
-let mediaRecorder = null;
-let audioStream = null;
-let audioChunks = [];
-let talkCountdown = 5;
-let countdownInterval = null;
-const MAX_TALK_SECONDS = 5;
-
-function startTalk() {
-  if (talkActive) return;
-  talkActive = true;
-  audioChunks = [];
-  talkCountdown = MAX_TALK_SECONDS;
-
-  const wrapper = document.querySelector('.mic-btn-wrapper');
-  const countdownEl = document.getElementById('micCountdown');
-  const hintEl = document.querySelector('.mic-hint');
-
-  if (wrapper) wrapper.classList.add('recording');
-  if (countdownEl) countdownEl.textContent = talkCountdown;
-  if (hintEl) hintEl.textContent = 'Recording...';
-
-  // Start countdown
-  countdownInterval = setInterval(() => {
-    talkCountdown--;
-    if (countdownEl) countdownEl.textContent = talkCountdown;
-    if (talkCountdown <= 0) {
-      stopTalk();  // Auto-stop at 5 seconds
-    }
-  }, 1000);
-
-  // Request microphone access
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(stream => {
-      audioStream = stream;
-
-      // Create MediaRecorder to capture audio
-      const options = { mimeType: 'audio/webm;codecs=opus' };
-      try {
-        mediaRecorder = new MediaRecorder(stream, options);
-      } catch (e) {
-        mediaRecorder = new MediaRecorder(stream);
-      }
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunks.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        // Combine all chunks into one blob
-        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-        sendTalkAudio(audioBlob);
-      };
-
-      mediaRecorder.start(100);  // Collect chunks every 100ms
-      console.log('[TALK] Started recording (max 5s)');
-    })
-    .catch(err => {
-      console.error('[TALK] Mic access denied:', err);
-      resetTalkUI();
-    });
-}
-
-function stopTalk() {
-  if (!talkActive) return;
-  talkActive = false;
-
-  // Stop countdown
-  if (countdownInterval) {
-    clearInterval(countdownInterval);
-    countdownInterval = null;
-  }
-
-  // Stop recording
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  }
-
-  // Stop mic stream
-  if (audioStream) {
-    audioStream.getTracks().forEach(track => track.stop());
-    audioStream = null;
-  }
-
-  console.log('[TALK] Stopped recording');
-}
-
-function sendTalkAudio(audioBlob) {
-  const wrapper = document.querySelector('.mic-btn-wrapper');
-  const countdownEl = document.getElementById('micCountdown');
-  const hintEl = document.querySelector('.mic-hint');
-
-  // Show sending state
-  if (wrapper) {
-    wrapper.classList.remove('recording');
-    wrapper.classList.add('sending');
-  }
-  if (countdownEl) countdownEl.textContent = '...';
-  if (hintEl) hintEl.textContent = 'Sending, expect delay...';
-
-  console.log('[TALK] Sending audio blob:', audioBlob.size, 'bytes');
-
-  // Convert blob to base64 and send
-  const reader = new FileReader();
-  reader.onloadend = () => {
-    const base64data = reader.result.split(',')[1];  // Remove data:audio/webm;base64, prefix
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'v380_talk_audio',
-        audio: base64data,
-        mimeType: audioBlob.type,
-        volume: currentVolume
-      }));
-      console.log('[TALK] Audio sent to server');
-    }
-
-    // Reset UI after short delay
-    setTimeout(resetTalkUI, 2000);
-  };
-  reader.readAsDataURL(audioBlob);
-}
-
-function resetTalkUI() {
-  talkActive = false;
-  const wrapper = document.querySelector('.mic-btn-wrapper');
-  const countdownEl = document.getElementById('micCountdown');
-  const hintEl = document.querySelector('.mic-hint');
-
-  if (wrapper) {
-    wrapper.classList.remove('recording');
-    wrapper.classList.remove('sending');
-  }
-  if (countdownEl) countdownEl.textContent = '5';
-  if (hintEl) hintEl.textContent = 'Hold to talk (5s max, expect delay)';
-}
-
-// ============ V380 MUSIC PLAYER ============
-let musicPlaying = false;
-let currentVolume = 25;
-
-function playMusic() {
-  musicPlaying = !musicPlaying;
-
-  const btn = document.getElementById('musicBtn');
-  if (btn) {
-    if (musicPlaying) {
-      btn.classList.add('playing');
-    } else {
-      btn.classList.remove('playing');
-    }
-  }
-
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'v380_music',
-      action: musicPlaying ? 'play' : 'stop',
-      volume: currentVolume
-    }));
-  }
-
-  console.log('[MUSIC]', musicPlaying ? 'Playing' : 'Stopped', 'at', currentVolume + '%');
-}
-
-let volumeDebounceTimer = null;
-
-function updateVolume(value) {
-  currentVolume = parseInt(value);
-  const volumeValue = document.getElementById('volumeValue');
-  const volumeIcon = document.querySelector('.volume-icon');
-
-  if (volumeValue) volumeValue.textContent = currentVolume + '%';
-
-  // Update icon based on volume level
-  if (volumeIcon) {
-    if (currentVolume <= 10) {
-      volumeIcon.textContent = '🔈';
-    } else if (currentVolume <= 50) {
-      volumeIcon.textContent = '🔉';
-    } else {
-      volumeIcon.textContent = '🔊';
-    }
-  }
-
-  console.log('[VOLUME]', currentVolume + '%');
-}
-
-// Called when slider is released - volume will be used on next play
-function applyVolume() {
-  // Don't restart music while playing - just store volume for next play
-  // This prevents glitchy audio from restarting the stream
-  console.log('[VOLUME] Set to', currentVolume + '% (applies on next play)');
-}

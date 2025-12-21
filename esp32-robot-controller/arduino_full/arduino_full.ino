@@ -328,17 +328,8 @@ void handleGamepad() {
           }
         }
 
-        // B button (button 1) toggles V380 light on press
-        if (b == 1 && state == 1) {
-          static bool lightOn = false;
-          lightOn = !lightOn;
-          Serial.printf("[LIGHT] V380 Light: %s\n", lightOn ? "ON" : "OFF");
-          if (wsConnected) {
-            String lightMsg = "{\"type\":\"v380_light\",\"state\":" + String(lightOn ? 1 : 0) + "}";
-            webSocket.sendTXT(lightMsg);
-            webSocket.sendTXT("{\"type\":\"serial\",\"data\":\"V380 Light: " + String(lightOn ? "ON" : "OFF") + "\"}");
-          }
-        }
+        // B button (button 1) - currently unused
+        // if (b == 1 && state == 1) { }
       }
     }
     pbtn = btn;
