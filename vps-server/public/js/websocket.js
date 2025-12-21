@@ -288,6 +288,12 @@ ws.onmessage = function(e) {
       return;  // Don't show TELEM in serial monitor - it's just noise
     }
 
+    // Check if this is SONAR data
+    if (d.data && d.data.startsWith('SONAR,')) {
+      parseSonarData(d.data);
+      return;  // Don't show SONAR in serial monitor - updated on UI
+    }
+
     // Don't show TEENSY_VERSION in serial monitor either
     if (d.data && d.data.startsWith('TEENSY_VERSION,')) {
       return;
@@ -457,5 +463,156 @@ function toggleMute2() {
     btn.classList.remove("muted");
   }
   console.log('[AUDIO] Cam2 muted:', isMuted2);
+}
+
+// ============ ULTRASONIC SONAR DISPLAY ============
+// Parse SONAR data: SONAR,FL,FR,RL,RR (distances in cm)
+function parseSonarData(data) {
+  const parts = data.split(',');
+  if (parts.length < 5) return;
+
+  const fl = parseFloat(parts[1]) || 0;
+  const fr = parseFloat(parts[2]) || 0;
+  const rl = parseFloat(parts[3]) || 0;
+  const rr = parseFloat(parts[4]) || 0;
+
+  console.log('[SONAR] FL:', fl, 'FR:', fr, 'RL:', rl, 'RR:', rr);
+
+  updateSonarDisplay('FL', fl);
+  updateSonarDisplay('FR', fr);
+  updateSonarDisplay('RL', rl);
+  updateSonarDisplay('RR', rr);
+}
+
+// Test function - call from browser console: testSonar(50)
+window.testSonar = function(distCm) {
+  console.log('[SONAR TEST] Testing with distance:', distCm, 'cm');
+  updateSonarDisplay('FL', distCm);
+  updateSonarDisplay('FR', distCm);
+  updateSonarDisplay('RL', distCm);
+  updateSonarDisplay('RR', distCm);
+};
+
+// Track sonar data timeout per sensor
+let sonarTimeouts = { FL: null, FR: null, RL: null, RR: null };
+
+// Smoothing: keep last 3 readings and average them
+let sonarHistory = { FL: [], FR: [], RL: [], RR: [] };
+let sonarSmoothed = { FL: 0, FR: 0, RL: 0, RR: 0 };
+
+function smoothReading(sensor, rawCm) {
+  const history = sonarHistory[sensor];
+  if (rawCm > 0) {
+    history.push(rawCm);
+    if (history.length > 3) history.shift(); // keep last 3
+  }
+  if (history.length === 0) return 0;
+  const avg = history.reduce((a, b) => a + b, 0) / history.length;
+  // Only update if change is > 5cm to reduce jitter
+  if (Math.abs(avg - sonarSmoothed[sensor]) > 5 || sonarSmoothed[sensor] === 0) {
+    sonarSmoothed[sensor] = avg;
+  }
+  return sonarSmoothed[sensor];
+}
+
+// Update individual sonar sensor display
+function updateSonarDisplay(sensor, distCm) {
+  const labelEl = document.getElementById('dist' + sensor);
+  const waveEl = document.getElementById('sonar' + sensor);
+  if (!labelEl || !waveEl) return;
+
+  // Smooth the reading to reduce jitter
+  distCm = smoothReading(sensor, distCm);
+
+  // Convert cm to feet for display (1 decimal for readability)
+  let distFt = distCm > 0 ? (distCm / 30.48).toFixed(1) : '--';
+  labelEl.textContent = distFt + 'ft';
+
+  // Mark as active (receiving data) - waves will animate
+  waveEl.classList.add('active');
+
+  // Clear previous timeout and set new one to remove active after 2s of no data
+  if (sonarTimeouts[sensor]) clearTimeout(sonarTimeouts[sensor]);
+  sonarTimeouts[sensor] = setTimeout(() => {
+    waveEl.classList.remove('active');
+    labelEl.textContent = '-- ft';
+  }, 2000);
+
+  // Get all waves in this sensor group
+  const waves = waveEl.querySelectorAll('.sonar-wave');
+
+  // Remove all color classes from waves first
+  waves.forEach(w => {
+    w.classList.remove('triggered', 'color-red', 'color-pink', 'color-orange', 'color-yellow');
+  });
+
+  // If object detected, trigger waves up to that distance with appropriate color
+  // Color based on distance: <1.5ft=red, 1.5-2.5ft=pink, 2.5-3.5ft=orange, 3.5ft+=yellow
+  if (distCm > 0 && distCm < 160) {  // Only trigger if object within ~5ft
+    // Determine color based on distance
+    let colorClass = '';
+    if (distCm < 45) colorClass = 'color-red';         // <1.5ft
+    else if (distCm < 75) colorClass = 'color-pink';   // 1.5-2.5ft
+    else if (distCm < 105) colorClass = 'color-orange'; // 2.5-3.5ft
+    else colorClass = 'color-yellow';                   // 3.5ft+
+
+    // Each wave = 0.5ft = 15.24cm
+    let triggerUpTo = Math.ceil(distCm / 15.24);
+    if (triggerUpTo > 10) triggerUpTo = 10;
+    if (triggerUpTo < 1) triggerUpTo = 1;
+
+    // Add triggered + color class to waves
+    for (let i = 1; i <= triggerUpTo; i++) {
+      const wave = waveEl.querySelector('.w' + i);
+      if (wave) {
+        wave.classList.add('triggered', colorClass);
+      }
+    }
+  }
+
+  // Update position class (preserve active class)
+  const posMap = { FL: 'front-left', FR: 'front-right', RL: 'rear-left', RR: 'rear-right' };
+  waveEl.className = 'sonar-wave-group ' + posMap[sensor] + ' active';
+
+  // Update label color based on closest detection
+  let labelColor = '';
+  if (distCm <= 0) labelColor = '';
+  else if (distCm < 60) labelColor = 'danger';
+  else if (distCm < 120) labelColor = 'warning';
+  else labelColor = 'clear';
+  labelEl.className = 'sonar-dist-label ' + posMap[sensor] + '-label' + (labelColor ? ' ' + labelColor : '');
+
+  // Update bar graph
+  const barEl = document.getElementById('bar' + sensor);
+  const readingEl = document.getElementById('reading' + sensor);
+  if (barEl && readingEl) {
+    // Max range is 600cm (~20ft), scale bar width accordingly
+    const maxCm = 600;
+    const pct = distCm > 0 ? Math.min((distCm / maxCm) * 100, 100) : 0;
+    barEl.style.width = pct + '%';
+
+    // Color the bar based on distance
+    if (distCm <= 0) {
+      barEl.style.background = 'rgba(100,100,100,0.3)';
+      barEl.style.borderColor = '#666';
+      barEl.style.boxShadow = 'none';
+    } else if (distCm < 60) {
+      barEl.style.background = 'linear-gradient(to top, #f33, rgba(255,50,50,0.3))';
+      barEl.style.borderColor = '#f33';
+      barEl.style.boxShadow = '0 0 8px #f33';
+    } else if (distCm < 150) {
+      barEl.style.background = 'linear-gradient(to top, #fc0, rgba(255,200,0,0.3))';
+      barEl.style.borderColor = '#fc0';
+      barEl.style.boxShadow = '0 0 8px #fc0';
+    } else {
+      barEl.style.background = 'linear-gradient(to top, #0c6, rgba(0,200,100,0.3))';
+      barEl.style.borderColor = '#0c6';
+      barEl.style.boxShadow = '0 0 8px #0c6';
+    }
+
+    // Show reading
+    readingEl.textContent = distCm > 0 ? (distCm / 30.48).toFixed(1) + 'ft' : '--';
+  }
+
 }
 

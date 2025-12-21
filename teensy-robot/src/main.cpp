@@ -9,6 +9,7 @@
 #include "flasher.h"
 #include "telemetry.h"
 #include "movement.h"
+#include "ultrasonic.h"
 
 // ===== GLOBAL STATE =====
 bool emergencyStop = false;
@@ -20,6 +21,7 @@ int16_t rightTriggerValue = 0;  // Right trigger for turbo mode (0-1023)
 static uint32_t lastMotorUpdate = 0;
 static uint32_t lastComm = 0;
 static uint32_t lastTelemetryUpdate = 0;
+static uint32_t lastSonarSend = 0;
 static bool watchdogTriggered = false;  // Tracks if watchdog stopped motors
 
 // ===== SETUP =====
@@ -50,6 +52,9 @@ void setup() {
   Serial.println("========================================\n");
 
   fullReset();
+
+  // Initialize ultrasonic sensors
+  ultrasonicInit();
 
   // Send version to ESP32
   Serial1.printf("TEENSY_VERSION,%s\n", TEENSY_VERSION);
@@ -301,6 +306,14 @@ void loop() {
     lastTelemetryUpdate = now;
     readDriverTelemetry();
     sendTelemetryToESP32();
+  }
+
+  // ===== ULTRASONIC SENSOR UPDATE =====
+  // Read sensors (staggered, one per call) and send data every 250ms
+  ultrasonicUpdate();
+  if (now - lastSonarSend >= 250) {
+    lastSonarSend = now;
+    ultrasonicSendToESP32();
   }
 
   // ===== DRAIN MODBUS RESPONSES =====

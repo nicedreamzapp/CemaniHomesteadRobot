@@ -60,23 +60,426 @@ body {
   overflow: visible;
   max-height: 370px;
 }
-.placeholder-area {
+/* ============ ULTRASONIC SONAR DISPLAY ============ */
+.sonar-section-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 4px 0;
+  border-bottom: 1px solid rgba(0, 170, 255, 0.3);
+  margin-bottom: 4px;
+}
+.sonar-title {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(0, 200, 255, 0.8);
+}
+.sonar-subtitle {
+  color: #5cf;
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+.sonar-display {
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.4);
   border-radius: 15px;
-  border: 2px dashed rgba(255, 255, 255, 0.2);
+  box-sizing: border-box;
 }
-.placeholder-text {
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 1.2rem;
-  font-weight: 500;
+.sonar-robot-container {
+  position: relative;
+  width: 100%;
+  max-width: 550px;
+  height: 340px;
+}
+
+/* Grid background - 10x10 grid, each cell = 1ft */
+.sonar-grid {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  height: 300px;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  border: 1px solid #333;
+  z-index: 0;
+}
+.sonar-grid::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image:
+    linear-gradient(to right, #333 1px, transparent 1px),
+    linear-gradient(to bottom, #333 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+/* Grid labels */
+.sonar-grid::after {
+  content: '1ft per square';
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
+  color: #555;
+}
+
+/* Detection markers - show where objects are detected */
+.detection-marker {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f00;
+  box-shadow: 0 0 10px #f00, 0 0 20px #f00;
+  z-index: 5;
+  opacity: 0;
+  transition: all 0.2s ease-out;
+}
+.detection-marker.active {
+  opacity: 1;
+}
+.detection-marker.close {
+  background: #f00;
+  box-shadow: 0 0 10px #f00, 0 0 20px #f00;
+}
+.detection-marker.mid {
+  background: #fc0;
+  box-shadow: 0 0 10px #fc0, 0 0 15px #fc0;
+}
+.detection-marker.far {
+  background: #0c6;
+  box-shadow: 0 0 8px #0c6, 0 0 12px #0c6;
+}
+
+.sonar-robot-body {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 70px;
+  background: linear-gradient(180deg, #1a5a3a 0%, #0d3d25 50%, #1a5a3a 100%);
+  border: 2px solid #00ff88;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(0,255,136,0.2);
+  z-index: 10;
+}
+.sonar-robot-front {
+  color: #0f8;
+  font-size: 0.7rem;
+  margin-bottom: 1px;
+}
+.sonar-robot-label {
+  color: #00ff88;
+  font-size: 0.45rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+/* Sensor wave groups - spread across full grid area */
+.sonar-wave-group {
+  position: absolute;
+  width: 180px;
+  height: 140px;
+}
+.sonar-wave-group.front-left {
+  top: 50%;
+  left: 50%;
+  transform: translate(-140px, -175px) rotate(-15deg);
+  transform-origin: bottom center;
+}
+.sonar-wave-group.front-right {
+  top: 50%;
+  left: 50%;
+  transform: translate(-40px, -175px) rotate(15deg);
+  transform-origin: bottom center;
+}
+.sonar-wave-group.rear-left {
+  top: 50%;
+  left: 50%;
+  transform: translate(-140px, 35px) rotate(15deg);
+  transform-origin: top center;
+}
+.sonar-wave-group.rear-right {
+  top: 50%;
+  left: 50%;
+  transform: translate(-40px, 35px) rotate(-15deg);
+  transform-origin: top center;
+}
+/* Rear waves - flip to expand downward */
+.sonar-wave-group.rear-left .sonar-wave,
+.sonar-wave-group.rear-right .sonar-wave {
+  bottom: auto;
+  top: 0;
+  border-radius: 0 0 50% 50%;
+  border-top: none;
+}
+.sonar-wave-group.rear-left .sonar-wave:not(.triggered),
+.sonar-wave-group.rear-right .sonar-wave:not(.triggered) {
+  border-bottom: 2px solid rgba(0, 180, 255, 0.7);
+}
+/* Sonar waves - 9 waves per sensor - STATIC by default (no animation) */
+.sonar-wave {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 2px solid rgba(100, 100, 100, 0.3);
+  border-radius: 50% 50% 0 0;
+  border-bottom: none;
+  opacity: 0.3;
+}
+/* Wave sizes - 10 waves at 0.5ft intervals */
+.sonar-wave.w1 { width: 22px; height: 12px; }
+.sonar-wave.w2 { width: 36px; height: 20px; }
+.sonar-wave.w3 { width: 50px; height: 28px; }
+.sonar-wave.w4 { width: 66px; height: 38px; }
+.sonar-wave.w5 { width: 82px; height: 48px; }
+.sonar-wave.w6 { width: 100px; height: 58px; }
+.sonar-wave.w7 { width: 118px; height: 68px; }
+.sonar-wave.w8 { width: 136px; height: 80px; }
+.sonar-wave.w9 { width: 154px; height: 92px; }
+.sonar-wave.w10 { width: 172px; height: 104px; }
+
+/* ACTIVE state - waves animate blue when receiving data */
+.sonar-wave-group.active .sonar-wave {
+  border-color: rgba(0, 180, 255, 0.7);
+  opacity: 0;
+  animation: sonarPulse 3s ease-out infinite;
+}
+.sonar-wave-group.active .sonar-wave.w1 { animation-delay: 0s; }
+.sonar-wave-group.active .sonar-wave.w2 { animation-delay: 0.1s; }
+.sonar-wave-group.active .sonar-wave.w3 { animation-delay: 0.2s; }
+.sonar-wave-group.active .sonar-wave.w4 { animation-delay: 0.3s; }
+.sonar-wave-group.active .sonar-wave.w5 { animation-delay: 0.4s; }
+.sonar-wave-group.active .sonar-wave.w6 { animation-delay: 0.5s; }
+.sonar-wave-group.active .sonar-wave.w7 { animation-delay: 0.6s; }
+.sonar-wave-group.active .sonar-wave.w8 { animation-delay: 0.7s; }
+.sonar-wave-group.active .sonar-wave.w9 { animation-delay: 0.8s; }
+.sonar-wave-group.active .sonar-wave.w10 { animation-delay: 0.9s; }
+
+@keyframes sonarPulse {
+  0% { opacity: 0.8; transform: translateX(-50%) scale(0.95); }
+  100% { opacity: 0; transform: translateX(-50%) scale(1.05); }
+}
+
+/* TRIGGERED waves - solid color based on distance class */
+.sonar-wave-group .sonar-wave.triggered,
+.sonar-wave-group.active .sonar-wave.triggered {
+  animation: none !important;
+  opacity: 1 !important;
+}
+/* Dark red: <1.5ft - ALL waves this color when object close */
+.sonar-wave.triggered.color-red {
+  border-color: #8b0000 !important;
+  border-top-color: #8b0000 !important;
+  border-bottom-color: #8b0000 !important;
+  box-shadow: 0 0 10px #ff0000 !important;
+}
+/* Pink: 1.5-2.5ft */
+.sonar-wave.triggered.color-pink {
+  border-color: #ff3250 !important;
+  border-top-color: #ff3250 !important;
+  border-bottom-color: #ff3250 !important;
+  box-shadow: 0 0 10px #ff3250 !important;
+}
+/* Orange: 2.5-3.5ft */
+.sonar-wave.triggered.color-orange {
+  border-color: #ff8c00 !important;
+  border-top-color: #ff8c00 !important;
+  border-bottom-color: #ff8c00 !important;
+  box-shadow: 0 0 10px #ff8c00 !important;
+}
+/* Yellow: 3.5ft+ */
+.sonar-wave.triggered.color-yellow {
+  border-color: #ffdc00 !important;
+  border-top-color: #ffdc00 !important;
+  border-bottom-color: #ffdc00 !important;
+  box-shadow: 0 0 10px #ffdc00 !important;
+}
+
+/* Embedded distance markers on waves - GREEN by default */
+.wave-ft {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  font-weight: bold;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  z-index: 100;
+  color: #00c850;
+  text-shadow: 0 0 6px #00c850;
+  border: 1px solid #00c850;
+}
+/* Distance labels change color ONLY when wave is triggered */
+.w2.triggered .wave-ft { color: #ff3050; text-shadow: 0 0 6px #ff3050; border-color: #ff3050; }  /* 1ft - red */
+.w4.triggered .wave-ft { color: #ff8c00; text-shadow: 0 0 6px #ff8c00; border-color: #ff8c00; }  /* 2ft - orange */
+.w6.triggered .wave-ft { color: #ffdc00; text-shadow: 0 0 6px #ffdc00; border-color: #ffdc00; }  /* 3ft - yellow */
+.w8.triggered .wave-ft { color: #00c850; text-shadow: 0 0 6px #00c850; border-color: #00c850; }  /* 5ft - stays green */
+
+/* Rear waves - labels at bottom of arc */
+.sonar-wave-group.rear-left .wave-ft,
+.sonar-wave-group.rear-right .wave-ft {
+  top: auto;
+  bottom: -8px;
+}
+
+/* Distance readings - positioned in corners with sensor label */
+.sonar-dist-label {
+  position: absolute;
+  font-size: 0.8rem;
+  font-weight: bold;
+  font-family: monospace;
+  color: #666;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  z-index: 100;
+}
+.sonar-dist-label.front-left-label { top: 10px; left: 10px; }
+.sonar-dist-label.front-left-label::before { content: 'FL '; color: #555; }
+.sonar-dist-label.front-right-label { top: 10px; right: 10px; }
+.sonar-dist-label.front-right-label::before { content: 'FR '; color: #555; }
+.sonar-dist-label.rear-left-label { bottom: 10px; left: 10px; }
+.sonar-dist-label.rear-left-label::before { content: 'RL '; color: #555; }
+.sonar-dist-label.rear-right-label { bottom: 10px; right: 10px; }
+.sonar-dist-label.rear-right-label::before { content: 'RR '; color: #555; }
+/* Distance label colors - only colored when object detected */
+.sonar-dist-label.clear { color: #0c6; border-color: #0c6; }
+.sonar-dist-label.warning { color: #fc0; border-color: #fc0; }
+.sonar-dist-label.danger { color: #f44; border-color: #f44; }
+/* Direction labels - Front, Back, L, R */
+.sonar-dir-label {
+  position: absolute;
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #666;
   text-transform: uppercase;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
 }
+.sonar-dir-label.top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.sonar-dir-label.bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.sonar-dir-label.left {
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.sonar-dir-label.right {
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Live sensor bar graphs */
+.sonar-graphs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(0, 170, 255, 0.3);
+}
+.sonar-graph {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 4px;
+}
+.graph-label {
+  font-size: 0.6rem;
+  font-weight: bold;
+  color: #0af;
+  text-align: center;
+  margin-bottom: 2px;
+}
+.graph-bar-container {
+  position: relative;
+  height: 60px;
+  background: linear-gradient(to right,
+    rgba(255,0,0,0.15) 0%,
+    rgba(255,0,0,0.15) 10%,
+    rgba(255,150,0,0.15) 10%,
+    rgba(255,150,0,0.15) 25%,
+    rgba(255,255,0,0.1) 25%,
+    rgba(255,255,0,0.1) 50%,
+    rgba(0,255,0,0.1) 50%,
+    rgba(0,255,0,0.1) 100%
+  );
+  border-radius: 3px;
+  overflow: hidden;
+}
+.graph-scale {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+  font-size: 0.4rem;
+  color: #555;
+}
+.graph-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(to top, #0af, rgba(0,170,255,0.3));
+  border-right: 2px solid #0af;
+  box-shadow: 0 0 8px #0af;
+  transition: width 0.2s ease-out;
+}
+.graph-reading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.9rem;
+  font-weight: bold;
+  font-family: monospace;
+  color: #fff;
+  text-shadow: 0 0 6px #000, 1px 1px 2px #000;
+}
+.graph-notes {
+  grid-column: 1 / -1;
+  font-size: 0.5rem;
+  color: #666;
+  text-align: center;
+}
+
 /* Light cam now goes inside sidebar */
 .light-cam-inline {
   flex: 1;

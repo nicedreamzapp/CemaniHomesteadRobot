@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.39"
+#define TEENSY_VERSION "3.40"
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
