@@ -547,8 +547,7 @@ function updateSonarDisplay(sensor, distCm) {
   });
 
   // If object detected, trigger waves up to that distance with appropriate color
-  // Color based on distance: <1.5ft=red, 1.5-2.5ft=pink, 2.5-3.5ft=orange, 3.5ft+=yellow
-  if (distCm > 0 && distCm < 160) {  // Only trigger if object within ~5ft
+  if (distCm > 0 && distCm < 160) {  // Any reading within 5ft
     // Determine color based on distance
     let colorClass = '';
     if (distCm < 45) colorClass = 'color-red';         // <1.5ft

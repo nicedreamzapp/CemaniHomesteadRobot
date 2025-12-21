@@ -314,22 +314,9 @@ body {
   box-shadow: 0 0 10px #ffdc00 !important;
 }
 
-/* Embedded distance markers on waves - GREEN by default */
+/* Embedded distance markers on waves - HIDDEN (only corner labels shown) */
 .wave-ft {
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.85rem;
-  font-weight: bold;
-  background: rgba(0, 0, 0, 0.85);
-  padding: 2px 6px;
-  border-radius: 3px;
-  white-space: nowrap;
-  z-index: 100;
-  color: #00c850;
-  text-shadow: 0 0 6px #00c850;
-  border: 1px solid #00c850;
+  display: none;
 }
 /* Distance labels change color ONLY when wave is triggered */
 .w2.triggered .wave-ft { color: #ff3050; text-shadow: 0 0 6px #ff3050; border-color: #ff3050; }  /* 1ft - red */

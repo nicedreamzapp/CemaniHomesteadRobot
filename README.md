@@ -602,6 +602,7 @@ Using two robotic arms for human-like bilateral manipulation:
 | **Safety Auto-Stop** | ✅ Complete | Stops if communication lost mid-command |
 | **Real-Time Telemetry** | ✅ Complete | Motor RPM, WiFi signal, debug output |
 | **Driver Telemetry** | ✅ Complete | Live battery voltage, motor/driver temps (°F), RPM, torque |
+| **Ultrasonic Sensors** | ✅ Complete | 4x JSN-SR04T-V3.0 corner-mounted, 0.7-20ft range, live UI visualization |
 
 ### Network Architecture
 
@@ -655,6 +656,7 @@ Using two robotic arms for human-like bilateral manipulation:
 - ✅ **Phase 6.9:** Dual control system - Xbox joystick + Command Center buttons work simultaneously
 - ✅ **Phase 6.10:** Safety auto-stop on disconnect (V3.5 firmware)
 - ✅ **Phase 6.11:** Driver telemetry - live battery V, motor/driver temps, RPM, torque via Modbus reads
+- ✅ **Phase 6.12:** Ultrasonic proximity sensors - 4x JSN-SR04T-V3.0 with color-coded UI visualization
 - 🚧 **Phase 7:** Autonomous predator patrol (Jetson + Lidar + YOLO)
 - 🔜 **Phase 8:** Deterrent system (siren, strobes, bear spray)
 - 🔜 **Phase 9:** OpenArm integration (future)
@@ -1249,7 +1251,7 @@ From r/robotics discussion:
 - [x] Arducam 1080P IR Night Camera ($34.99)
 - [x] VPS Server (~$4/mo any provider)
 - [ ] u-blox NEO-M8N GPS Module (~$15-20)
-- [ ] JSN-SR04T Waterproof Ultrasonics x4 (~$32)
+- [x] JSN-SR04T Waterproof Ultrasonics x4 (~$32) ✅ **WORKING**
 - [ ] Industrial PIR Sensor (~$25-40)
 - [ ] Siren + Strobe deterrents (~$30)
 
