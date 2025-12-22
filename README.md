@@ -24,7 +24,7 @@
 
 https://github.com/user-attachments/assets/6a05e239-ce66-46ee-b951-474730370bfe
 
-*Successfully pulling a loaded metal cart - first real-world test after 6 months of building.*
+*Successfully pulling a loaded metal cart - first real-world test!*
 
 ---
 
@@ -180,7 +180,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 ## Current Status
 
-**Weight:** 65 lbs | **Build Time:** 6 months from zero | **Status:** Remote control anywhere ✅
+**Weight:** 65 lbs | **Status:** Remote control anywhere ✅
 
 ### What's Working
 
