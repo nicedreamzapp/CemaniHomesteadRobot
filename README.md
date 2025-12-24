@@ -334,8 +334,8 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 
 ### Other Hard-Won Lessons
 
-- **Ground everything together** - Most "weird behavior" is a grounding problem
-- **Tank steering is hard** - Coordinating 4 motors via 2 Modbus drivers takes time
+- **Tank steering code is hard** - Coordinating 4 motors via 2 Modbus drivers, getting the mixing math right, handling edge cases
+- **Never cheap out on power electronics** - The buck converter lesson cost $200 in blown boards before it sunk in
 - **Build monitoring early** - Remote debugging saves hours
 - **Test hardware before code** - Real-world reveals what simulation can't
 
