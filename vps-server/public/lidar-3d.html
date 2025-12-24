@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LIDAR 3D View</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a12;
+      overflow: hidden;
+      font-family: monospace;
+    }
+    #container { width: 100vw; height: 100vh; }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #0f8;
+      font-size: 12px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px 15px;
+      border-radius: 8px;
+      border: 1px solid #0f8;
+      z-index: 100;
+    }
+    #hud h2 { margin-bottom: 8px; font-size: 14px; }
+    #status { color: #fc0; }
+    #stats { margin-top: 5px; color: #888; }
+    #controls {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      color: #888;
+      font-size: 11px;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 12px;
+      border-radius: 5px;
+    }
+    #legend {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #444;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 3px 0;
+      font-size: 11px;
+      color: #aaa;
+    }
+    .legend-color {
+      width: 20px;
+      height: 10px;
+      margin-right: 8px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+
+  <div id="hud">
+    <h2>LIDAR 3D MAP</h2>
+    <div id="status">Connecting...</div>
+    <div id="stats">Points: 0 | FPS: 0</div>
+  </div>
+
+  <div id="controls">
+    Drag to rotate | Scroll to zoom | Right-drag to pan
+  </div>
+
+  <div id="legend">
+    <div class="legend-item"><div class="legend-color" style="background:#ff2020"></div>&lt; 0.5m (danger)</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ff8800"></div>0.5 - 1m</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ffcc00"></div>1 - 1.5m</div>
+    <div class="legend-item"><div class="legend-color" style="background:#00dd66"></div>1.5 - 2m</div>
+    <div class="legend-item"><div class="legend-color" style="background:#00aaff"></div>&gt; 2m (safe)</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    // Three.js setup
+    const container = document.getElementById('container');
+    const statusEl = document.getElementById('status');
+    const statsEl = document.getElementById('stats');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a12);
+    scene.fog = new THREE.Fog(0x0a0a12, 8, 20);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(4, 5, 4);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2.1;
+    controls.minDistance = 2;
+    controls.maxDistance = 15;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(5, 10, 5);
+    scene.add(directionalLight);
+
+    // Ground grid
+    const gridHelper = new THREE.GridHelper(10, 20, 0x004444, 0x002222);
+    scene.add(gridHelper);
+
+    // Ground plane (subtle)
+    const groundGeom = new THREE.PlaneGeometry(12, 12);
+    const groundMat = new THREE.MeshBasicMaterial({
+      color: 0x0a1520,
+      transparent: true,
+      opacity: 0.8
+    });
+    const ground = new THREE.Mesh(groundGeom, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    scene.add(ground);
+
+    // Robot body
+    const robotGroup = new THREE.Group();
+
+    // Main body
+    const bodyGeom = new THREE.BoxGeometry(0.4, 0.25, 0.5);
+    const bodyMat = new THREE.MeshPhongMaterial({
+      color: 0x1a5a3a,
+      emissive: 0x0a2a1a,
+      shininess: 30
+    });
+    const body = new THREE.Mesh(bodyGeom, bodyMat);
+    body.position.y = 0.15;
+    robotGroup.add(body);
+
+    // Body outline glow
+    const bodyEdges = new THREE.EdgesGeometry(bodyGeom);
+    const bodyLine = new THREE.LineSegments(bodyEdges, new THREE.LineBasicMaterial({ color: 0x00ff88 }));
+    bodyLine.position.y = 0.15;
+    robotGroup.add(bodyLine);
+
+    // Wheels
+    const wheelGeom = new THREE.CylinderGeometry(0.08, 0.08, 0.05, 16);
+    const wheelMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+    const wheelPositions = [
+      [-0.22, 0.08, 0.18], [0.22, 0.08, 0.18],
+      [-0.22, 0.08, -0.18], [0.22, 0.08, -0.18]
+    ];
+    wheelPositions.forEach(pos => {
+      const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(...pos);
+      robotGroup.add(wheel);
+    });
+
+    // Front indicator (direction arrow)
+    const arrowShape = new THREE.Shape();
+    arrowShape.moveTo(0, 0.15);
+    arrowShape.lineTo(-0.08, 0);
+    arrowShape.lineTo(0.08, 0);
+    arrowShape.closePath();
+    const arrowGeom = new THREE.ShapeGeometry(arrowShape);
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide });
+    const arrow = new THREE.Mesh(arrowGeom, arrowMat);
+    arrow.rotation.x = -Math.PI / 2;
+    arrow.position.set(0, 0.28, -0.35);
+    robotGroup.add(arrow);
+
+    // LIDAR sensor on top
+    const lidarGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.04, 16);
+    const lidarMat = new THREE.MeshPhongMaterial({ color: 0x333333, emissive: 0x00ff88, emissiveIntensity: 0.3 });
+    const lidarSensor = new THREE.Mesh(lidarGeom, lidarMat);
+    lidarSensor.position.y = 0.3;
+    robotGroup.add(lidarSensor);
+
+    // Lidar spinning indicator
+    const lidarRing = new THREE.RingGeometry(0.06, 0.08, 32);
+    const lidarRingMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    const lidarRingMesh = new THREE.Mesh(lidarRing, lidarRingMat);
+    lidarRingMesh.rotation.x = -Math.PI / 2;
+    lidarRingMesh.position.y = 0.32;
+    robotGroup.add(lidarRingMesh);
+
+    scene.add(robotGroup);
+
+    // Lidar points and walls
+    let pointCloud = null;
+    let wallMeshes = [];
+
+    // Color based on distance
+    function getColor(dist) {
+      const maxDist = 3000; // 3m in mm
+      const ratio = Math.min(dist / maxDist, 1);
+
+      if (ratio < 0.17) return new THREE.Color(0xff2020);      // Red - very close
+      else if (ratio < 0.33) return new THREE.Color(0xff8800); // Orange
+      else if (ratio < 0.5) return new THREE.Color(0xffcc00);  // Yellow
+      else if (ratio < 0.67) return new THREE.Color(0x00dd66); // Green
+      else return new THREE.Color(0x00aaff);                   // Blue - far
+    }
+
+    function updateLidarVisualization(points) {
+      // Remove old visualization
+      if (pointCloud) scene.remove(pointCloud);
+      wallMeshes.forEach(m => scene.remove(m));
+      wallMeshes = [];
+
+      if (!points || points.length === 0) return;
+
+      // Sort points by angle
+      points.sort((a, b) => a[0] - b[0]);
+
+      // Create point cloud
+      const positions = [];
+      const colors = [];
+
+      for (const [angle, dist] of points) {
+        const rad = (angle - 90) * Math.PI / 180;
+        const x = (dist / 1000) * Math.cos(rad);  // Convert mm to meters
+        const z = (dist / 1000) * Math.sin(rad);
+        const y = 0.3; // Height of lidar sensor
+
+        positions.push(x, y, z);
+        const color = getColor(dist);
+        colors.push(color.r, color.g, color.b);
+      }
+
+      const pointGeom = new THREE.BufferGeometry();
+      pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      const pointMat = new THREE.PointsMaterial({
+        size: 0.08,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.9
+      });
+
+      pointCloud = new THREE.Points(pointGeom, pointMat);
+      scene.add(pointCloud);
+
+      // Create 3D walls (extruded from 2D scan)
+      for (let i = 0; i < points.length - 1; i++) {
+        const [angle1, dist1] = points[i];
+        const [angle2, dist2] = points[i + 1];
+
+        // Skip if angles are too far apart (gap)
+        let angleDiff = angle2 - angle1;
+        if (angleDiff < 0) angleDiff += 360;
+        if (angleDiff > 8) continue;
+
+        const rad1 = (angle1 - 90) * Math.PI / 180;
+        const rad2 = (angle2 - 90) * Math.PI / 180;
+
+        const x1 = (dist1 / 1000) * Math.cos(rad1);
+        const z1 = (dist1 / 1000) * Math.sin(rad1);
+        const x2 = (dist2 / 1000) * Math.cos(rad2);
+        const z2 = (dist2 / 1000) * Math.sin(rad2);
+
+        // Create wall segment
+        const wallHeight = 0.8;
+        const wallGeom = new THREE.BufferGeometry();
+        const vertices = new Float32Array([
+          x1, 0, z1,      x2, 0, z2,      x2, wallHeight, z2,
+          x1, 0, z1,      x2, wallHeight, z2,  x1, wallHeight, z1
+        ]);
+        wallGeom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        wallGeom.computeVertexNormals();
+
+        const avgDist = (dist1 + dist2) / 2;
+        const wallColor = getColor(avgDist);
+
+        const wallMat = new THREE.MeshBasicMaterial({
+          color: wallColor,
+          transparent: true,
+          opacity: 0.4,
+          side: THREE.DoubleSide
+        });
+
+        const wall = new THREE.Mesh(wallGeom, wallMat);
+        scene.add(wall);
+        wallMeshes.push(wall);
+
+        // Wall edge glow
+        const edgeGeom = new THREE.BufferGeometry();
+        const edgeVerts = new Float32Array([
+          x1, wallHeight, z1, x2, wallHeight, z2
+        ]);
+        edgeGeom.setAttribute('position', new THREE.BufferAttribute(edgeVerts, 3));
+        const edgeMat = new THREE.LineBasicMaterial({
+          color: wallColor,
+          linewidth: 2
+        });
+        const edge = new THREE.Line(edgeGeom, edgeMat);
+        scene.add(edge);
+        wallMeshes.push(edge);
+      }
+
+      // Floor scan line (where lidar beam hits)
+      const scanLineGeom = new THREE.BufferGeometry();
+      const scanPositions = [];
+      for (const [angle, dist] of points) {
+        const rad = (angle - 90) * Math.PI / 180;
+        const x = (dist / 1000) * Math.cos(rad);
+        const z = (dist / 1000) * Math.sin(rad);
+        scanPositions.push(x, 0.01, z);
+      }
+      scanLineGeom.setAttribute('position', new THREE.Float32BufferAttribute(scanPositions, 3));
+      const scanLineMat = new THREE.LineBasicMaterial({ color: 0x00ffaa, transparent: true, opacity: 0.6 });
+      const scanLine = new THREE.Line(scanLineGeom, scanLineMat);
+      scene.add(scanLine);
+      wallMeshes.push(scanLine);
+
+      statsEl.textContent = `Points: ${points.length} | FPS: ${Math.round(fps)}`;
+    }
+
+    // WebSocket connection
+    let pointCount = 0;
+    let lastUpdate = 0;
+    let fps = 0;
+    let frameCount = 0;
+    let lastFpsTime = Date.now();
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(wsProtocol + '//' + location.host);
+
+    ws.onopen = () => {
+      statusEl.innerHTML = '&#10004; Connected - Waiting for LIDAR...';
+      statusEl.style.color = '#0f8';
+    };
+
+    ws.onclose = () => {
+      statusEl.innerHTML = '&#10008; Disconnected';
+      statusEl.style.color = '#f44';
+    };
+
+    ws.onmessage = (e) => {
+      if (e.data instanceof ArrayBuffer || e.data instanceof Blob) return;
+
+      try {
+        const d = JSON.parse(e.data);
+        if (d.type === 'lidar') {
+          pointCount++;
+          lastUpdate = Date.now();
+          statusEl.innerHTML = `&#10004; LIDAR Active (frame ${pointCount})`;
+          statusEl.style.color = '#0f8';
+          updateLidarVisualization(d.points);
+        }
+      } catch (err) {}
+    };
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Rotate lidar indicator
+      lidarRingMesh.rotation.z += 0.1;
+
+      // FPS counter
+      frameCount++;
+      const now = Date.now();
+      if (now - lastFpsTime > 1000) {
+        fps = frameCount;
+        frameCount = 0;
+        lastFpsTime = now;
+      }
+
+      // Stale data warning
+      if (lastUpdate > 0 && now - lastUpdate > 3000) {
+        statusEl.innerHTML = '&#9888; LIDAR data stale';
+        statusEl.style.color = '#fc0';
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Handle resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>

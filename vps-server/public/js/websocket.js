@@ -319,7 +319,7 @@ ws.onmessage = function(e) {
 
   // ============ LIDAR DATA HANDLING ============
   if(d.type === 'lidar') {
-    drawLidarPoints(d.points);
+    updateLidar3D(d.points);  // Use 3D visualization
   }
 
   if(d.type === 'status') {
@@ -487,6 +487,12 @@ function parseSonarData(data) {
   updateSonarDisplay('FR', fr);
   updateSonarDisplay('RL', rl);
   updateSonarDisplay('RR', rr);
+
+  // Also update 3D view ultrasonic badges
+  updateUltrasonicBadges('FL', fl);
+  updateUltrasonicBadges('FR', fr);
+  updateUltrasonicBadges('RL', rl);
+  updateUltrasonicBadges('RR', rr);
 }
 
 // Test function - call from browser console: testSonar(50)
@@ -620,21 +626,54 @@ function updateSonarDisplay(sensor, distCm) {
 
 }
 
-// ============ LIDAR DISPLAY ============
+// ============ LIDAR THERMAL MAP DISPLAY ============
 let lidarCanvas = null;
 let lidarCtx = null;
 let lidarLastPoints = [];
+let lidarHistory = [];  // Keep last few frames for smoothing
+const LIDAR_HISTORY_SIZE = 3;
 
 function initLidarCanvas() {
   lidarCanvas = document.getElementById('lidarCanvas');
   if (!lidarCanvas) return false;
 
-  // Match canvas size to container
   const container = lidarCanvas.parentElement;
-  lidarCanvas.width = container.offsetWidth;
-  lidarCanvas.height = container.offsetHeight;
+  // Use 2x resolution for crisp rendering
+  const dpr = window.devicePixelRatio || 1;
+  lidarCanvas.width = container.offsetWidth * dpr;
+  lidarCanvas.height = container.offsetHeight * dpr;
+  lidarCanvas.style.width = container.offsetWidth + 'px';
+  lidarCanvas.style.height = container.offsetHeight + 'px';
   lidarCtx = lidarCanvas.getContext('2d');
+  lidarCtx.scale(dpr, dpr);
   return true;
+}
+
+// Thermal color gradient - like infrared camera
+function getThermalColor(dist, maxDist) {
+  const ratio = Math.min(dist / maxDist, 1);
+  // Infrared palette: white (hot/close) -> yellow -> orange -> red -> purple -> blue -> black (cold/far)
+  if (ratio < 0.15) {
+    // Very close - bright white/yellow (HOT)
+    const t = ratio / 0.15;
+    return `rgb(255, ${Math.floor(255 - t * 30)}, ${Math.floor(255 - t * 200)})`;
+  } else if (ratio < 0.3) {
+    // Close - orange/red
+    const t = (ratio - 0.15) / 0.15;
+    return `rgb(255, ${Math.floor(225 - t * 150)}, ${Math.floor(55 - t * 55)})`;
+  } else if (ratio < 0.5) {
+    // Medium - red to magenta
+    const t = (ratio - 0.3) / 0.2;
+    return `rgb(${Math.floor(255 - t * 50)}, ${Math.floor(75 - t * 75)}, ${Math.floor(t * 150)})`;
+  } else if (ratio < 0.7) {
+    // Far - purple to blue
+    const t = (ratio - 0.5) / 0.2;
+    return `rgb(${Math.floor(205 - t * 155)}, 0, ${Math.floor(150 + t * 105)})`;
+  } else {
+    // Very far - dark blue to near black (COLD)
+    const t = (ratio - 0.7) / 0.3;
+    return `rgb(${Math.floor(50 - t * 40)}, 0, ${Math.floor(255 - t * 200)})`;
+  }
 }
 
 function drawLidarPoints(points) {
@@ -643,73 +682,135 @@ function drawLidarPoints(points) {
 
   // Resize canvas if needed
   const container = lidarCanvas.parentElement;
-  if (lidarCanvas.width !== container.offsetWidth || lidarCanvas.height !== container.offsetHeight) {
-    lidarCanvas.width = container.offsetWidth;
-    lidarCanvas.height = container.offsetHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const w = container.offsetWidth;
+  const h = container.offsetHeight;
+
+  if (Math.abs(lidarCanvas.width - w * dpr) > 5) {
+    lidarCanvas.width = w * dpr;
+    lidarCanvas.height = h * dpr;
+    lidarCanvas.style.width = w + 'px';
+    lidarCanvas.style.height = h + 'px';
+    lidarCtx.scale(dpr, dpr);
   }
 
   const ctx = lidarCtx;
-  const w = lidarCanvas.width;
-  const h = lidarCanvas.height;
   const cx = w / 2;
   const cy = h / 2;
 
-  // Scale: 5ft (1524mm) = half the display
-  const scale = Math.min(w, h) / 2 / 1800;  // 1.8m radius visible
+  // Scale: 2.5m radius visible (about 8ft)
+  const maxDist = 2500;  // mm
+  const scale = Math.min(w, h) / 2 / maxDist * 0.9;
 
-  // Clear canvas
-  ctx.clearRect(0, 0, w, h);
+  // Add to history for smoothing
+  lidarHistory.push(points);
+  if (lidarHistory.length > LIDAR_HISTORY_SIZE) lidarHistory.shift();
 
-  // Draw lidar points
-  ctx.beginPath();
-  let prevX = null, prevY = null;
-
-  // Sort by angle for connected drawing
-  points.sort((a, b) => a[0] - b[0]);
-
-  for (const [angle, dist] of points) {
-    // Convert to screen coords (0 = front = up)
-    const rad = (angle - 90) * Math.PI / 180;
-    const x = cx + dist * scale * Math.cos(rad);
-    const y = cy + dist * scale * Math.sin(rad);
-
-    // Color by distance
-    let color;
-    if (dist < 500) {
-      color = '#ff3030';  // Red - close
-    } else if (dist < 1000) {
-      color = '#ff8c00';  // Orange
-    } else if (dist < 2000) {
-      color = '#ffdc00';  // Yellow
-    } else {
-      color = '#00dd66';  // Green - far
-    }
-
-    // Draw point
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-
-    // Connect nearby points to show walls
-    if (prevX !== null) {
-      const dx = x - prevX;
-      const dy = y - prevY;
-      if (Math.sqrt(dx*dx + dy*dy) < 25) {
-        ctx.beginPath();
-        ctx.moveTo(prevX, prevY);
-        ctx.lineTo(x, y);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
+  // Merge recent frames
+  const mergedPoints = [];
+  const angleMap = new Map();
+  for (const frame of lidarHistory) {
+    for (const [angle, dist] of frame) {
+      const key = Math.round(angle);
+      if (!angleMap.has(key) || dist < angleMap.get(key)) {
+        angleMap.set(key, dist);
       }
     }
-    prevX = x;
-    prevY = y;
+  }
+  angleMap.forEach((dist, angle) => mergedPoints.push([angle, dist]));
+  mergedPoints.sort((a, b) => a[0] - b[0]);
+
+  // Clear canvas (transparent)
+  ctx.clearRect(0, 0, w, h);
+
+  // ============ DRAW LIDAR POINTS AND WALLS ============
+  if (mergedPoints.length > 2) {
+    // First pass: draw wall lines connecting nearby points
+    ctx.beginPath();
+    let firstPoint = true;
+    let lastX, lastY, lastDist;
+
+    for (let i = 0; i < mergedPoints.length; i++) {
+      const [angle, dist] = mergedPoints[i];
+      const rad = (angle - 90) * Math.PI / 180;
+      const x = cx + dist * scale * Math.cos(rad);
+      const y = cy + dist * scale * Math.sin(rad);
+
+      if (firstPoint) {
+        ctx.moveTo(x, y);
+        firstPoint = false;
+      } else {
+        // Check if this is a continuous wall or a gap
+        const dx = x - lastX;
+        const dy = y - lastY;
+        const screenDist = Math.sqrt(dx*dx + dy*dy);
+
+        if (screenDist < 40) {
+          ctx.lineTo(x, y);
+        } else {
+          // Gap - start new path segment
+          ctx.moveTo(x, y);
+        }
+      }
+      lastX = x;
+      lastY = y;
+      lastDist = dist;
+    }
+
+    // Thick glowing wall line
+    ctx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#00ffc8';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // ============ DRAW COLORED POINTS ============
+    for (const [angle, dist] of mergedPoints) {
+      const rad = (angle - 90) * Math.PI / 180;
+      const x = cx + dist * scale * Math.cos(rad);
+      const y = cy + dist * scale * Math.sin(rad);
+
+      // Color by distance - thermal style
+      let color, glowColor;
+      if (dist < 400) {
+        color = '#ff3030';  // Red - very close
+        glowColor = 'rgba(255, 50, 50, 0.8)';
+      } else if (dist < 800) {
+        color = '#ff8800';  // Orange - close
+        glowColor = 'rgba(255, 136, 0, 0.6)';
+      } else if (dist < 1200) {
+        color = '#ffcc00';  // Yellow - medium
+        glowColor = 'rgba(255, 200, 0, 0.4)';
+      } else if (dist < 1800) {
+        color = '#00dd66';  // Green - far
+        glowColor = 'rgba(0, 220, 100, 0.3)';
+      } else {
+        color = '#00aaff';  // Blue - very far
+        glowColor = 'rgba(0, 170, 255, 0.2)';
+      }
+
+      // Draw glowing point
+      ctx.beginPath();
+      ctx.arc(x, y, dist < 600 ? 5 : 3, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = dist < 600 ? 10 : 5;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Extra highlight for danger zone
+      if (dist < 500) {
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 50, 50, 0.3)';
+        ctx.fill();
+      }
+    }
   }
 
   // Store for sensor agreement checking
-  lidarLastPoints = points;
+  lidarLastPoints = mergedPoints;
 
   // Check sensor agreement with ultrasonic
   checkSensorAgreement();
@@ -773,4 +874,245 @@ function checkSensorAgreement() {
     }
   }
 }
+
+// ============ INTEGRATED 3D LIDAR VIEW ============
+let lidar3dScene, lidar3dCamera, lidar3dRenderer, lidar3dControls;
+let lidar3dRobot, lidar3dWalls = [], lidar3dPointCloud;
+let lidar3dPositionTrail = [];
+let lidar3dInitialized = false;
+let lidar3dFrameCount = 0;
+
+function initLidar3D() {
+  const container = document.getElementById('lidar3dContainer');
+  if (!container || lidar3dInitialized) return;
+
+  // Scene
+  lidar3dScene = new THREE.Scene();
+  lidar3dScene.background = new THREE.Color(0x0a0a12);
+  lidar3dScene.fog = new THREE.Fog(0x0a0a12, 6, 15);
+
+  // Camera
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  lidar3dCamera = new THREE.PerspectiveCamera(55, w / h, 0.1, 50);
+  lidar3dCamera.position.set(3, 4, 3);
+  lidar3dCamera.lookAt(0, 0, 0);
+
+  // Renderer
+  lidar3dRenderer = new THREE.WebGLRenderer({ antialias: true });
+  lidar3dRenderer.setSize(w, h);
+  lidar3dRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.insertBefore(lidar3dRenderer.domElement, container.firstChild);
+
+  // Controls
+  lidar3dControls = new THREE.OrbitControls(lidar3dCamera, lidar3dRenderer.domElement);
+  lidar3dControls.enableDamping = true;
+  lidar3dControls.dampingFactor = 0.05;
+  lidar3dControls.maxPolarAngle = Math.PI / 2.1;
+  lidar3dControls.minDistance = 1.5;
+  lidar3dControls.maxDistance = 10;
+
+  // Lighting
+  lidar3dScene.add(new THREE.AmbientLight(0x404040, 0.6));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+  dirLight.position.set(5, 8, 5);
+  lidar3dScene.add(dirLight);
+
+  // Grid
+  const grid = new THREE.GridHelper(8, 16, 0x004444, 0x002222);
+  lidar3dScene.add(grid);
+
+  // Ground
+  const groundGeom = new THREE.PlaneGeometry(10, 10);
+  const groundMat = new THREE.MeshBasicMaterial({ color: 0x0a1520, transparent: true, opacity: 0.7 });
+  const ground = new THREE.Mesh(groundGeom, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.01;
+  lidar3dScene.add(ground);
+
+  // Robot
+  lidar3dRobot = createRobot3D();
+  lidar3dScene.add(lidar3dRobot);
+
+  lidar3dInitialized = true;
+  animateLidar3D();
+}
+
+function createRobot3D() {
+  const group = new THREE.Group();
+
+  // Body
+  const bodyGeom = new THREE.BoxGeometry(0.35, 0.2, 0.45);
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0x1a5a3a, emissive: 0x0a2a1a });
+  const body = new THREE.Mesh(bodyGeom, bodyMat);
+  body.position.y = 0.12;
+  group.add(body);
+
+  // Body edge glow
+  const edges = new THREE.EdgesGeometry(bodyGeom);
+  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00ff88 }));
+  line.position.y = 0.12;
+  group.add(line);
+
+  // Wheels
+  const wheelGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 12);
+  const wheelMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+  [[-0.18, 0.06, 0.15], [0.18, 0.06, 0.15], [-0.18, 0.06, -0.15], [0.18, 0.06, -0.15]].forEach(pos => {
+    const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(...pos);
+    group.add(wheel);
+  });
+
+  // Front arrow
+  const arrowShape = new THREE.Shape();
+  arrowShape.moveTo(0, 0.12);
+  arrowShape.lineTo(-0.06, 0);
+  arrowShape.lineTo(0.06, 0);
+  arrowShape.closePath();
+  const arrow = new THREE.Mesh(
+    new THREE.ShapeGeometry(arrowShape),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide })
+  );
+  arrow.rotation.x = -Math.PI / 2;
+  arrow.position.set(0, 0.23, -0.3);
+  group.add(arrow);
+
+  // Lidar sensor
+  const lidarGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.03, 12);
+  const lidarMat = new THREE.MeshPhongMaterial({ color: 0x333333, emissive: 0x00ff88, emissiveIntensity: 0.3 });
+  const lidar = new THREE.Mesh(lidarGeom, lidarMat);
+  lidar.position.y = 0.24;
+  group.add(lidar);
+
+  return group;
+}
+
+function getDistanceColor3D(dist) {
+  if (dist < 400) return new THREE.Color(0xff2020);
+  if (dist < 800) return new THREE.Color(0xff8800);
+  if (dist < 1200) return new THREE.Color(0xffcc00);
+  if (dist < 1800) return new THREE.Color(0x00dd66);
+  return new THREE.Color(0x00aaff);
+}
+
+function updateLidar3D(points) {
+  if (!lidar3dInitialized) initLidar3D();
+  if (!lidar3dScene) return;
+
+  lidar3dFrameCount++;
+  document.getElementById('lidar3dStatus').textContent = 'LIDAR: ' + points.length + ' pts';
+
+  // Clear old walls
+  lidar3dWalls.forEach(m => lidar3dScene.remove(m));
+  lidar3dWalls = [];
+  if (lidar3dPointCloud) lidar3dScene.remove(lidar3dPointCloud);
+
+  points.sort((a, b) => a[0] - b[0]);
+
+  // Point cloud
+  const positions = [], colors = [];
+  for (const [angle, dist] of points) {
+    const rad = (angle - 90) * Math.PI / 180;
+    const x = (dist / 1000) * Math.cos(rad);
+    const z = (dist / 1000) * Math.sin(rad);
+    positions.push(x, 0.24, z);
+    const c = getDistanceColor3D(dist);
+    colors.push(c.r, c.g, c.b);
+  }
+  const pointGeom = new THREE.BufferGeometry();
+  pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({ size: 0.06, vertexColors: true }));
+  lidar3dScene.add(lidar3dPointCloud);
+
+  // Walls
+  for (let i = 0; i < points.length - 1; i++) {
+    const [a1, d1] = points[i], [a2, d2] = points[i + 1];
+    let diff = a2 - a1; if (diff < 0) diff += 360;
+    if (diff > 6) continue;
+
+    const r1 = (a1 - 90) * Math.PI / 180, r2 = (a2 - 90) * Math.PI / 180;
+    const x1 = (d1 / 1000) * Math.cos(r1), z1 = (d1 / 1000) * Math.sin(r1);
+    const x2 = (d2 / 1000) * Math.cos(r2), z2 = (d2 / 1000) * Math.sin(r2);
+
+    const wallH = 0.6;
+    const wallGeom = new THREE.BufferGeometry();
+    wallGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      x1, 0, z1, x2, 0, z2, x2, wallH, z2, x1, 0, z1, x2, wallH, z2, x1, wallH, z1
+    ]), 3));
+    wallGeom.computeVertexNormals();
+
+    const wallMat = new THREE.MeshBasicMaterial({
+      color: getDistanceColor3D((d1 + d2) / 2),
+      transparent: true, opacity: 0.35, side: THREE.DoubleSide
+    });
+    const wall = new THREE.Mesh(wallGeom, wallMat);
+    lidar3dScene.add(wall);
+    lidar3dWalls.push(wall);
+
+    // Top edge
+    const edgeGeom = new THREE.BufferGeometry();
+    edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
+    const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: getDistanceColor3D((d1 + d2) / 2) }));
+    lidar3dScene.add(edge);
+    lidar3dWalls.push(edge);
+  }
+}
+
+function animateLidar3D() {
+  if (!lidar3dInitialized) return;
+  requestAnimationFrame(animateLidar3D);
+  lidar3dControls.update();
+  lidar3dRenderer.render(lidar3dScene, lidar3dCamera);
+}
+
+// Update ultrasonic badges
+function updateUltrasonicBadges(sensor, distCm) {
+  const badge = document.getElementById('usBadge' + sensor);
+  if (!badge) return;
+  const ft = distCm > 0 ? (distCm / 30.48).toFixed(1) : '--';
+  badge.textContent = sensor + ': ' + ft + 'ft';
+  badge.classList.remove('danger', 'warning');
+  if (distCm > 0 && distCm < 50) badge.classList.add('danger');
+  else if (distCm > 0 && distCm < 100) badge.classList.add('warning');
+}
+
+// Update position badge
+function updatePositionBadge(x, y) {
+  const badge = document.getElementById('posBadge');
+  if (badge) badge.textContent = 'X: ' + x.toFixed(1) + ' Y: ' + y.toFixed(1);
+}
+
+// Fullscreen toggle
+function toggleLidar3DFullscreen() {
+  const container = document.querySelector('.light-cam-wide');
+  if (container) {
+    container.classList.toggle('lidar3d-fullscreen');
+    setTimeout(() => {
+      if (lidar3dRenderer && lidar3dCamera) {
+        const c = document.getElementById('lidar3dContainer');
+        lidar3dRenderer.setSize(c.clientWidth, c.clientHeight);
+        lidar3dCamera.aspect = c.clientWidth / c.clientHeight;
+        lidar3dCamera.updateProjectionMatrix();
+      }
+    }, 100);
+  }
+}
+
+// Handle resize
+window.addEventListener('resize', () => {
+  if (lidar3dRenderer && lidar3dCamera && lidar3dInitialized) {
+    const c = document.getElementById('lidar3dContainer');
+    if (c) {
+      lidar3dRenderer.setSize(c.clientWidth, c.clientHeight);
+      lidar3dCamera.aspect = c.clientWidth / c.clientHeight;
+      lidar3dCamera.updateProjectionMatrix();
+    }
+  }
+});
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', initLidar3D);
+setTimeout(initLidar3D, 500);
 

@@ -4,7 +4,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/styles.css?v=1221v">
+<link rel="stylesheet" href="css/styles.css?v=1224a">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 <div class="container">
@@ -233,89 +235,25 @@
 
   </div>
 
-  <!-- HYBRID SENSOR DISPLAY - LiDAR + Ultrasonic -->
+  <!-- 3D LIDAR MAP - Integrated View -->
   <div class="light-cam-wide glass">
-    <div class="sonar-section-header">
-      <span class="sonar-title">HYBRID SENSORS</span>
-      <span class="sonar-subtitle">LiDAR 360° + 4x Ultrasonic</span>
+    <div class="lidar3d-header">
+      <span class="lidar3d-title">3D SPATIAL MAP</span>
+      <span class="lidar3d-subtitle">LiDAR + Position + Ultrasonics</span>
+      <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen">⛶</button>
     </div>
-    <div class="sonar-display">
-      <div class="sonar-robot-container">
-        <!-- LiDAR canvas layer (behind everything) -->
-        <canvas id="lidarCanvas" class="lidar-canvas"></canvas>
-
-        <!-- Grid background - each cell = 1 foot -->
-        <div class="sonar-grid" id="sonarGrid">
-          <!-- 10x10 grid (5ft each direction from center) -->
-        </div>
-        <!-- Direction labels -->
-        <div class="sonar-dir-label top">FRONT</div>
-        <div class="sonar-dir-label bottom">BACK</div>
-        <div class="sonar-dir-label left">L</div>
-        <div class="sonar-dir-label right">R</div>
-
-        <!-- Sensor waves with distance markers (every 0.5ft) -->
-        <div class="sonar-wave-group front-left" id="sonarFL">
-          <div class="sonar-wave w1"><span class="wave-ft">.5</span></div>
-          <div class="sonar-wave w2"><span class="wave-ft">1'</span></div>
-          <div class="sonar-wave w3"><span class="wave-ft">1.5</span></div>
-          <div class="sonar-wave w4"><span class="wave-ft">2'</span></div>
-          <div class="sonar-wave w5"><span class="wave-ft">2.5</span></div>
-          <div class="sonar-wave w6"><span class="wave-ft">3'</span></div>
-          <div class="sonar-wave w7"><span class="wave-ft">3.5</span></div>
-          <div class="sonar-wave w8"><span class="wave-ft">4'</span></div>
-          <div class="sonar-wave w9"><span class="wave-ft">4.5</span></div>
-          <div class="sonar-wave w10"><span class="wave-ft">5'</span></div>
-        </div>
-        <div class="sonar-dist-label front-left-label" id="distFL">--</div>
-
-        <div class="sonar-wave-group front-right" id="sonarFR">
-          <div class="sonar-wave w1"><span class="wave-ft">.5</span></div>
-          <div class="sonar-wave w2"><span class="wave-ft">1'</span></div>
-          <div class="sonar-wave w3"><span class="wave-ft">1.5</span></div>
-          <div class="sonar-wave w4"><span class="wave-ft">2'</span></div>
-          <div class="sonar-wave w5"><span class="wave-ft">2.5</span></div>
-          <div class="sonar-wave w6"><span class="wave-ft">3'</span></div>
-          <div class="sonar-wave w7"><span class="wave-ft">3.5</span></div>
-          <div class="sonar-wave w8"><span class="wave-ft">4'</span></div>
-          <div class="sonar-wave w9"><span class="wave-ft">4.5</span></div>
-          <div class="sonar-wave w10"><span class="wave-ft">5'</span></div>
-        </div>
-        <div class="sonar-dist-label front-right-label" id="distFR">--</div>
-
-        <div class="sonar-wave-group rear-left" id="sonarRL">
-          <div class="sonar-wave w1"><span class="wave-ft">.5</span></div>
-          <div class="sonar-wave w2"><span class="wave-ft">1'</span></div>
-          <div class="sonar-wave w3"><span class="wave-ft">1.5</span></div>
-          <div class="sonar-wave w4"><span class="wave-ft">2'</span></div>
-          <div class="sonar-wave w5"><span class="wave-ft">2.5</span></div>
-          <div class="sonar-wave w6"><span class="wave-ft">3'</span></div>
-          <div class="sonar-wave w7"><span class="wave-ft">3.5</span></div>
-          <div class="sonar-wave w8"><span class="wave-ft">4'</span></div>
-          <div class="sonar-wave w9"><span class="wave-ft">4.5</span></div>
-          <div class="sonar-wave w10"><span class="wave-ft">5'</span></div>
-        </div>
-        <div class="sonar-dist-label rear-left-label" id="distRL">--</div>
-
-        <div class="sonar-wave-group rear-right" id="sonarRR">
-          <div class="sonar-wave w1"><span class="wave-ft">.5</span></div>
-          <div class="sonar-wave w2"><span class="wave-ft">1'</span></div>
-          <div class="sonar-wave w3"><span class="wave-ft">1.5</span></div>
-          <div class="sonar-wave w4"><span class="wave-ft">2'</span></div>
-          <div class="sonar-wave w5"><span class="wave-ft">2.5</span></div>
-          <div class="sonar-wave w6"><span class="wave-ft">3'</span></div>
-          <div class="sonar-wave w7"><span class="wave-ft">3.5</span></div>
-          <div class="sonar-wave w8"><span class="wave-ft">4'</span></div>
-          <div class="sonar-wave w9"><span class="wave-ft">4.5</span></div>
-          <div class="sonar-wave w10"><span class="wave-ft">5'</span></div>
-        </div>
-        <div class="sonar-dist-label rear-right-label" id="distRR">--</div>
-
-        <!-- Robot body -->
-        <div class="sonar-robot-body">
-          <div class="sonar-robot-front">▲</div>
-          <div class="sonar-robot-label">CEMANI</div>
-        </div>
+    <div class="lidar3d-container" id="lidar3dContainer">
+      <!-- Three.js renders here -->
+      <div class="lidar3d-overlay">
+        <!-- Ultrasonic corner badges -->
+        <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
+        <div class="us-badge us-fr" id="usBadgeFR">FR: --</div>
+        <div class="us-badge us-rl" id="usBadgeRL">RL: --</div>
+        <div class="us-badge us-rr" id="usBadgeRR">RR: --</div>
+        <!-- Position info -->
+        <div class="pos-badge" id="posBadge">X: 0.0 Y: 0.0</div>
+        <!-- Lidar status -->
+        <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
       </div>
     </div>
   </div>

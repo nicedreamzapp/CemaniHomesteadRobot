@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LIDAR Test</title>
+  <style>
+    body {
+      background: #111;
+      color: #0f8;
+      font-family: monospace;
+      margin: 0;
+      padding: 20px;
+    }
+    #status {
+      padding: 10px;
+      margin-bottom: 10px;
+      background: #222;
+      border-radius: 5px;
+    }
+    #canvas {
+      border: 2px solid #0f8;
+      border-radius: 10px;
+      display: block;
+      margin: 0 auto;
+    }
+    #log {
+      margin-top: 20px;
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 5px;
+      height: 150px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>LIDAR 360° Test Display</h1>
+  <div id="status">Connecting...</div>
+  <canvas id="canvas" width="600" height="600"></canvas>
+  <div id="log"></div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    const log = document.getElementById('log');
+
+    let pointCount = 0;
+    let lastUpdate = 0;
+
+    function addLog(msg) {
+      const now = new Date().toLocaleTimeString();
+      log.innerHTML = `[${now}] ${msg}<br>` + log.innerHTML;
+      if (log.children.length > 50) {
+        log.innerHTML = log.innerHTML.split('<br>').slice(0, 50).join('<br>');
+      }
+    }
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(wsProtocol + '//' + location.host);
+
+    ws.onopen = () => {
+      status.innerHTML = '✓ WebSocket Connected - Waiting for LIDAR data...';
+      status.style.color = '#0f8';
+      addLog('WebSocket connected');
+    };
+
+    ws.onclose = () => {
+      status.innerHTML = '✗ WebSocket Disconnected';
+      status.style.color = '#f44';
+      addLog('WebSocket disconnected');
+    };
+
+    ws.onerror = (e) => {
+      addLog('WebSocket error: ' + e);
+    };
+
+    ws.onmessage = (e) => {
+      if (e.data instanceof ArrayBuffer || e.data instanceof Blob) {
+        return; // Skip binary (video/audio)
+      }
+
+      try {
+        const d = JSON.parse(e.data);
+
+        if (d.type === 'lidar') {
+          pointCount++;
+          lastUpdate = Date.now();
+          status.innerHTML = `✓ LIDAR Active - ${d.points.length} points (frame #${pointCount})`;
+          addLog(`Received ${d.points.length} lidar points`);
+          drawLidar(d.points);
+        }
+      } catch (err) {}
+    };
+
+    // Check for stale data
+    setInterval(() => {
+      if (lastUpdate > 0 && Date.now() - lastUpdate > 3000) {
+        status.innerHTML = '⚠ LIDAR data stale (no updates in 3s)';
+        status.style.color = '#fc0';
+      }
+    }, 1000);
+
+    function drawLidar(points) {
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxDist = 3000; // 3m
+      const scale = (Math.min(w, h) / 2 - 20) / maxDist;
+
+      // Clear
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw range rings
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      for (let r = 500; r <= maxDist; r += 500) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * scale, 0, Math.PI * 2);
+        ctx.stroke();
+        // Label
+        ctx.fillStyle = '#555';
+        ctx.font = '10px monospace';
+        ctx.fillText((r/1000).toFixed(1) + 'm', cx + 5, cy - r * scale + 12);
+      }
+
+      // Draw direction labels
+      ctx.fillStyle = '#666';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('FRONT', cx, 20);
+      ctx.fillText('REAR', cx, h - 10);
+      ctx.fillText('LEFT', 20, cy);
+      ctx.fillText('RIGHT', w - 25, cy);
+
+      // Draw points and walls
+      if (points.length > 0) {
+        // Sort by angle
+        points.sort((a, b) => a[0] - b[0]);
+
+        // Draw wall lines
+        ctx.beginPath();
+        let first = true;
+        let lastX, lastY;
+
+        for (const [angle, dist] of points) {
+          const rad = (angle - 90) * Math.PI / 180;
+          const x = cx + dist * scale * Math.cos(rad);
+          const y = cy + dist * scale * Math.sin(rad);
+
+          if (first) {
+            ctx.moveTo(x, y);
+            first = false;
+          } else {
+            const dx = x - lastX;
+            const dy = y - lastY;
+            if (Math.sqrt(dx*dx + dy*dy) < 30) {
+              ctx.lineTo(x, y);
+            } else {
+              ctx.moveTo(x, y);
+            }
+          }
+          lastX = x;
+          lastY = y;
+        }
+
+        ctx.strokeStyle = '#00ffc8';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00ffc8';
+        ctx.shadowBlur = 6;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Draw points
+        for (const [angle, dist] of points) {
+          const rad = (angle - 90) * Math.PI / 180;
+          const x = cx + dist * scale * Math.cos(rad);
+          const y = cy + dist * scale * Math.sin(rad);
+
+          // Color by distance
+          let color;
+          if (dist < 500) color = '#ff3030';
+          else if (dist < 1000) color = '#ff8800';
+          else if (dist < 1500) color = '#ffcc00';
+          else if (dist < 2000) color = '#00dd66';
+          else color = '#00aaff';
+
+          ctx.beginPath();
+          ctx.arc(x, y, dist < 500 ? 4 : 2, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+      }
+
+      // Draw robot at center
+      ctx.beginPath();
+      ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+      ctx.fillStyle = '#0f8';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Direction arrow
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 18);
+      ctx.lineTo(cx - 6, cy - 8);
+      ctx.lineTo(cx + 6, cy - 8);
+      ctx.closePath();
+      ctx.fillStyle = '#0f8';
+      ctx.fill();
+    }
+
+    // Initial draw
+    drawLidar([]);
+  </script>
+</body>
+</html>

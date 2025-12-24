@@ -60,44 +60,133 @@ body {
   overflow: visible;
   max-height: 370px;
 }
-/* ============ ULTRASONIC SONAR DISPLAY ============ */
-.sonar-section-header {
+/* ============ 3D LIDAR MAP DISPLAY ============ */
+.lidar3d-header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 8px 0 4px 0;
-  border-bottom: 1px solid rgba(0, 170, 255, 0.3);
-  margin-bottom: 4px;
+  justify-content: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(0, 255, 200, 0.3);
+  position: relative;
 }
-.sonar-title {
+.lidar3d-title {
   color: #fff;
   font-size: 0.9rem;
   font-weight: bold;
   letter-spacing: 2px;
-  text-shadow: 0 0 10px rgba(0, 200, 255, 0.8);
+  text-shadow: 0 0 10px rgba(0, 255, 200, 0.8);
 }
-.sonar-subtitle {
-  color: #5cf;
-  font-size: 0.6rem;
+.lidar3d-subtitle {
+  color: #0fa;
+  font-size: 0.55rem;
   letter-spacing: 1px;
-  margin-top: 2px;
+  margin-left: 10px;
 }
-.sonar-display {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 15px;
-  box-sizing: border-box;
+.lidar3d-expand-btn {
+  position: absolute;
+  right: 10px;
+  background: rgba(0, 255, 200, 0.2);
+  border: 1px solid rgba(0, 255, 200, 0.5);
+  color: #0fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
 }
-.sonar-robot-container {
+.lidar3d-expand-btn:hover {
+  background: rgba(0, 255, 200, 0.4);
+}
+.lidar3d-container {
   position: relative;
   width: 100%;
-  max-width: 550px;
   height: 340px;
+  background: #0a0a12;
+  border-radius: 0 0 15px 15px;
+  overflow: hidden;
 }
+.lidar3d-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+.lidar3d-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+/* Ultrasonic corner badges */
+.us-badge {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 255, 136, 0.5);
+  color: #0f8;
+  font-size: 0.65rem;
+  font-weight: bold;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+.us-badge.danger { color: #f44; border-color: #f44; }
+.us-badge.warning { color: #fc0; border-color: #fc0; }
+.us-fl { top: 8px; left: 8px; }
+.us-fr { top: 8px; right: 8px; }
+.us-rl { bottom: 8px; left: 8px; }
+.us-rr { bottom: 8px; right: 8px; }
+/* Position badge */
+.pos-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 170, 255, 0.5);
+  color: #5af;
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+/* Lidar status badge */
+.lidar-status {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 255, 200, 0.5);
+  color: #0fa;
+  font-size: 0.6rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+/* Fullscreen mode */
+.lidar3d-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: none !important;
+  z-index: 9999 !important;
+  border-radius: 0 !important;
+}
+.lidar3d-fullscreen .lidar3d-container {
+  height: calc(100vh - 40px) !important;
+  border-radius: 0 !important;
+}
+
+/* ============ LEGACY SONAR (hidden but kept for JS compatibility) ============ */
+.sonar-section-header { display: none; }
+.sonar-title { display: none; }
+.sonar-subtitle { display: none; }
+.sonar-display { display: none; }
+.sonar-robot-container { display: none; }
 
 /* Grid background - 10x10 grid, each cell = 1ft */
 .sonar-grid {
@@ -164,23 +253,29 @@ body {
   box-shadow: 0 0 8px #0c6, 0 0 12px #0c6;
 }
 
-/* ============ LIDAR CANVAS ============ */
+/* ============ LIDAR CANVAS - BEHIND ULTRASONIC ============ */
 .lidar-canvas {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  z-index: 1;  /* Behind ultrasonic waves but above background */
   pointer-events: none;
 }
 
-/* Reduce ultrasonic wave opacity now that lidar is primary */
+/* Make ultrasonic waves more transparent so lidar shows through */
 .sonar-wave-group .sonar-wave {
-  opacity: 0.4;
+  opacity: 0.2 !important;
+  border-width: 1px !important;
 }
 .sonar-wave-group.active .sonar-wave.triggered {
-  opacity: 0.7;
+  opacity: 0.4 !important;
+}
+
+/* Subtle grid */
+.sonar-grid {
+  opacity: 0.4;
 }
 
 /* Sensor agreement highlight - when lidar and sonar both see object */
