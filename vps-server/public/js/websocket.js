@@ -1259,58 +1259,103 @@ function updateLidar3D(points) {
     lidar3dSlamPoints.shift();
   }
 
-  // Update SLAM point cloud visualization
+  // Update SLAM point cloud visualization - make it more visible as a "map"
   if (lidar3dSlamCloud && lidar3dSlamPoints.length > 0) {
     const slamPos = [], slamCol = [];
     for (const sp of lidar3dSlamPoints) {
-      slamPos.push(sp.x, 0.01, sp.z);  // Ground level
-      slamCol.push(sp.color.r * 0.6, sp.color.g * 0.6, sp.color.b * 0.6);  // Dimmer
+      slamPos.push(sp.x, 0.02, sp.z);  // Slightly above ground
+      // Use a consistent blue-white color for mapped areas (like a blueprint)
+      slamCol.push(0.3, 0.5, 0.7);  // Muted blue for persistent map
     }
     const slamGeom = new THREE.BufferGeometry();
     slamGeom.setAttribute('position', new THREE.Float32BufferAttribute(slamPos, 3));
     slamGeom.setAttribute('color', new THREE.Float32BufferAttribute(slamCol, 3));
     lidar3dSlamCloud.geometry.dispose();
     lidar3dSlamCloud.geometry = slamGeom;
+    lidar3dSlamCloud.material.size = 0.05;  // Visible map dots
   }
 
-  // Current scan point cloud - added to scene (relative to robot at center)
+  // Current scan point cloud - brighter, larger, more visible
   const pointGeom = new THREE.BufferGeometry();
   pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({ size: 0.06, vertexColors: true }));
+  lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({
+    size: 0.10,  // Larger points for current scan
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.9
+  }));
   lidar3dScene.add(lidar3dPointCloud);  // Scene, not world container - stays with robot
 
-  // Walls (relative to robot at center)
-  for (let i = 0; i < points.length - 1; i++) {
-    const [a1, d1] = points[i], [a2, d2] = points[i + 1];
-    let diff = a2 - a1; if (diff < 0) diff += 360;
-    if (diff > 6) continue;
+  // Detect walls vs objects by analyzing point continuity
+  // Walls: long continuous segments at similar distances
+  // Objects: isolated clusters or sudden distance changes
 
-    const r1 = (a1 - 90) * Math.PI / 180, r2 = (a2 - 90) * Math.PI / 180;
-    const x1 = (d1 / 1000) * Math.cos(r1), z1 = -(d1 / 1000) * Math.sin(r1);
-    const x2 = (d2 / 1000) * Math.cos(r2), z2 = -(d2 / 1000) * Math.sin(r2);
+  let wallSegments = [];  // Groups of connected wall points
+  let currentSegment = [];
 
-    const wallH = 0.6;
-    const wallGeom = new THREE.BufferGeometry();
-    wallGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-      x1, 0, z1, x2, 0, z2, x2, wallH, z2, x1, 0, z1, x2, wallH, z2, x1, wallH, z1
-    ]), 3));
-    wallGeom.computeVertexNormals();
+  for (let i = 0; i < points.length; i++) {
+    const [a1, d1] = points[i];
+    const [a2, d2] = points[i + 1] || [a1 + 360, d1];
 
-    const wallMat = new THREE.MeshBasicMaterial({
-      color: getDistanceColor3D((d1 + d2) / 2),
-      transparent: true, opacity: 0.35, side: THREE.DoubleSide
-    });
-    const wall = new THREE.Mesh(wallGeom, wallMat);
-    lidar3dScene.add(wall);  // Scene, stays with robot
-    lidar3dWalls.push(wall);
+    let angleDiff = a2 - a1;
+    if (angleDiff < 0) angleDiff += 360;
+    const distDiff = Math.abs(d2 - d1);
 
-    // Top edge
-    const edgeGeom = new THREE.BufferGeometry();
-    edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
-    const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: getDistanceColor3D((d1 + d2) / 2) }));
-    lidar3dScene.add(edge);  // Scene, stays with robot
-    lidar3dWalls.push(edge);
+    // Check if points are continuous (close in angle AND distance)
+    const isContinuous = angleDiff < 4 && distDiff < 300;  // Stricter continuity
+
+    if (isContinuous) {
+      currentSegment.push(points[i]);
+    } else {
+      if (currentSegment.length > 0) {
+        currentSegment.push(points[i]);
+        wallSegments.push(currentSegment);
+      }
+      currentSegment = [];
+    }
+  }
+  if (currentSegment.length > 0) wallSegments.push(currentSegment);
+
+  // Render each segment differently based on size
+  for (const segment of wallSegments) {
+    if (segment.length < 2) continue;
+
+    const isWall = segment.length >= 5;  // 5+ points = wall, fewer = object
+    const wallH = isWall ? 0.5 : 0.3;  // Walls taller than objects
+    const opacity = isWall ? 0.4 : 0.6;  // Objects more opaque
+
+    // Draw segment as connected panels
+    for (let i = 0; i < segment.length - 1; i++) {
+      const [a1, d1] = segment[i], [a2, d2] = segment[i + 1];
+      const r1 = (a1 - 90) * Math.PI / 180, r2 = (a2 - 90) * Math.PI / 180;
+      const x1 = (d1 / 1000) * Math.cos(r1), z1 = -(d1 / 1000) * Math.sin(r1);
+      const x2 = (d2 / 1000) * Math.cos(r2), z2 = -(d2 / 1000) * Math.sin(r2);
+
+      const wallGeom = new THREE.BufferGeometry();
+      wallGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        x1, 0, z1, x2, 0, z2, x2, wallH, z2, x1, 0, z1, x2, wallH, z2, x1, wallH, z1
+      ]), 3));
+      wallGeom.computeVertexNormals();
+
+      // Color: walls are cyan/blue, objects are orange/yellow
+      const baseColor = isWall ? getDistanceColor3D((d1 + d2) / 2) : new THREE.Color(0xff8844);
+      const wallMat = new THREE.MeshBasicMaterial({
+        color: baseColor,
+        transparent: true, opacity: opacity, side: THREE.DoubleSide
+      });
+      const wall = new THREE.Mesh(wallGeom, wallMat);
+      lidar3dScene.add(wall);
+      lidar3dWalls.push(wall);
+
+      // Top edge - brighter for objects
+      const edgeColor = isWall ? baseColor : new THREE.Color(0xffaa00);
+      const edgeGeom = new THREE.BufferGeometry();
+      edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
+      const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: edgeColor, linewidth: isWall ? 1 : 2 }));
+      lidar3dScene.add(edge);
+      lidar3dWalls.push(edge);
+    }
   }
 }
 
