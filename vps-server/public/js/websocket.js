@@ -317,6 +317,11 @@ ws.onmessage = function(e) {
     serialDiv.scrollTop = serialDiv.scrollHeight;
   }
 
+  // ============ LIDAR DATA HANDLING ============
+  if(d.type === 'lidar') {
+    drawLidarPoints(d.points);
+  }
+
   if(d.type === 'status') {
     // Update header status indicator
     document.getElementById('status').textContent = d.connected ? 'ONLINE' : 'OFFLINE';
@@ -613,5 +618,159 @@ function updateSonarDisplay(sensor, distCm) {
     readingEl.textContent = distCm > 0 ? (distCm / 30.48).toFixed(1) + 'ft' : '--';
   }
 
+}
+
+// ============ LIDAR DISPLAY ============
+let lidarCanvas = null;
+let lidarCtx = null;
+let lidarLastPoints = [];
+
+function initLidarCanvas() {
+  lidarCanvas = document.getElementById('lidarCanvas');
+  if (!lidarCanvas) return false;
+
+  // Match canvas size to container
+  const container = lidarCanvas.parentElement;
+  lidarCanvas.width = container.offsetWidth;
+  lidarCanvas.height = container.offsetHeight;
+  lidarCtx = lidarCanvas.getContext('2d');
+  return true;
+}
+
+function drawLidarPoints(points) {
+  if (!lidarCtx && !initLidarCanvas()) return;
+  if (!points || points.length === 0) return;
+
+  // Resize canvas if needed
+  const container = lidarCanvas.parentElement;
+  if (lidarCanvas.width !== container.offsetWidth || lidarCanvas.height !== container.offsetHeight) {
+    lidarCanvas.width = container.offsetWidth;
+    lidarCanvas.height = container.offsetHeight;
+  }
+
+  const ctx = lidarCtx;
+  const w = lidarCanvas.width;
+  const h = lidarCanvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+
+  // Scale: 5ft (1524mm) = half the display
+  const scale = Math.min(w, h) / 2 / 1800;  // 1.8m radius visible
+
+  // Clear canvas
+  ctx.clearRect(0, 0, w, h);
+
+  // Draw lidar points
+  ctx.beginPath();
+  let prevX = null, prevY = null;
+
+  // Sort by angle for connected drawing
+  points.sort((a, b) => a[0] - b[0]);
+
+  for (const [angle, dist] of points) {
+    // Convert to screen coords (0 = front = up)
+    const rad = (angle - 90) * Math.PI / 180;
+    const x = cx + dist * scale * Math.cos(rad);
+    const y = cy + dist * scale * Math.sin(rad);
+
+    // Color by distance
+    let color;
+    if (dist < 500) {
+      color = '#ff3030';  // Red - close
+    } else if (dist < 1000) {
+      color = '#ff8c00';  // Orange
+    } else if (dist < 2000) {
+      color = '#ffdc00';  // Yellow
+    } else {
+      color = '#00dd66';  // Green - far
+    }
+
+    // Draw point
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Connect nearby points to show walls
+    if (prevX !== null) {
+      const dx = x - prevX;
+      const dy = y - prevY;
+      if (Math.sqrt(dx*dx + dy*dy) < 25) {
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    prevX = x;
+    prevY = y;
+  }
+
+  // Store for sensor agreement checking
+  lidarLastPoints = points;
+
+  // Check sensor agreement with ultrasonic
+  checkSensorAgreement();
+}
+
+// Check if lidar and sonar agree on objects in same direction
+function checkSensorAgreement() {
+  const container = document.querySelector('.sonar-robot-container');
+  if (!container) return;
+
+  // Remove old agreement markers
+  container.querySelectorAll('.sensor-agreement').forEach(el => el.remove());
+
+  // Directions and their angle ranges
+  const directions = {
+    FL: { minAngle: 300, maxAngle: 360, altMin: 0, altMax: 45 },
+    FR: { minAngle: 45, maxAngle: 90 },
+    RL: { minAngle: 180, maxAngle: 225 },
+    RR: { minAngle: 135, maxAngle: 180 }
+  };
+
+  for (const [sensor, range] of Object.entries(directions)) {
+    const sonarDist = sonarSmoothed[sensor];
+    if (sonarDist <= 0) continue;
+
+    // Find lidar points in this direction
+    const sonarDistMm = sonarDist * 10;  // cm to mm
+    let foundAgreement = false;
+
+    for (const [angle, dist] of lidarLastPoints) {
+      const inRange = (angle >= range.minAngle && angle <= range.maxAngle) ||
+                      (range.altMin !== undefined && angle >= range.altMin && angle <= range.altMax);
+      if (!inRange) continue;
+
+      // Check if distances agree (within 30cm)
+      if (Math.abs(dist - sonarDistMm) < 300) {
+        foundAgreement = true;
+        break;
+      }
+    }
+
+    if (foundAgreement && sonarDist < 150) {  // Only highlight close objects
+      // Add pulsing agreement marker
+      const marker = document.createElement('div');
+      marker.className = 'sensor-agreement';
+
+      // Position based on sensor location
+      const posMap = {
+        FL: { top: '25%', left: '35%' },
+        FR: { top: '25%', left: '65%' },
+        RL: { top: '75%', left: '35%' },
+        RR: { top: '75%', left: '65%' }
+      };
+      const pos = posMap[sensor];
+      marker.style.top = pos.top;
+      marker.style.left = pos.left;
+      marker.style.width = '30px';
+      marker.style.height = '30px';
+
+      container.appendChild(marker);
+    }
+  }
 }
 

@@ -1,0 +1,9 @@
+# RPLIDAR A1 udev rules
+# Copy to /etc/udev/rules.d/ and run: sudo udevadm control --reload-rules
+# Or unplug and replug the device
+
+# RPLIDAR A1 (Silicon Labs CP210x)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", MODE="0666", SYMLINK+="rplidar"
+
+# Alternative: match by serial adapter
+KERNEL=="ttyUSB*", MODE="0666"

@@ -121,7 +121,6 @@
         <div class="future-sensors horizontal">
           <div class="future-chip"><span class="icon">&#129302;</span> OpenArm</div>
           <div class="future-chip"><span class="icon">&#128506;</span> GPS</div>
-          <div class="future-chip"><span class="icon">&#128065;</span> LiDAR</div>
           <div class="future-chip"><span class="icon">&#127793;</span> Solar</div>
         </div>
       </div>
@@ -234,14 +233,17 @@
 
   </div>
 
-  <!-- ULTRASONIC SENSOR DISPLAY -->
+  <!-- HYBRID SENSOR DISPLAY - LiDAR + Ultrasonic -->
   <div class="light-cam-wide glass">
     <div class="sonar-section-header">
-      <span class="sonar-title">ULTRASONIC PROXIMITY</span>
-      <span class="sonar-subtitle">4x Sensors | 21-600cm Range</span>
+      <span class="sonar-title">HYBRID SENSORS</span>
+      <span class="sonar-subtitle">LiDAR 360° + 4x Ultrasonic</span>
     </div>
     <div class="sonar-display">
       <div class="sonar-robot-container">
+        <!-- LiDAR canvas layer (behind everything) -->
+        <canvas id="lidarCanvas" class="lidar-canvas"></canvas>
+
         <!-- Grid background - each cell = 1 foot -->
         <div class="sonar-grid" id="sonarGrid">
           <!-- 10x10 grid (5ft each direction from center) -->

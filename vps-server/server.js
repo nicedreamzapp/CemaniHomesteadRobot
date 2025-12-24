@@ -533,6 +533,18 @@ wss.on("connection", (ws, req) => {
         ws.send(JSON.stringify({type:"pong", timestamp: Date.now()}));
       }
 
+      // Handle Jetson lidar identify
+      if(data.type === "identify" && data.device === "jetson-lidar") {
+        ws.isJetsonLidar = true;
+        console.log("[JETSON] Lidar relay connected");
+      }
+
+      // Handle lidar data from Jetson - broadcast to browsers
+      if(data.type === "lidar" && ws.isJetsonLidar) {
+        // Broadcast lidar data to all browser clients
+        broadcast({type: "lidar", points: data.points, count: data.count}, ws);
+      }
+
       if(data.type === "get_status") {
         ws.isBrowser = true;  // Mark as browser client
         ws.send(JSON.stringify({type:"status", ...robotStatus, camera: cameraStatus, teensyConnected: teensyStatus.connected}));
