@@ -1057,32 +1057,41 @@ function createRobot3D() {
 
   // Ultrasonic sensor cones (FL, FR, RL, RR)
   // JSN-SR04T range: 21-600cm, ~30° beam angle
-  const conePositions = {
-    FL: { x: -0.12, z: -0.22, rotY: Math.PI * 0.15 },   // Front-left, angled outward
-    FR: { x: 0.12, z: -0.22, rotY: -Math.PI * 0.15 },   // Front-right, angled outward
-    RL: { x: -0.12, z: 0.22, rotY: Math.PI - Math.PI * 0.15 },  // Rear-left
-    RR: { x: 0.12, z: 0.22, rotY: Math.PI + Math.PI * 0.15 }    // Rear-right
+  // Cones point outward from robot corners, angled ~27° from straight
+  const coneConfigs = {
+    FL: { x: -0.15, z: -0.20, angle: -Math.PI/2 - 0.5 },   // Front-left, forward-left
+    FR: { x: 0.15, z: -0.20, angle: -Math.PI/2 + 0.5 },    // Front-right, forward-right
+    RL: { x: -0.15, z: 0.20, angle: Math.PI/2 + 0.5 },     // Rear-left, backward-left
+    RR: { x: 0.15, z: 0.20, angle: Math.PI/2 - 0.5 }       // Rear-right, backward-right
   };
 
-  Object.keys(conePositions).forEach(sensor => {
-    const pos = conePositions[sensor];
-    // Cone: radiusTop, radiusBottom, height, radialSegments
-    const coneGeom = new THREE.ConeGeometry(0.15, 0.5, 16, 1, true);
+  Object.keys(coneConfigs).forEach(sensor => {
+    const cfg = coneConfigs[sensor];
+    // Create a group for each sensor to make rotation easier
+    const sensorGroup = new THREE.Group();
+    sensorGroup.position.set(cfg.x, 0.08, cfg.z);
+    sensorGroup.rotation.y = cfg.angle;
+
+    // Cone points along +Z after group rotation
+    // radiusTop=0 (point), radiusBottom=beam spread, height=distance
+    const coneGeom = new THREE.ConeGeometry(0, 0.3, 16, 1, true);  // Will be scaled
     const coneMat = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       transparent: true,
-      opacity: 0.25,
+      opacity: 0.3,
       side: THREE.DoubleSide,
       depthWrite: false
     });
     const cone = new THREE.Mesh(coneGeom, coneMat);
-    cone.rotation.x = Math.PI / 2;  // Point forward (along Z)
-    cone.rotation.z = pos.rotY;
-    cone.position.set(pos.x, 0.1, pos.z);
-    cone.visible = false;  // Start hidden, show when data arrives
+    // Rotate cone to point along Z (forward from group)
+    cone.rotation.x = Math.PI / 2;
+    cone.position.z = 0.25;  // Offset so base is at sensor, tip extends out
+    cone.visible = false;
     cone.userData.sensor = sensor;
-    group.add(cone);
-    lidar3dUltrasonicCones[sensor] = cone;
+
+    sensorGroup.add(cone);
+    group.add(sensorGroup);
+    lidar3dUltrasonicCones[sensor] = { cone, group: sensorGroup };
   });
 
   return group;
@@ -1098,41 +1107,55 @@ function getDistanceColor3D(dist) {
 
 // Update ultrasonic cone in 3D view
 function updateUltrasonic3D(sensor, distCm) {
-  const cone = lidar3dUltrasonicCones[sensor];
-  if (!cone) return;
+  const coneData = lidar3dUltrasonicCones[sensor];
+  if (!coneData || !coneData.cone) return;
 
-  // Hide if no valid reading
-  if (distCm <= 0 || distCm > 600) {
+  const cone = coneData.cone;
+
+  // Hide if no valid reading (min 21cm for JSN-SR04T)
+  if (distCm < 21 || distCm > 600) {
     cone.visible = false;
     return;
   }
 
   cone.visible = true;
 
-  // Scale cone length based on distance (max 6m = 600cm)
-  // Convert cm to meters, scale to reasonable visual size
+  // Convert cm to meters - this is the ACTUAL distance to object
   const distM = distCm / 100;
-  const coneLength = Math.min(distM * 0.8, 4);  // Cap at 4m visual
-  const coneRadius = 0.08 + (distM * 0.05);  // Wider at longer distances
 
-  // Update cone geometry scale
-  cone.scale.set(coneRadius / 0.15, coneLength / 0.5, coneRadius / 0.15);
+  // Cone length = actual distance (1:1 scale in 3D world)
+  // Cone spread = ~30° beam angle, so radius at end = dist * tan(15°) ≈ dist * 0.27
+  const coneLength = distM;
+  const coneRadius = distM * 0.27;  // 30° beam angle
 
-  // Color based on distance (red=close, yellow=mid, cyan=far)
-  let color;
+  // Scale cone: base geometry is height=0.5, radius=0.3
+  // Scale Y (height after rotation) to match distance
+  // Scale X,Z (radius) to match beam spread
+  cone.scale.set(coneRadius / 0.3, coneLength / 0.5, coneRadius / 0.3);
+
+  // Reposition so cone tip starts at sensor, extends outward
+  cone.position.z = coneLength / 2;
+
+  // Color based on distance (red=close, yellow=mid, green=far, cyan=clear)
+  let color, opacity;
   if (distCm < 50) {
     color = 0xff0000;  // Red - danger close
+    opacity = 0.6;
   } else if (distCm < 100) {
-    color = 0xff8800;  // Orange - caution
-  } else if (distCm < 200) {
-    color = 0xffff00;  // Yellow - attention
+    color = 0xff6600;  // Orange - caution
+    opacity = 0.45;
+  } else if (distCm < 150) {
+    color = 0xffcc00;  // Yellow - attention
+    opacity = 0.35;
+  } else if (distCm < 250) {
+    color = 0x44ff44;  // Green - ok
+    opacity = 0.25;
   } else {
     color = 0x00ffff;  // Cyan - clear
+    opacity = 0.2;
   }
   cone.material.color.setHex(color);
-
-  // Opacity based on distance (more visible when close)
-  cone.material.opacity = distCm < 100 ? 0.5 : 0.25;
+  cone.material.opacity = opacity;
 }
 
 function updateLidar3D(points) {
