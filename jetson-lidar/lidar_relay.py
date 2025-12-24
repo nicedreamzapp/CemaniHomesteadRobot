@@ -50,6 +50,7 @@ class LidarRelay:
 
     def lidar_thread(self):
         """Thread to continuously read lidar"""
+        consecutive_errors = 0
         while self.running:
             try:
                 if not self.connect_lidar():
@@ -58,6 +59,8 @@ class LidarRelay:
 
                 self.lidar.start_motor()
                 time.sleep(1)
+                print("LIDAR motor started, scanning...")
+                consecutive_errors = 0  # Reset on successful start
 
                 for scan in self.lidar.iter_scans(max_buf_meas=2000, min_len=50):
                     if not self.running:
@@ -77,15 +80,34 @@ class LidarRelay:
                         self.current_scan = points
 
             except Exception as e:
-                print(f"LIDAR error: {e}")
-            finally:
-                try:
-                    if self.lidar:
-                        self.lidar.stop()
-                        self.lidar.stop_motor()
-                        self.lidar.disconnect()
-                except:
-                    pass
+                consecutive_errors += 1
+                print(f"LIDAR error ({consecutive_errors}): {e}")
+                # Only do full restart after multiple consecutive errors
+                if consecutive_errors >= 3:
+                    print("Multiple errors - restarting LIDAR...")
+                    try:
+                        if self.lidar:
+                            self.lidar.stop()
+                            self.lidar.stop_motor()
+                            self.lidar.disconnect()
+                            self.lidar = None
+                    except:
+                        pass
+                    consecutive_errors = 0
+                    time.sleep(3)
+                else:
+                    time.sleep(0.5)  # Brief pause before retry
+                continue  # Try again without full restart
+
+            # Only reach here if iter_scans exits normally (shouldn't happen)
+            try:
+                if self.lidar:
+                    self.lidar.stop()
+                    self.lidar.stop_motor()
+                    self.lidar.disconnect()
+                    self.lidar = None
+            except:
+                pass
 
             if self.running:
                 time.sleep(2)
