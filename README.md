@@ -8,6 +8,7 @@
 ![Status](https://img.shields.io/badge/Status-Remote_Control_Live-green?style=for-the-badge)
 ![Power](https://img.shields.io/badge/Power-24V_LiFePO4-orange?style=for-the-badge)
 ![Remote](https://img.shields.io/badge/Remote-Control_From_Anywhere-blue?style=for-the-badge)
+![LIDAR](https://img.shields.io/badge/LIDAR-360°_3D_Mapping-purple?style=for-the-badge)
 ![Sonar](https://img.shields.io/badge/Sonar-4x_Ultrasonic-cyan?style=for-the-badge)
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
@@ -91,20 +92,21 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 **Control and monitor your robot from ANYWHERE in the world!**
 
-![Web Dashboard](docs/images/new-ui-robot.png)
+![Command Center with LIDAR](docs/images/command-center-lidar.png)
 
-*Command Center with dual cameras, PTZ controls, ultrasonic sonar display, and real-time telemetry*
+*Command Center featuring dual PTZ cameras, real-time 3D LIDAR mapping, tank drive controls with GO/STOP buttons, ultrasonic proximity sensors, position tracking, and complete telemetry dashboard*
 
 ### Features
 
 | Category | Features |
 |----------|----------|
-| **Controls** | Virtual joystick, distance presets (0.5ft/1ft/3ft/10ft), GO/STOP buttons |
-| **Telemetry** | Motor RPM, battery voltage (%), driver temps, WiFi signal |
-| **Cameras** | Dual PTZ with RTSP streaming, ONVIF pan/tilt, audio |
-| **Sonar** | 4x ultrasonic sensors with color-coded proximity visualization |
+| **Controls** | Tank drive with L/R steering, distance presets (0.5ft/1ft/3ft/10ft), GO/STOP buttons |
+| **LIDAR** | Real-time 3D point cloud visualization, 360° scanning, obstacle detection |
+| **Telemetry** | Motor RPM, battery voltage (%), driver temps, WiFi signal, uptime |
+| **Cameras** | Dual PTZ with RTSP streaming, ONVIF pan/tilt, two-way audio |
+| **Sonar** | 4x ultrasonic sensors with color-coded proximity badges (FL/FR/RL/RR) |
 | **Dev Tools** | Serial monitor popup, code editor, wireless compile & upload |
-| **Tracking** | Position tracker with trip distance, heading, encoder ticks |
+| **Tracking** | Position tracker with X/Y coordinates, heading, trip distance, encoder ticks |
 
 ### Architecture
 
@@ -164,9 +166,9 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 | Component | Specs | Status |
 |-----------|-------|--------|
+| **RPLidar A1** | 360°, 12m range, 8000 samples/sec | ✅ Working |
 | **4x Ultrasonic** | JSN-SR04T-V3.0, 21-600cm | ✅ Working |
 | **2x PTZ Cameras** | Sricam 1080p RTSP/ONVIF | ✅ Working |
-| **RPLidar A1** | 360°, 12m range | 🔜 Next |
 | **GPS Module** | u-blox NEO-M8N | 🔜 Next |
 
 ### Computing
@@ -189,11 +191,13 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 | Tank Drive Platform | ✅ | 4WD hub motors, pulls loaded carts |
 | 8BitDo Controller | ✅ | Bluetooth via ESP32, exponential curves |
 | Web Command Center | ✅ | Control from anywhere, glassmorphism UI |
+| **3D LIDAR Mapping** | ✅ | Real-time 360° point cloud, obstacle visualization |
 | Dual PTZ Cameras | ✅ | RTSP streaming, ONVIF pan/tilt |
 | Audio Streaming | ✅ | Hear surroundings through browser |
 | Wireless Programming | ✅ | Flash Teensy from browser |
-| **Ultrasonic Sonar** | ✅ | 4x sensors, color-coded UI visualization |
-| Driver Telemetry | ✅ | Battery V, temps, RPM, torque |
+| Ultrasonic Sonar | ✅ | 4x sensors, color-coded proximity badges |
+| Position Tracking | ✅ | X/Y coordinates, heading, trip distance |
+| Driver Telemetry | ✅ | Battery V, temps, RPM, WiFi signal |
 | Safety Auto-Stop | ✅ | Stops if connection lost |
 
 ### Coming Next
@@ -201,7 +205,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 | Feature | Status | Notes |
 |---------|:------:|-------|
 | GPS Navigation | 🔜 | All-weather positioning |
-| LiDAR Mapping | 🔜 | RPLidar A1 for SLAM |
+| SLAM Navigation | 🔜 | Using LIDAR for autonomous mapping |
 | Predator Detection | 🔜 | YOLOv8 on Jetson |
 | Autonomous Patrol | 🔜 | Waypoint navigation |
 
@@ -224,7 +228,9 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 ✅ Phase 6.10: Safety auto-stop
 ✅ Phase 6.11: Driver telemetry via Modbus
 ✅ Phase 6.12: Ultrasonic proximity sensors
-🔜 Phase 7:   Autonomous patrol (Jetson + LiDAR + GPS)
+✅ Phase 6.13: 3D LIDAR mapping with real-time visualization
+✅ Phase 6.14: Position tracking with odometry
+🔜 Phase 7:   Autonomous patrol (Jetson + SLAM + GPS)
 🔜 Phase 8:   Deterrent system (siren, strobes)
 ```
 
@@ -333,6 +339,7 @@ CemaniHomesteadRobot/
 ├── teensy-robot/           # Motor control firmware (PlatformIO)
 ├── esp32-robot-controller/ # Bluepad32 + WiFi + WebSocket
 ├── vps-server/             # Node.js server + Command Center UI
+├── jetson-lidar/           # LIDAR processing on Jetson Orin Nano
 ├── jetson-camera-relay/    # Camera relay for Jetson
 ├── mac-camera-relay/       # Camera relay for Mac
 ├── ZLAC8015D-V2.0/         # Driver documentation
@@ -343,10 +350,14 @@ CemaniHomesteadRobot/
 
 ## Roadmap
 
+### Completed
+- [x] LIDAR integration with 3D visualization
+- [x] Position tracking with odometry
+- [x] Jetson Orin Nano integration
+
 ### Next Up
 - [ ] GPS module installation
-- [ ] LiDAR mounting with rain cover
-- [ ] Jetson Orin Nano integration
+- [ ] SLAM-based autonomous navigation
 - [ ] YOLOv8 predator detection
 
 ### Future

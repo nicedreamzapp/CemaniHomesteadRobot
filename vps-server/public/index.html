@@ -5,6 +5,351 @@
 <title>CEMANI COMMAND CENTER</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/styles.css?v=1224a">
+<style>
+/* TWO COLUMN LAYOUT: Cameras | Drive System (wider) */
+.container {
+  grid-template-columns: minmax(300px, 1fr) minmax(400px, 600px) !important;
+  grid-template-rows: 50px auto 1fr !important;
+  grid-template-areas:
+    "header header"
+    "cams middle"
+    "cams lightcam" !important;
+}
+/* Remove padding from drive system */
+.middle-column {
+  padding: 0 !important;
+  overflow: visible !important;
+}
+.drive-panel {
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+/* Hide sidebar - moved to header and LIDAR */
+.sidebar { display: none !important; }
+
+/* 3D map bigger - full card */
+.light-cam-wide {
+  max-height: 520px !important;
+  position: relative;
+}
+/* Hide the header - elements float directly on grid */
+.lidar3d-header { display: none !important; }
+.lidar3d-title { display: none !important; }
+.lidar3d-subtitle { display: none !important; }
+
+/* LIDAR status floats on grid */
+.lidar-status {
+  position: absolute !important;
+  top: 8px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 10;
+  background: rgba(0,0,0,0.5) !important;
+  padding: 3px 8px !important;
+  border-radius: 4px !important;
+}
+
+/* Fix ultrasonic badge positions */
+.us-badge.us-fl { top: 8px !important; left: 8px !important; }
+.us-badge.us-fr { top: 8px !important; right: 8px !important; }
+.us-badge.us-rl { bottom: 60px !important; left: 8px !important; }
+.us-badge.us-rr { bottom: 60px !important; right: 8px !important; }
+
+/* Floating buttons on grid - below LIDAR status */
+.lidar-btns-row {
+  position: absolute !important;
+  top: 38px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 20px !important;
+  z-index: 10;
+}
+.lidar3d-reset-btn, .lidar3d-expand-btn {
+  background: rgba(0,0,0,0.5) !important;
+  padding: 4px 10px !important;
+  border-radius: 4px !important;
+  position: static !important;
+  display: inline-block !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+.lidar-btns-row {
+  pointer-events: auto !important;
+}
+.lidar-status {
+  pointer-events: auto !important;
+}
+
+/* Drive System header with temps on sides */
+.drive-header-with-temps {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 8px 10px !important;
+}
+.header-temp-left, .header-temp-right {
+  font-size: 0.75rem;
+  color: #fc0;
+  background: rgba(0,0,0,0.3);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.header-title {
+  color: #0f8;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+/* Hide old driver temps row */
+.driver-temps-row {
+  display: none !important;
+}
+/* Remove button outline from speed boxes */
+.speed-box {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+/* Move robot visual to left */
+.tank-robot-view {
+  justify-content: flex-start !important;
+  padding-left: 10px !important;
+  gap: 4px !important;
+  position: relative !important;
+}
+/* Center CEMANI label in chassis */
+.tank-label {
+  text-align: center !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+/* FWD/BACK buttons at edges of chassis */
+.tank-dir-btn {
+  padding: 4px 6px !important;
+  font-size: 9px !important;
+  position: absolute !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+#dirF {
+  top: 5px !important;
+}
+#dirB {
+  bottom: 5px !important;
+}
+/* Scale robot proportionally bigger */
+.tank-body {
+  height: 170px !important;
+  width: 90px !important;
+  position: relative !important;
+}
+.tank-wheel {
+  width: 28px !important;
+  height: 55px !important;
+}
+.tank-track {
+  gap: 12px !important;
+}
+/* Position L/R buttons between wheels and chassis using absolute positioning */
+.tank-steer-btn {
+  position: absolute !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  z-index: 10;
+}
+#dirL {
+  left: 44px !important;
+}
+#dirR {
+  left: 248px !important;
+}
+.speed-row {
+  justify-content: flex-start !important;
+  padding-left: 8px !important;
+  gap: 65px !important;
+  margin-top: -5px !important;
+}
+.speed-box {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  flex: 0 0 auto !important;
+}
+/* Pill-shaped ft buttons, horizontal row at top right */
+.dist-row {
+  position: absolute !important;
+  right: 25px !important;
+  top: 80px !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: 220px !important;
+  margin-top: 0 !important;
+}
+.dist-btn {
+  flex: 0 0 auto !important;
+  padding: 8px 12px !important;
+  border-radius: 20px !important;
+  font-size: 0.8rem !important;
+}
+/* Move status text - smaller, below ft buttons */
+.move-status {
+  position: absolute !important;
+  right: 25px !important;
+  top: 135px !important;
+  width: 220px !important;
+  text-align: center !important;
+  font-size: 9px !important;
+  padding: 6px 12px !important;
+}
+/* GO/STOP buttons - below status text, centered */
+.exec-row {
+  position: absolute !important;
+  right: 25px !important;
+  top: 175px !important;
+  width: 220px !important;
+  flex-direction: row !important;
+  justify-content: center !important;
+  gap: 30px !important;
+  margin-top: 0 !important;
+}
+.exec-btn {
+  flex: 0 0 auto !important;
+  padding: 10px 24px !important;
+  font-size: 11px !important;
+}
+/* GO button - green light (circle) */
+.exec-btn.go {
+  width: 65px !important;
+  height: 65px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  background: radial-gradient(circle at 30% 30%, #7fff7f, #3cb550, #228b22) !important;
+  box-shadow: 0 0 25px rgba(0, 255, 0, 0.6), inset 0 -4px 8px rgba(0,0,0,0.3) !important;
+}
+/* STOP button - stop sign (octagon) */
+.exec-btn.stop {
+  width: 65px !important;
+  height: 65px !important;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%) !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  background: linear-gradient(145deg, #ff4444, #cc0000) !important;
+  box-shadow: 0 0 20px rgba(255, 0, 0, 0.5) !important;
+}
+/* Make drive card relative for absolute positioning */
+.middle-column .card {
+  position: relative !important;
+}
+.lidar3d-container {
+  height: 100% !important;
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Serial/Code/Battery buttons in camera column */
+.cam-triggers {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 8px;
+}
+.battery-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #2a4a3a, #1a3a2a);
+  border: 2px solid rgba(0, 255, 136, 0.5);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #0f8;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+.batt-bar-mini {
+  width: 40px;
+  height: 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 3px;
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  overflow: hidden;
+}
+.batt-fill-mini {
+  height: 100%;
+  background: linear-gradient(90deg, #f44, #fc0, #0f8);
+  width: 75%;
+  transition: width 0.3s;
+}
+.xbox-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #2a3a4a, #1a2a3a);
+  border: 2px solid rgba(100, 200, 255, 0.5);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #5af;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Position stats bar on 3D map */
+.position-stats-bar {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 15px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  border-radius: 8px;
+  padding: 8px 15px;
+  z-index: 10;
+}
+.pos-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.pos-label {
+  font-size: 0.5rem;
+  color: #888;
+  letter-spacing: 1px;
+}
+.pos-val {
+  font-size: 0.85rem;
+  color: #5af;
+  font-weight: bold;
+  font-family: monospace;
+}
+
+/* Reset button in LIDAR */
+.lidar3d-reset-btn {
+  background: rgba(255, 100, 100, 0.2);
+  border: 1px solid rgba(255, 100, 100, 0.5);
+  color: #f88;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.6rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.lidar3d-reset-btn:hover {
+  background: rgba(255, 100, 100, 0.4);
+}
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
@@ -47,6 +392,13 @@
           <span class="dev-label">Jetson</span>
           <span class="dev-status" id="jetsonStatus">--</span>
           <span class="dev-version" id="jetsonVersion"></span>
+        </div>
+      </div>
+      <div class="device-chip" id="xboxCard">
+        <span class="dev-icon">&#127918;</span>
+        <div class="dev-info">
+          <span class="dev-label">Xbox</span>
+          <span class="dev-status" id="xboxState">--</span>
         </div>
       </div>
     </div>
@@ -116,14 +468,20 @@
       </div>
     </div>
 
-    <!-- COMING SOON row -->
+    <!-- Serial/Code/Battery triggers -->
     <div class="coming-soon-row">
-      <div class="coming-soon-cams">
-        <div class="section-header"><span class="emoji">&#128301;</span> COMING SOON</div>
-        <div class="future-sensors horizontal">
-          <div class="future-chip"><span class="icon">&#129302;</span> OpenArm</div>
-          <div class="future-chip"><span class="icon">&#128506;</span> GPS</div>
-          <div class="future-chip"><span class="icon">&#127793;</span> Solar</div>
+      <div class="cam-triggers">
+        <div class="serial-trigger" onclick="toggleSerialPopup()">
+          <span class="emoji">&#128187;</span> SERIAL
+        </div>
+        <div class="serial-trigger" onclick="toggleCodePopup()">
+          <span class="emoji">&#128221;</span> CODE
+        </div>
+        <div class="battery-trigger">
+          <span class="emoji">&#128267;</span>
+          <div class="batt-bar-mini"><div class="batt-fill-mini" id="headerBatteryFill"></div></div>
+          <span id="headerBatteryVoltage">--</span>V
+          <span id="headerBatteryPercent">--</span>%
         </div>
       </div>
     </div>
@@ -132,28 +490,18 @@
 
   <!-- Middle: Drive System (merged with Robot Control) -->
   <div class="middle-column glass">
-    <!-- DRIVE SYSTEM - EV Dashboard Style with Controls -->
-    <div class="section-header"><span class="emoji">&#128664;</span> DRIVE SYSTEM</div>
+    <!-- DRIVE SYSTEM Header with Driver Temps on sides -->
+    <div class="section-header drive-header-with-temps">
+      <span class="header-temp-left">&#9881; Driver 1: <span id="driver1Temp">--</span>&deg;F</span>
+      <span class="header-title"><span class="emoji">&#128664;</span> DRIVE SYSTEM</span>
+      <span class="header-temp-right">&#9881; Driver 2: <span id="driver2Temp">--</span>&deg;F</span>
+    </div>
     <div class="drive-panel">
       <!-- Hidden battery elements for JS compatibility -->
       <div style="display:none">
         <div id="batteryBar"><div id="batteryFill"></div></div>
         <span id="batteryVoltage">--</span>
         <span id="batteryPercent">--</span>
-      </div>
-
-      <!-- Driver Temps Row - Above Robot -->
-      <div class="driver-temps-row">
-        <div class="driver-temp-box">
-          <span class="driver-icon">&#9881;</span>
-          <span class="driver-name">Driver 2</span>
-          <span class="driver-temp-val" id="driver2Temp">--</span><span class="temp-unit">&deg;F</span>
-        </div>
-        <div class="driver-temp-box">
-          <span class="driver-icon">&#9881;</span>
-          <span class="driver-name">Driver 1</span>
-          <span class="driver-temp-val" id="driver1Temp">--</span><span class="temp-unit">&deg;F</span>
-        </div>
       </div>
 
       <!-- Robot Top-Down View - Tank Style with Side Wheels and Controls -->
@@ -235,30 +583,36 @@
 
   </div>
 
-  <!-- 3D LIDAR MAP - Integrated View -->
+  <!-- 3D LIDAR MAP - Integrated View with Position Tracker -->
   <div class="light-cam-wide glass">
-    <div class="lidar3d-header">
-      <span class="lidar3d-title">3D SPATIAL MAP</span>
-      <span class="lidar3d-subtitle">LiDAR + Position + Ultrasonics</span>
-      <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen">⛶</button>
-    </div>
     <div class="lidar3d-container" id="lidar3dContainer">
       <!-- Three.js renders here -->
       <div class="lidar3d-overlay">
+        <!-- LIDAR status and buttons floating on grid -->
+        <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
+        <div class="lidar-btns-row">
+          <button class="lidar3d-reset-btn" onclick="resetOdometry()" title="Reset Position">RESET</button>
+          <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen">⛶</button>
+        </div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
         <div class="us-badge us-fr" id="usBadgeFR">FR: --</div>
         <div class="us-badge us-rl" id="usBadgeRL">RL: --</div>
         <div class="us-badge us-rr" id="usBadgeRR">RR: --</div>
-        <!-- Position info -->
-        <div class="pos-badge" id="posBadge">X: 0.0 Y: 0.0</div>
-        <!-- Lidar status -->
-        <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
+        <!-- Position stats bar at bottom -->
+        <div class="position-stats-bar">
+          <div class="pos-stat"><span class="pos-label">X</span><span class="pos-val" id="odomX">0.0</span></div>
+          <div class="pos-stat"><span class="pos-label">Y</span><span class="pos-val" id="odomY">0.0</span></div>
+          <div class="pos-stat"><span class="pos-label">HDG</span><span class="pos-val"><span id="odomHeading">0</span>&deg;</span></div>
+          <div class="pos-stat"><span class="pos-label">TRIP</span><span class="pos-val"><span id="odomTripDist">0.0</span>ft</span></div>
+          <div class="pos-stat"><span class="pos-label">L TICKS</span><span class="pos-val" id="encL">0</span></div>
+          <div class="pos-stat"><span class="pos-label">R TICKS</span><span class="pos-val" id="encR">0</span></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Right: Position Tracker + Code -->
+  <!-- Right: Position Tracker + Code (HIDDEN - moved to LIDAR) -->
   <div class="sidebar glass">
     <!-- POSITION TRACKER -->
     <div class="section-header"><span class="emoji">&#128506;</span> POSITION TRACKER</div>
@@ -273,19 +627,19 @@
       <div class="tracker-stats">
         <div class="tracker-stat">
           <span class="stat-label">TRIP</span>
-          <span class="stat-value"><span id="odomTripDist">0.0</span> ft</span>
+          <span class="stat-value"><span id="odomTripDist2">0.0</span> ft</span>
         </div>
         <div class="tracker-stat">
           <span class="stat-label">HDG</span>
-          <span class="stat-value"><span id="odomHeading">0</span>&deg;</span>
+          <span class="stat-value"><span id="odomHeading2">0</span>&deg;</span>
         </div>
         <div class="tracker-stat">
           <span class="stat-label">L TICKS</span>
-          <span class="stat-value" id="encL">0</span>
+          <span class="stat-value" id="encL2">0</span>
         </div>
         <div class="tracker-stat">
           <span class="stat-label">R TICKS</span>
-          <span class="stat-value" id="encR">0</span>
+          <span class="stat-value" id="encR2">0</span>
         </div>
       </div>
     </div>
@@ -298,8 +652,6 @@
       <span id="positionR"></span>
       <span id="torqueL"></span>
       <span id="torqueR"></span>
-      <span id="odomX"></span>
-      <span id="odomY"></span>
     </div>
 
     <!-- XBOX CONTROLLER - moved from middle column -->
@@ -307,7 +659,7 @@
       <div class="xbox-status" id="xboxStatus">
         <span class="xbox-icon">&#127918;</span>
         <span class="xbox-label">Xbox Controller</span>
-        <span class="xbox-state" id="xboxState">--</span>
+        <span class="xbox-state" id="xboxState2">--</span>
       </div>
     </div>
 
@@ -321,8 +673,8 @@
       </div>
       <div class="sidebar-battery">
         <span class="header-batt-icon">&#128267;</span>
-        <div class="header-batt-bar"><div class="header-batt-fill" id="headerBatteryFill"></div></div>
-        <span class="header-batt-text"><span id="headerBatteryVoltage">--</span>V <span id="headerBatteryPercent">--</span>%</span>
+        <div class="header-batt-bar"><div class="header-batt-fill" id="headerBatteryFill2"></div></div>
+        <span class="header-batt-text"><span id="headerBatteryVoltage2">--</span>V <span id="headerBatteryPercent2">--</span>%</span>
       </div>
     </div>
 
