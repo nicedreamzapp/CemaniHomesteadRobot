@@ -1057,41 +1057,32 @@ function createRobot3D() {
 
   // Ultrasonic sensor cones (FL, FR, RL, RR)
   // JSN-SR04T range: 21-600cm, ~30° beam angle
-  // Cones point outward from robot corners, angled ~27° from straight
-  const coneConfigs = {
-    FL: { x: -0.15, z: -0.20, angle: -Math.PI/2 - 0.5 },   // Front-left, forward-left
-    FR: { x: 0.15, z: -0.20, angle: -Math.PI/2 + 0.5 },    // Front-right, forward-right
-    RL: { x: -0.15, z: 0.20, angle: Math.PI/2 + 0.5 },     // Rear-left, backward-left
-    RR: { x: 0.15, z: 0.20, angle: Math.PI/2 - 0.5 }       // Rear-right, backward-right
+  const conePositions = {
+    FL: { x: -0.12, z: -0.22, rotY: Math.PI * 0.15 },   // Front-left, angled outward
+    FR: { x: 0.12, z: -0.22, rotY: -Math.PI * 0.15 },   // Front-right, angled outward
+    RL: { x: -0.12, z: 0.22, rotY: Math.PI - Math.PI * 0.15 },  // Rear-left
+    RR: { x: 0.12, z: 0.22, rotY: Math.PI + Math.PI * 0.15 }    // Rear-right
   };
 
-  Object.keys(coneConfigs).forEach(sensor => {
-    const cfg = coneConfigs[sensor];
-    // Create a group for each sensor to make rotation easier
-    const sensorGroup = new THREE.Group();
-    sensorGroup.position.set(cfg.x, 0.08, cfg.z);
-    sensorGroup.rotation.y = cfg.angle;
-
-    // Cone points along +Z after group rotation
-    // radiusTop=0 (point), radiusBottom=beam spread, height=distance
-    const coneGeom = new THREE.ConeGeometry(0, 0.3, 16, 1, true);  // Will be scaled
+  Object.keys(conePositions).forEach(sensor => {
+    const pos = conePositions[sensor];
+    // Cone: radiusTop, radiusBottom, height, radialSegments
+    const coneGeom = new THREE.ConeGeometry(0.15, 0.5, 16, 1, true);
     const coneMat = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.25,
       side: THREE.DoubleSide,
       depthWrite: false
     });
     const cone = new THREE.Mesh(coneGeom, coneMat);
-    // Rotate cone to point along Z (forward from group)
-    cone.rotation.x = Math.PI / 2;
-    cone.position.z = 0.25;  // Offset so base is at sensor, tip extends out
-    cone.visible = false;
+    cone.rotation.x = Math.PI / 2;  // Point forward (along Z)
+    cone.rotation.z = pos.rotY;
+    cone.position.set(pos.x, 0.1, pos.z);
+    cone.visible = false;  // Start hidden, show when data arrives
     cone.userData.sensor = sensor;
-
-    sensorGroup.add(cone);
-    group.add(sensorGroup);
-    lidar3dUltrasonicCones[sensor] = { cone, group: sensorGroup };
+    group.add(cone);
+    lidar3dUltrasonicCones[sensor] = cone;
   });
 
   return group;
@@ -1107,55 +1098,41 @@ function getDistanceColor3D(dist) {
 
 // Update ultrasonic cone in 3D view
 function updateUltrasonic3D(sensor, distCm) {
-  const coneData = lidar3dUltrasonicCones[sensor];
-  if (!coneData || !coneData.cone) return;
+  const cone = lidar3dUltrasonicCones[sensor];
+  if (!cone) return;
 
-  const cone = coneData.cone;
-
-  // Hide if no valid reading (min 21cm for JSN-SR04T)
-  if (distCm < 21 || distCm > 600) {
+  // Hide if no valid reading
+  if (distCm <= 0 || distCm > 600) {
     cone.visible = false;
     return;
   }
 
   cone.visible = true;
 
-  // Convert cm to meters - this is the ACTUAL distance to object
+  // Scale cone length based on distance (max 6m = 600cm)
+  // Convert cm to meters, scale to reasonable visual size
   const distM = distCm / 100;
+  const coneLength = Math.min(distM * 0.8, 4);  // Cap at 4m visual
+  const coneRadius = 0.08 + (distM * 0.05);  // Wider at longer distances
 
-  // Cone length = actual distance (1:1 scale in 3D world)
-  // Cone spread = ~30° beam angle, so radius at end = dist * tan(15°) ≈ dist * 0.27
-  const coneLength = distM;
-  const coneRadius = distM * 0.27;  // 30° beam angle
+  // Update cone geometry scale
+  cone.scale.set(coneRadius / 0.15, coneLength / 0.5, coneRadius / 0.15);
 
-  // Scale cone: base geometry is height=0.5, radius=0.3
-  // Scale Y (height after rotation) to match distance
-  // Scale X,Z (radius) to match beam spread
-  cone.scale.set(coneRadius / 0.3, coneLength / 0.5, coneRadius / 0.3);
-
-  // Reposition so cone tip starts at sensor, extends outward
-  cone.position.z = coneLength / 2;
-
-  // Color based on distance (red=close, yellow=mid, green=far, cyan=clear)
-  let color, opacity;
+  // Color based on distance (red=close, yellow=mid, cyan=far)
+  let color;
   if (distCm < 50) {
     color = 0xff0000;  // Red - danger close
-    opacity = 0.6;
   } else if (distCm < 100) {
-    color = 0xff6600;  // Orange - caution
-    opacity = 0.45;
-  } else if (distCm < 150) {
-    color = 0xffcc00;  // Yellow - attention
-    opacity = 0.35;
-  } else if (distCm < 250) {
-    color = 0x44ff44;  // Green - ok
-    opacity = 0.25;
+    color = 0xff8800;  // Orange - caution
+  } else if (distCm < 200) {
+    color = 0xffff00;  // Yellow - attention
   } else {
     color = 0x00ffff;  // Cyan - clear
-    opacity = 0.2;
   }
   cone.material.color.setHex(color);
-  cone.material.opacity = opacity;
+
+  // Opacity based on distance (more visible when close)
+  cone.material.opacity = distCm < 100 ? 0.5 : 0.25;
 }
 
 function updateLidar3D(points) {
@@ -1217,12 +1194,13 @@ function updateLidar3D(points) {
 
   for (const [angle, dist] of points) {
     // Local coordinates (relative to robot facing forward)
-    const rad = (angle - 90) * Math.PI / 180;
+    // LIDAR 0° = front of robot = -Z in Three.js
+    const rad = (angle + 90) * Math.PI / 180;  // +90 to align front with -Z
     const localX = (dist / 1000) * Math.cos(rad);
     const localZ = (dist / 1000) * Math.sin(rad);
 
     // Current scan: show relative to robot (robot is at origin, points around it)
-    positions.push(localX, 0.24, -localZ);
+    positions.push(localX, 0.24, localZ);  // No negation needed now
     const c = getDistanceColor3D(dist);
     colors.push(c.r, c.g, c.b);
 
@@ -1259,103 +1237,58 @@ function updateLidar3D(points) {
     lidar3dSlamPoints.shift();
   }
 
-  // Update SLAM point cloud visualization - make it more visible as a "map"
+  // Update SLAM point cloud visualization
   if (lidar3dSlamCloud && lidar3dSlamPoints.length > 0) {
     const slamPos = [], slamCol = [];
     for (const sp of lidar3dSlamPoints) {
-      slamPos.push(sp.x, 0.02, sp.z);  // Slightly above ground
-      // Use a consistent blue-white color for mapped areas (like a blueprint)
-      slamCol.push(0.3, 0.5, 0.7);  // Muted blue for persistent map
+      slamPos.push(sp.x, 0.01, sp.z);  // Ground level
+      slamCol.push(sp.color.r * 0.6, sp.color.g * 0.6, sp.color.b * 0.6);  // Dimmer
     }
     const slamGeom = new THREE.BufferGeometry();
     slamGeom.setAttribute('position', new THREE.Float32BufferAttribute(slamPos, 3));
     slamGeom.setAttribute('color', new THREE.Float32BufferAttribute(slamCol, 3));
     lidar3dSlamCloud.geometry.dispose();
     lidar3dSlamCloud.geometry = slamGeom;
-    lidar3dSlamCloud.material.size = 0.05;  // Visible map dots
   }
 
-  // Current scan point cloud - brighter, larger, more visible
+  // Current scan point cloud - added to scene (relative to robot at center)
   const pointGeom = new THREE.BufferGeometry();
   pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({
-    size: 0.10,  // Larger points for current scan
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.9
-  }));
+  lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({ size: 0.06, vertexColors: true }));
   lidar3dScene.add(lidar3dPointCloud);  // Scene, not world container - stays with robot
 
-  // Detect walls vs objects by analyzing point continuity
-  // Walls: long continuous segments at similar distances
-  // Objects: isolated clusters or sudden distance changes
+  // Walls (relative to robot at center)
+  for (let i = 0; i < points.length - 1; i++) {
+    const [a1, d1] = points[i], [a2, d2] = points[i + 1];
+    let diff = a2 - a1; if (diff < 0) diff += 360;
+    if (diff > 6) continue;
 
-  let wallSegments = [];  // Groups of connected wall points
-  let currentSegment = [];
+    const r1 = (a1 + 90) * Math.PI / 180, r2 = (a2 + 90) * Math.PI / 180;
+    const x1 = (d1 / 1000) * Math.cos(r1), z1 = (d1 / 1000) * Math.sin(r1);
+    const x2 = (d2 / 1000) * Math.cos(r2), z2 = (d2 / 1000) * Math.sin(r2);
 
-  for (let i = 0; i < points.length; i++) {
-    const [a1, d1] = points[i];
-    const [a2, d2] = points[i + 1] || [a1 + 360, d1];
+    const wallH = 0.6;
+    const wallGeom = new THREE.BufferGeometry();
+    wallGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      x1, 0, z1, x2, 0, z2, x2, wallH, z2, x1, 0, z1, x2, wallH, z2, x1, wallH, z1
+    ]), 3));
+    wallGeom.computeVertexNormals();
 
-    let angleDiff = a2 - a1;
-    if (angleDiff < 0) angleDiff += 360;
-    const distDiff = Math.abs(d2 - d1);
+    const wallMat = new THREE.MeshBasicMaterial({
+      color: getDistanceColor3D((d1 + d2) / 2),
+      transparent: true, opacity: 0.35, side: THREE.DoubleSide
+    });
+    const wall = new THREE.Mesh(wallGeom, wallMat);
+    lidar3dScene.add(wall);  // Scene, stays with robot
+    lidar3dWalls.push(wall);
 
-    // Check if points are continuous (close in angle AND distance)
-    const isContinuous = angleDiff < 4 && distDiff < 300;  // Stricter continuity
-
-    if (isContinuous) {
-      currentSegment.push(points[i]);
-    } else {
-      if (currentSegment.length > 0) {
-        currentSegment.push(points[i]);
-        wallSegments.push(currentSegment);
-      }
-      currentSegment = [];
-    }
-  }
-  if (currentSegment.length > 0) wallSegments.push(currentSegment);
-
-  // Render each segment differently based on size
-  for (const segment of wallSegments) {
-    if (segment.length < 2) continue;
-
-    const isWall = segment.length >= 5;  // 5+ points = wall, fewer = object
-    const wallH = isWall ? 0.5 : 0.3;  // Walls taller than objects
-    const opacity = isWall ? 0.4 : 0.6;  // Objects more opaque
-
-    // Draw segment as connected panels
-    for (let i = 0; i < segment.length - 1; i++) {
-      const [a1, d1] = segment[i], [a2, d2] = segment[i + 1];
-      const r1 = (a1 - 90) * Math.PI / 180, r2 = (a2 - 90) * Math.PI / 180;
-      const x1 = (d1 / 1000) * Math.cos(r1), z1 = -(d1 / 1000) * Math.sin(r1);
-      const x2 = (d2 / 1000) * Math.cos(r2), z2 = -(d2 / 1000) * Math.sin(r2);
-
-      const wallGeom = new THREE.BufferGeometry();
-      wallGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-        x1, 0, z1, x2, 0, z2, x2, wallH, z2, x1, 0, z1, x2, wallH, z2, x1, wallH, z1
-      ]), 3));
-      wallGeom.computeVertexNormals();
-
-      // Color: walls are cyan/blue, objects are orange/yellow
-      const baseColor = isWall ? getDistanceColor3D((d1 + d2) / 2) : new THREE.Color(0xff8844);
-      const wallMat = new THREE.MeshBasicMaterial({
-        color: baseColor,
-        transparent: true, opacity: opacity, side: THREE.DoubleSide
-      });
-      const wall = new THREE.Mesh(wallGeom, wallMat);
-      lidar3dScene.add(wall);
-      lidar3dWalls.push(wall);
-
-      // Top edge - brighter for objects
-      const edgeColor = isWall ? baseColor : new THREE.Color(0xffaa00);
-      const edgeGeom = new THREE.BufferGeometry();
-      edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
-      const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: edgeColor, linewidth: isWall ? 1 : 2 }));
-      lidar3dScene.add(edge);
-      lidar3dWalls.push(edge);
-    }
+    // Top edge
+    const edgeGeom = new THREE.BufferGeometry();
+    edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
+    const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: getDistanceColor3D((d1 + d2) / 2) }));
+    lidar3dScene.add(edge);  // Scene, stays with robot
+    lidar3dWalls.push(edge);
   }
 }
 
