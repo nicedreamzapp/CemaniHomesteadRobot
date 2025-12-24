@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CEMANI COMMAND CENTER</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/styles.css?v=1224a">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+/* TWO COLUMN LAYOUT: Cameras | Unified Tactical */
+.container {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) 1fr;  /* 15% smaller cameras */
+  grid-template-rows: 50px 1fr;
+  grid-template-areas:
+    "header header"
+    "cams unified";
+  gap: 8px;
+  padding: 8px;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+/* Hide original middle column, sidebar, and lightcam */
+.middle-column { display: none !important; }
+.sidebar { display: none !important; }
+.light-cam-wide { display: none !important; }
+
+/* UNIFIED TACTICAL PANEL */
+.unified-panel {
+  grid-area: unified;
+  background: rgba(40, 60, 90, 0.5);
+  backdrop-filter: blur(10px);
+  border: 3px solid rgba(0, 255, 136, 0.4);
+  border-radius: 20px;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6), inset 0 3px 0 rgba(255, 255, 255, 0.3), 0 0 30px rgba(0, 255, 136, 0.2);
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+/* Drive controls section - left side of unified panel */
+.drive-section {
+  grid-row: 1 / 4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 15px;
+  padding: 10px;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.drive-header {
+  text-align: center;
+  padding: 5px;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+}
+.drive-title {
+  color: #0f8;
+  font-size: 0.8rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+/* Driver temps */
+.driver-temps {
+  display: flex;
+  justify-content: space-around;
+  padding: 5px;
+}
+.driver-temp {
+  text-align: center;
+}
+.driver-temp-label { font-size: 0.5rem; color: #888; }
+.driver-temp-val { font-size: 0.9rem; color: #fc0; font-weight: bold; }
+
+/* Tank robot view */
+.tank-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 0;
+}
+.tank-steer {
+  background: linear-gradient(135deg, #2a4a6a, #1a3a5a);
+  border: 2px solid #4af;
+  border-radius: 8px;
+  color: #4af;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 0.7rem;
+}
+.tank-steer:hover { background: linear-gradient(135deg, #3a5a7a, #2a4a6a); }
+.tank-steer:active { transform: scale(0.95); }
+
+.tank-tracks {
+  display: flex;
+  gap: 5px;
+}
+.tank-track-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tank-wheel {
+  width: 18px;
+  height: 35px;
+  background: linear-gradient(90deg, #333, #555, #333);
+  border: 2px solid #0f8;
+  border-radius: 4px;
+  position: relative;
+}
+.wheel-temp {
+  font-size: 0.45rem;
+  color: #fc0;
+  text-align: center;
+}
+
+.tank-body {
+  background: linear-gradient(135deg, #1a4a3a, #0a2a1a);
+  border: 2px solid #0f8;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 70px;
+}
+.tank-dir-btn {
+  background: linear-gradient(135deg, #2a5a4a, #1a4a3a);
+  border: 1px solid #0f8;
+  border-radius: 5px;
+  color: #0f8;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.6rem;
+  font-weight: bold;
+}
+.tank-dir-btn:hover { background: linear-gradient(135deg, #3a6a5a, #2a5a4a); }
+.tank-label {
+  color: #0f8;
+  font-size: 0.5rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+/* Speed display */
+.speed-display {
+  display: flex;
+  justify-content: space-around;
+  padding: 5px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+.speed-box {
+  text-align: center;
+}
+.speed-label { font-size: 0.5rem; color: #888; }
+.speed-val { font-size: 1rem; color: #0f8; font-weight: bold; font-family: monospace; }
+.speed-unit { font-size: 0.4rem; color: #666; }
+
+/* Distance buttons */
+.dist-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+.dist-btn {
+  background: linear-gradient(135deg, #3a4a6a, #2a3a5a);
+  border: 1px solid #4af;
+  border-radius: 5px;
+  color: #4af;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 0.6rem;
+  font-weight: bold;
+}
+.dist-btn:hover { background: linear-gradient(135deg, #4a5a7a, #3a4a6a); }
+.dist-btn.selected { background: #4af; color: #000; }
+
+/* Move status */
+.move-status {
+  text-align: center;
+  padding: 5px;
+  font-size: 0.6rem;
+  color: #888;
+}
+
+/* GO/STOP buttons */
+.exec-buttons {
+  display: flex;
+  gap: 8px;
+}
+.exec-btn {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.exec-btn.go {
+  background: linear-gradient(135deg, #2a8a4a, #1a6a3a);
+  color: #fff;
+  border: 2px solid #0f8;
+}
+.exec-btn.go:hover { background: linear-gradient(135deg, #3a9a5a, #2a8a4a); }
+.exec-btn.stop {
+  background: linear-gradient(135deg, #a03030, #802020);
+  color: #fff;
+  border: 2px solid #f44;
+}
+.exec-btn.stop:hover { background: linear-gradient(135deg, #b04040, #a03030); }
+
+/* 3D Map section - right side top */
+.map-section {
+  background: #0a0a12;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+.map-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+  z-index: 10;
+}
+.map-title {
+  color: #0f8;
+  font-size: 0.75rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+.map-btns {
+  display: flex;
+  gap: 5px;
+}
+.map-btn {
+  background: rgba(0, 255, 136, 0.15);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  color: #0f8;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.55rem;
+  font-weight: bold;
+}
+.map-btn:hover { background: rgba(0, 255, 136, 0.3); }
+
+#lidar3dContainer {
+  width: 100%;
+  height: 100%;
+}
+
+/* Ultrasonic badges on map */
+.us-badge {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.55rem;
+  font-family: monospace;
+  font-weight: bold;
+  z-index: 10;
+}
+.us-badge .label { color: #666; }
+.us-badge .val { color: #0f8; }
+.us-badge.danger .val { color: #f44; }
+.us-badge.warning .val { color: #fc0; }
+.us-fl { top: 35px; left: 8px; }
+.us-fr { top: 35px; right: 8px; }
+.us-rl { bottom: 8px; left: 8px; }
+.us-rr { bottom: 8px; right: 8px; }
+
+.lidar-status {
+  position: absolute;
+  top: 35px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 255, 200, 0.4);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.5rem;
+  color: #0fa;
+  z-index: 10;
+}
+
+/* Position/Stats bar - bottom right */
+.stats-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.stats-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.stats-title {
+  font-size: 0.55rem;
+  color: #0f8;
+  font-weight: bold;
+  letter-spacing: 1px;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+  padding-bottom: 3px;
+}
+.stats-row {
+  display: flex;
+  justify-content: space-around;
+}
+.stat-item {
+  text-align: center;
+}
+.stat-label { font-size: 0.45rem; color: #666; display: block; }
+.stat-val { font-size: 0.7rem; color: #5af; font-weight: bold; font-family: monospace; }
+
+/* Extra items */
+.extras-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.xbox-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.55rem;
+}
+.xbox-icon { font-size: 1rem; }
+.xbox-text { color: #888; }
+.xbox-text.connected { color: #0f8; }
+
+.battery-display {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.batt-icon { font-size: 0.9rem; }
+.batt-bar {
+  width: 50px;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 3px;
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  overflow: hidden;
+}
+.batt-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f44, #fc0, #0f8);
+  width: 75%;
+}
+.batt-text { font-size: 0.55rem; color: #0f8; }
+
+.trigger-btns {
+  display: flex;
+  gap: 5px;
+}
+.trig-btn {
+  background: rgba(0, 100, 200, 0.2);
+  border: 1px solid rgba(0, 150, 255, 0.3);
+  color: #5af;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.5rem;
+}
+.trig-btn:hover { background: rgba(0, 100, 200, 0.4); }
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- HEADER - same as original -->
+  <div class="header glass">
+    <div class="header-left">
+      <div class="status-indicator-small" id="statusIndicator">
+        <span class="status-dot offline" id="statusDot"></span>
+      </div>
+      <span id="status" style="display:none">OFFLINE</span>
+    </div>
+    <h1>CEMANI COMMAND CENTER</h1>
+    <div class="header-devices">
+      <div class="device-chip" id="esp32Card">
+        <span class="dev-icon">&#128225;</span>
+        <div class="dev-info">
+          <span class="dev-label">ESP32</span>
+          <span class="dev-status" id="esp32Status">--</span>
+          <span class="dev-version" id="esp32Version"></span>
+        </div>
+      </div>
+      <div class="device-chip" id="teensyCard">
+        <span class="dev-icon">&#9881;</span>
+        <div class="dev-info">
+          <span class="dev-label">Teensy</span>
+          <span class="dev-status" id="teensyStatus">--</span>
+          <span class="dev-version" id="teensyVersion"></span>
+        </div>
+      </div>
+      <div class="device-chip" id="jetsonCard">
+        <span class="dev-icon">&#128752;</span>
+        <div class="dev-info">
+          <span class="dev-label">Jetson</span>
+          <span class="dev-status" id="jetsonStatus">--</span>
+          <span class="dev-version" id="jetsonVersion"></span>
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="info-chip"><span class="chip-label">WiFi</span><span class="chip-value" id="wifi">--</span></span>
+      <span class="info-chip"><span class="chip-label">Signal</span><span class="chip-value" id="rssi">--</span></span>
+      <span class="info-chip"><span class="chip-label">Up</span><span class="chip-value" id="uptime">--</span></span>
+    </div>
+    <span id="ip" style="display:none">--</span>
+    <span id="version" style="display:none">--</span>
+    <span id="esp32StatusMini" style="display:none">--</span>
+    <span id="teensyStatusMini" style="display:none">--</span>
+  </div>
+
+  <!-- CAMERAS - same as original -->
+  <div class="cameras-column glass">
+    <div class="cam-wrapper">
+      <div class="cam-label-centered">&#9650; FRONT CAM</div>
+      <div class="cam-container" id="cam1-container">
+        <div class="cam-video">
+          <div id="cam1-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+        </div>
+        <div class="cam-overlay">
+          <div class="cam-status-badge" id="cam1-status">OFFLINE</div>
+          <div class="ptz-overlay">
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="up">&#9650;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="left">&#9664;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="right">&#9654;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz="down">&#9660;</div>
+            <div class="ptz-btn empty"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cam-wrapper">
+      <div class="cam-label-centered">&#9660; REAR CAM</div>
+      <div class="cam-container" id="cam2-container">
+        <div class="cam-video">
+          <div id="cam2-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+        </div>
+        <div class="cam-overlay">
+          <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
+          <div class="speaker-btn" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">&#128266;</div>
+          <div class="ptz-overlay">
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="up">&#9650;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="left">&#9664;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="right">&#9654;</div>
+            <div class="ptz-btn empty"></div>
+            <div class="ptz-btn" data-ptz2="down">&#9660;</div>
+            <div class="ptz-btn empty"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="coming-soon-row">
+      <div class="coming-soon-cams">
+        <div class="section-header"><span class="emoji">&#128301;</span> COMING SOON</div>
+        <div class="future-sensors horizontal">
+          <div class="future-chip"><span class="icon">&#129302;</span> OpenArm</div>
+          <div class="future-chip"><span class="icon">&#128506;</span> GPS</div>
+          <div class="future-chip"><span class="icon">&#127793;</span> Solar</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UNIFIED PANEL - Drive + Map + Position -->
+  <div class="unified-panel">
+    <!-- LEFT: Drive Controls -->
+    <div class="drive-section">
+      <div class="drive-header">
+        <span class="drive-title">&#128664; DRIVE SYSTEM</span>
+      </div>
+
+      <div class="driver-temps">
+        <div class="driver-temp">
+          <span class="driver-temp-label">&#9881; Driver 1</span>
+          <div class="driver-temp-val"><span id="driver1Temp">--</span>&deg;F</div>
+        </div>
+        <div class="driver-temp">
+          <span class="driver-temp-label">&#9881; Driver 2</span>
+          <div class="driver-temp-val"><span id="driver2Temp">--</span>&deg;F</div>
+        </div>
+      </div>
+
+      <div class="tank-view">
+        <div class="tank-steer" id="dirL">&#9664; L</div>
+        <div class="tank-tracks">
+          <div class="tank-track-col">
+            <div class="wheel-temp"><span id="motorTempLF">--</span>&deg;</div>
+            <div class="tank-wheel" id="wheelLF"></div>
+            <div class="wheel-temp"><span id="motorTempLR">--</span>&deg;</div>
+            <div class="tank-wheel" id="wheelLR"></div>
+          </div>
+        </div>
+        <div class="tank-body">
+          <div class="tank-dir-btn" id="dirF">&#9650; FWD</div>
+          <div class="tank-label">CEMANI</div>
+          <div class="tank-queue" id="ctrlQueueDisplay"></div>
+          <div class="tank-dir-btn" id="dirB">BACK &#9660;</div>
+        </div>
+        <div class="tank-tracks">
+          <div class="tank-track-col">
+            <div class="wheel-temp"><span id="motorTempRF">--</span>&deg;</div>
+            <div class="tank-wheel" id="wheelRF"></div>
+            <div class="wheel-temp"><span id="motorTempRR">--</span>&deg;</div>
+            <div class="tank-wheel" id="wheelRR"></div>
+          </div>
+        </div>
+        <div class="tank-steer" id="dirR">R &#9654;</div>
+      </div>
+
+      <div class="speed-display">
+        <div class="speed-box">
+          <span class="speed-label">&#9664; LEFT</span>
+          <div class="speed-val" id="velocityL">0.00</div>
+          <span class="speed-unit">MPH</span>
+        </div>
+        <div class="speed-box">
+          <span class="speed-label">RIGHT &#9654;</span>
+          <div class="speed-val" id="velocityR">0.00</div>
+          <span class="speed-unit">MPH</span>
+        </div>
+      </div>
+
+      <div class="dist-buttons">
+        <div class="dist-btn" data-dist="0.5">0.5ft</div>
+        <div class="dist-btn" data-dist="1">1ft</div>
+        <div class="dist-btn" data-dist="3">3ft</div>
+        <div class="dist-btn" data-dist="10">10ft</div>
+      </div>
+
+      <div class="move-status" id="moveStatus">Tap direction, then distance</div>
+
+      <div class="exec-buttons">
+        <button class="exec-btn go" onclick="executeQueue()">GO</button>
+        <button class="exec-btn stop" onclick="emergencyStop()">STOP</button>
+      </div>
+    </div>
+
+    <!-- RIGHT TOP: 3D Map -->
+    <div class="map-section">
+      <div class="map-header">
+        <span class="map-title">TACTICAL MAP</span>
+        <div class="map-btns">
+          <button class="map-btn" onclick="resetOdometry()">RESET</button>
+          <button class="map-btn" onclick="toggleView3D()">2D/3D</button>
+          <button class="map-btn" onclick="toggleLidar3DFullscreen()">&#9974;</button>
+        </div>
+      </div>
+      <div id="lidar3dContainer"></div>
+      <!-- Ultrasonic badges -->
+      <div class="us-badge us-fl"><span class="label">FL</span> <span class="val" id="usValFL">--</span></div>
+      <div class="us-badge us-fr"><span class="label">FR</span> <span class="val" id="usValFR">--</span></div>
+      <div class="us-badge us-rl"><span class="label">RL</span> <span class="val" id="usValRL">--</span></div>
+      <div class="us-badge us-rr"><span class="label">RR</span> <span class="val" id="usValRR">--</span></div>
+      <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
+    </div>
+
+    <!-- RIGHT BOTTOM: Stats -->
+    <div class="stats-bar">
+      <div class="stats-group">
+        <div class="stats-title">&#128506; POSITION</div>
+        <div class="stats-row">
+          <div class="stat-item"><span class="stat-label">X</span><span class="stat-val" id="odomX">0.0</span></div>
+          <div class="stat-item"><span class="stat-label">Y</span><span class="stat-val" id="odomY">0.0</span></div>
+          <div class="stat-item"><span class="stat-label">HDG</span><span class="stat-val"><span id="odomHeading">0</span>&deg;</span></div>
+          <div class="stat-item"><span class="stat-label">TRIP</span><span class="stat-val"><span id="odomTripDist">0.0</span>ft</span></div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-item"><span class="stat-label">L TICKS</span><span class="stat-val" id="encL">0</span></div>
+          <div class="stat-item"><span class="stat-label">R TICKS</span><span class="stat-val" id="encR">0</span></div>
+        </div>
+      </div>
+
+      <div class="stats-group">
+        <div class="extras-row">
+          <div class="xbox-status">
+            <span class="xbox-icon">&#127918;</span>
+            <span class="xbox-text" id="xboxState">--</span>
+          </div>
+          <div class="battery-display">
+            <span class="batt-icon">&#128267;</span>
+            <div class="batt-bar"><div class="batt-fill" id="headerBatteryFill"></div></div>
+            <span class="batt-text"><span id="headerBatteryVoltage">--</span>V</span>
+          </div>
+          <div class="trigger-btns">
+            <div class="trig-btn" onclick="toggleSerialPopup()">&#128187; SERIAL</div>
+            <div class="trig-btn" onclick="toggleCodePopup()">&#128221; CODE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Popups - same as original -->
+<div class="serial-popup" id="serialPopup">
+  <div class="serial-popup-header" id="serialPopupHeader">
+    <span class="emoji">&#128187;</span> SERIAL MONITOR
+    <span class="serial-popup-close" onclick="toggleSerialPopup()">&times;</span>
+  </div>
+  <div class="serial" id="serial"></div>
+  <input type="text" id="cmd" placeholder="Send command...">
+</div>
+
+<div class="serial-popup" id="codePopup">
+  <div class="serial-popup-header" id="codePopupHeader">
+    <span class="emoji">&#128221;</span> WRITE CODE
+    <span class="serial-popup-close" onclick="toggleCodePopup()">&times;</span>
+  </div>
+  <div class="code-popup-content">
+    <div class="tabs">
+      <div class="tab" data-tab="teensy">Teensy</div>
+      <div class="tab active" data-tab="esp32">ESP32</div>
+    </div>
+    <div class="editor">
+      <textarea id="editor" placeholder="// ESP32 code..."></textarea>
+    </div>
+    <div class="code-popup-buttons">
+      <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
+      <div class="btn" id="flashPrebuiltBtn" style="background:linear-gradient(135deg,#74c0fc,#4da3f0);">FLASH PREBUILT</div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden compatibility elements -->
+<div style="display:none">
+  <span id="driverTemp"></span>
+  <span id="motorTempAvg"></span>
+  <span id="positionL"></span>
+  <span id="positionR"></span>
+  <span id="torqueL"></span>
+  <span id="torqueR"></span>
+  <span id="batteryVoltage"></span>
+  <span id="batteryPercent"></span>
+  <div id="batteryBar"><div id="batteryFill"></div></div>
+  <div id="currentDir"></div>
+  <div id="cmdQueueDisplay"></div>
+  <canvas id="odomCanvas"></canvas>
+</div>
+
+<script src="js/telemetry.js?v=2"></script>
+<script src="js/controls.js?v=7"></script>
+<script src="js/websocket.js?v=7"></script>
+<script>
+// Update ultrasonic display
+window.updateUltrasonicBadges = function(sensor, distCm) {
+  const el = document.getElementById('usVal' + sensor);
+  const badge = el ? el.closest('.us-badge') : null;
+  if (!el) return;
+
+  const ft = (distCm / 30.48).toFixed(1);
+  el.textContent = ft + "'";
+
+  if (badge) {
+    badge.classList.remove('danger', 'warning');
+    if (distCm > 0 && distCm < 30) badge.classList.add('danger');
+    else if (distCm > 0 && distCm < 60) badge.classList.add('warning');
+  }
+};
+
+// 2D/3D toggle
+function toggleView3D() {
+  if (typeof lidar3dCamera !== 'undefined' && lidar3dCamera) {
+    if (lidar3dCamera.position.y > 8) {
+      lidar3dCamera.position.set(3, 4, 3);
+    } else {
+      lidar3dCamera.position.set(0, 12, 0.1);
+    }
+    lidar3dCamera.lookAt(0, 0, 0);
+  }
+}
+</script>
+</body>
+</html>

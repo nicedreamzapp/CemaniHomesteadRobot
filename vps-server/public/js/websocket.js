@@ -493,6 +493,12 @@ function parseSonarData(data) {
   updateUltrasonicBadges('FR', fr);
   updateUltrasonicBadges('RL', rl);
   updateUltrasonicBadges('RR', rr);
+
+  // Update 3D ultrasonic cones
+  updateUltrasonic3D('FL', fl);
+  updateUltrasonic3D('FR', fr);
+  updateUltrasonic3D('RL', rl);
+  updateUltrasonic3D('RR', rr);
 }
 
 // Test function - call from browser console: testSonar(50)
@@ -885,6 +891,9 @@ let lidar3dInitialized = false;
 let lidar3dFrameCount = 0;
 let lidar3dGrid = null;
 
+// Ultrasonic sensor cones in 3D view
+let lidar3dUltrasonicCones = { FL: null, FR: null, RL: null, RR: null };
+
 // World container - moves under robot (robot stays centered)
 let lidar3dWorldContainer = null;
 
@@ -1046,6 +1055,36 @@ function createRobot3D() {
   lidar.position.y = 0.24;
   group.add(lidar);
 
+  // Ultrasonic sensor cones (FL, FR, RL, RR)
+  // JSN-SR04T range: 21-600cm, ~30° beam angle
+  const conePositions = {
+    FL: { x: -0.12, z: -0.22, rotY: Math.PI * 0.15 },   // Front-left, angled outward
+    FR: { x: 0.12, z: -0.22, rotY: -Math.PI * 0.15 },   // Front-right, angled outward
+    RL: { x: -0.12, z: 0.22, rotY: Math.PI - Math.PI * 0.15 },  // Rear-left
+    RR: { x: 0.12, z: 0.22, rotY: Math.PI + Math.PI * 0.15 }    // Rear-right
+  };
+
+  Object.keys(conePositions).forEach(sensor => {
+    const pos = conePositions[sensor];
+    // Cone: radiusTop, radiusBottom, height, radialSegments
+    const coneGeom = new THREE.ConeGeometry(0.15, 0.5, 16, 1, true);
+    const coneMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.25,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const cone = new THREE.Mesh(coneGeom, coneMat);
+    cone.rotation.x = Math.PI / 2;  // Point forward (along Z)
+    cone.rotation.z = pos.rotY;
+    cone.position.set(pos.x, 0.1, pos.z);
+    cone.visible = false;  // Start hidden, show when data arrives
+    cone.userData.sensor = sensor;
+    group.add(cone);
+    lidar3dUltrasonicCones[sensor] = cone;
+  });
+
   return group;
 }
 
@@ -1055,6 +1094,45 @@ function getDistanceColor3D(dist) {
   if (dist < 1200) return new THREE.Color(0xffcc00);
   if (dist < 1800) return new THREE.Color(0x00dd66);
   return new THREE.Color(0x00aaff);
+}
+
+// Update ultrasonic cone in 3D view
+function updateUltrasonic3D(sensor, distCm) {
+  const cone = lidar3dUltrasonicCones[sensor];
+  if (!cone) return;
+
+  // Hide if no valid reading
+  if (distCm <= 0 || distCm > 600) {
+    cone.visible = false;
+    return;
+  }
+
+  cone.visible = true;
+
+  // Scale cone length based on distance (max 6m = 600cm)
+  // Convert cm to meters, scale to reasonable visual size
+  const distM = distCm / 100;
+  const coneLength = Math.min(distM * 0.8, 4);  // Cap at 4m visual
+  const coneRadius = 0.08 + (distM * 0.05);  // Wider at longer distances
+
+  // Update cone geometry scale
+  cone.scale.set(coneRadius / 0.15, coneLength / 0.5, coneRadius / 0.15);
+
+  // Color based on distance (red=close, yellow=mid, cyan=far)
+  let color;
+  if (distCm < 50) {
+    color = 0xff0000;  // Red - danger close
+  } else if (distCm < 100) {
+    color = 0xff8800;  // Orange - caution
+  } else if (distCm < 200) {
+    color = 0xffff00;  // Yellow - attention
+  } else {
+    color = 0x00ffff;  // Cyan - clear
+  }
+  cone.material.color.setHex(color);
+
+  // Opacity based on distance (more visible when close)
+  cone.material.opacity = distCm < 100 ? 0.5 : 0.25;
 }
 
 function updateLidar3D(points) {

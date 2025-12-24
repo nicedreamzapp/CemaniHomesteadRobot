@@ -23,7 +23,7 @@ EXCLUDE_MAX = 220
 EXCLUDE_DIST = 400
 
 # Send rate limiting
-SEND_INTERVAL = 0.15  # Send data every 150ms
+SEND_INTERVAL = 0.10  # Send data every 100ms (10 fps)
 
 
 class LidarRelay:
@@ -160,8 +160,9 @@ class LidarRelay:
             return
 
         # Downsample if too many points (keep every Nth point)
-        if len(points) > 200:
-            step = len(points) // 200
+        # RPLIDAR A1M8 does ~1450 pts/scan - keep up to 1200 for best detail
+        if len(points) > 1200:
+            step = len(points) // 1200
             points = points[::step]
 
         try:
