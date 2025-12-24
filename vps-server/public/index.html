@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/styles.css?v=1224a">
+<link rel="stylesheet" href="css/styles.css?v=1224c">
 <style>
 /* TWO COLUMN LAYOUT: Cameras | Drive System (wider) */
 .container {
@@ -209,40 +209,42 @@
   font-size: 9px !important;
   padding: 6px 12px !important;
 }
-/* GO/STOP buttons - below status text, centered */
+/* GO/STOP buttons - centered between tap direction and card bottom */
 .exec-row {
   position: absolute !important;
-  right: 25px !important;
-  top: 175px !important;
-  width: 220px !important;
+  right: 15px !important;
+  top: 180px !important;
+  width: 240px !important;
   flex-direction: row !important;
   justify-content: center !important;
-  gap: 30px !important;
+  align-items: center !important;
+  gap: 20px !important;
   margin-top: 0 !important;
 }
 .exec-btn {
   flex: 0 0 auto !important;
-  padding: 10px 24px !important;
-  font-size: 11px !important;
+  padding: 0 !important;
+  font-size: 14px !important;
+  font-weight: bold !important;
 }
-/* GO button - green light (circle) */
+/* GO button - green light (circle) - 20% bigger */
 .exec-btn.go {
-  width: 65px !important;
-  height: 65px !important;
+  width: 85px !important;
+  height: 85px !important;
   border-radius: 50% !important;
   padding: 0 !important;
   background: radial-gradient(circle at 30% 30%, #7fff7f, #3cb550, #228b22) !important;
-  box-shadow: 0 0 25px rgba(0, 255, 0, 0.6), inset 0 -4px 8px rgba(0,0,0,0.3) !important;
+  box-shadow: 0 0 30px rgba(0, 255, 0, 0.6), inset 0 -5px 10px rgba(0,0,0,0.3) !important;
 }
-/* STOP button - stop sign (octagon) */
+/* STOP button - stop sign (octagon) - 20% bigger */
 .exec-btn.stop {
-  width: 65px !important;
-  height: 65px !important;
+  width: 85px !important;
+  height: 85px !important;
   clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%) !important;
   border-radius: 0 !important;
   padding: 0 !important;
   background: linear-gradient(145deg, #ff4444, #cc0000) !important;
-  box-shadow: 0 0 20px rgba(255, 0, 0, 0.5) !important;
+  box-shadow: 0 0 25px rgba(255, 0, 0, 0.5) !important;
 }
 /* Make drive card relative for absolute positioning */
 .middle-column .card {
@@ -478,7 +480,7 @@
           <span class="emoji">&#128221;</span> CODE
         </div>
         <div class="battery-trigger">
-          <span class="emoji">&#128267;</span>
+          <span class="emoji">&#128267;</span> Battery
           <div class="batt-bar-mini"><div class="batt-fill-mini" id="headerBatteryFill"></div></div>
           <span id="headerBatteryVoltage">--</span>V
           <span id="headerBatteryPercent">--</span>%
@@ -525,7 +527,6 @@
         <div class="tank-body">
           <div class="tank-dir-btn" id="dirF">&#9650; FWD</div>
           <div class="tank-label">CEMANI</div>
-          <div class="tank-queue" id="ctrlQueueDisplay"></div>
           <div class="tank-dir-btn" id="dirB">BACK &#9660;</div>
         </div>
 
@@ -543,6 +544,12 @@
 
         <!-- Right Steering Button -->
         <div class="tank-steer-btn" id="dirR">R &#9654;</div>
+
+        <!-- Command Display (far right) -->
+        <div class="cmd-display-side" id="ctrlQueueDisplay">
+          <div class="cmd-line" id="cmdDirLine">--</div>
+          <div class="cmd-line" id="cmdDistLine">--</div>
+        </div>
       </div>
 
       <!-- Speed Displays -->
@@ -713,8 +720,8 @@
 </div>
 
 <!-- Load JavaScript files in correct order: controls defines updateXboxStatus, websocket calls it -->
-<script src="js/telemetry.js?v=2"></script>
-<script src="js/controls.js?v=7"></script>
-<script src="js/websocket.js?v=7"></script>
+<script src="js/telemetry.js?v=3"></script>
+<script src="js/controls.js?v=10"></script>
+<script src="js/websocket.js?v=14"></script>
 </body>
 </html>

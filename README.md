@@ -92,9 +92,9 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 **Control and monitor your robot from ANYWHERE in the world!**
 
-![Command Center with LIDAR](docs/images/command-center-lidar.png)
+![Command Center](docs/images/command-center.webp)
 
-*Command Center featuring dual PTZ cameras, real-time 3D LIDAR mapping, tank drive controls with GO/STOP buttons, ultrasonic proximity sensors, position tracking, and complete telemetry dashboard*
+*Command Center featuring dual PTZ cameras, real-time 3D LIDAR mapping, tank drive controls, ultrasonic proximity sensors, position tracking, and complete telemetry dashboard*
 
 ### Features
 

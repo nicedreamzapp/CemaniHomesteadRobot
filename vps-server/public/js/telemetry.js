@@ -331,6 +331,15 @@ function updateDriverTelemetry(data) {
     if (yEl) yEl.textContent = mmToFt(data.odomY).toFixed(1) + ' ft';
   }
 
+  // Sync server odometry to local odomState for 3D view
+  if (data.odomX !== undefined) odomState.x = data.odomX;
+  if (data.odomY !== undefined) odomState.y = data.odomY;
+  if (data.odomHeading !== undefined) odomState.heading = data.odomHeading;
+  if (data.odomDistance !== undefined) odomState.totalDistance = data.odomDistance;
+  if (data.odomTrail !== undefined && data.odomTrail.length > 0) {
+    odomState.trail = data.odomTrail;
+  }
+
   // Draw odometry mini-map
   if (data.odomTrail !== undefined || data.odomX !== undefined) {
     drawOdometryMap(data);
@@ -619,14 +628,21 @@ window.resetOdometry = function() {
   const encR = document.getElementById('encR');
   if (encR) encR.textContent = '0';
 
-  // Force complete canvas redraw with empty trail
+  // Clear 3D LIDAR SLAM map and trail
+  if (typeof clearLidarSlamMap === 'function') {
+    clearLidarSlamMap();
+  }
+
+  // Force complete canvas redraw with empty trail (if mini-map exists)
   if (odomCtx && odomCanvas) {
     const w = odomCanvas.width / 2;
     const h = odomCanvas.height / 2;
     odomCtx.clearRect(0, 0, w, h);
   }
-  drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [] });
-  console.log('[ODOM] Reset complete - trail cleared, waiting for new baseline from robot');
+  if (typeof drawOdometryMap === 'function') {
+    drawOdometryMap({ odomX: 0, odomY: 0, odomHeading: 0, odomTrail: [] });
+  }
+  console.log('[ODOM] Reset complete - trail and SLAM map cleared');
 };
 
 function updateOdometryFromEncoders(posL, posR) {

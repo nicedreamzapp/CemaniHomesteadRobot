@@ -879,8 +879,40 @@ function checkSensorAgreement() {
 let lidar3dScene, lidar3dCamera, lidar3dRenderer, lidar3dControls;
 let lidar3dRobot, lidar3dWalls = [], lidar3dPointCloud;
 let lidar3dPositionTrail = [];
+let lidar3dTrailLine = null;
+let lidar3dTrailGeom = null;
 let lidar3dInitialized = false;
 let lidar3dFrameCount = 0;
+let lidar3dGrid = null;
+
+// World container - moves under robot (robot stays centered)
+let lidar3dWorldContainer = null;
+
+// SLAM-style accumulated map
+let lidar3dSlamPoints = [];  // Accumulated world-space points
+let lidar3dSlamCloud = null;  // Three.js point cloud for SLAM map
+let lidar3dLastRobotPos = { x: 0, y: 0, heading: 0 };
+const SLAM_MAX_POINTS = 50000;  // Limit for performance
+const SLAM_POINT_SPACING = 0.03;  // Minimum distance between stored points (meters)
+
+// Clear SLAM map (called from reset button)
+window.clearLidarSlamMap = function() {
+  lidar3dSlamPoints = [];
+  lidar3dPositionTrail = [];
+  if (lidar3dTrailGeom) {
+    lidar3dTrailGeom.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+  }
+  if (lidar3dSlamCloud) {
+    lidar3dSlamCloud.geometry.dispose();
+    lidar3dSlamCloud.geometry = new THREE.BufferGeometry();
+  }
+  // Reset world container position (robot stays at center)
+  if (lidar3dWorldContainer) {
+    lidar3dWorldContainer.position.set(0, 0, 0);
+    lidar3dWorldContainer.rotation.y = 0;
+  }
+  console.log('[SLAM] Map cleared');
+};
 
 function initLidar3D() {
   const container = document.getElementById('lidar3dContainer');
@@ -918,21 +950,50 @@ function initLidar3D() {
   dirLight.position.set(5, 8, 5);
   lidar3dScene.add(dirLight);
 
-  // Grid
-  const grid = new THREE.GridHelper(8, 16, 0x004444, 0x002222);
-  lidar3dScene.add(grid);
+  // DEBUG: Fixed reference grid removed - was for debugging only
+  // The cyan grid in worldContainer is the only grid now
 
-  // Ground
-  const groundGeom = new THREE.PlaneGeometry(10, 10);
+  // World container - this moves/rotates while robot stays centered
+  lidar3dWorldContainer = new THREE.Group();
+  lidar3dScene.add(lidar3dWorldContainer);
+
+  // Grid - each square = 1 sq ft (0.3048m)
+  // 30 ft x 30 ft grid = 9.144m, 30 divisions
+  const gridSizeFt = 30;
+  const gridSizeM = gridSizeFt * 0.3048;  // feet to meters
+  lidar3dGrid = new THREE.GridHelper(gridSizeM, gridSizeFt, 0x00ffff, 0x006666);  // Cyan grid
+  lidar3dGrid.position.y = 0.005;
+  lidar3dWorldContainer.add(lidar3dGrid);
+
+  // Ground (larger) - added to world container
+  const groundGeom = new THREE.PlaneGeometry(30, 30);
   const groundMat = new THREE.MeshBasicMaterial({ color: 0x0a1520, transparent: true, opacity: 0.7 });
   const ground = new THREE.Mesh(groundGeom, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.01;
-  lidar3dScene.add(ground);
+  lidar3dWorldContainer.add(ground);
 
-  // Robot
+  // Robot stays at center (0,0,0) - only rotates to show heading
   lidar3dRobot = createRobot3D();
-  lidar3dScene.add(lidar3dRobot);
+  lidar3dScene.add(lidar3dRobot);  // Added to scene, NOT world container
+
+  // Yellow path trail line - added to world container
+  lidar3dTrailGeom = new THREE.BufferGeometry();
+  const trailMat = new THREE.LineBasicMaterial({
+    color: 0xffff00,
+    transparent: true,
+    opacity: 0.8,
+    linewidth: 3
+  });
+  lidar3dTrailLine = new THREE.Line(lidar3dTrailGeom, trailMat);
+  lidar3dWorldContainer.add(lidar3dTrailLine);
+
+  // SLAM accumulated point cloud (starts empty) - added to world container
+  lidar3dSlamCloud = new THREE.Points(
+    new THREE.BufferGeometry(),
+    new THREE.PointsMaterial({ size: 0.04, vertexColors: true, transparent: true, opacity: 0.5 })
+  );
+  lidar3dWorldContainer.add(lidar3dSlamCloud);
 
   lidar3dInitialized = true;
   animateLidar3D();
@@ -1003,38 +1064,130 @@ function updateLidar3D(points) {
   lidar3dFrameCount++;
   document.getElementById('lidar3dStatus').textContent = 'LIDAR: ' + points.length + ' pts';
 
-  // Clear old walls
-  lidar3dWalls.forEach(m => lidar3dScene.remove(m));
+  // Get current robot position from odometry (from telemetry.js odomState)
+  const robotX = (typeof odomState !== 'undefined' && odomState.x) ? odomState.x / 1000 : 0;  // mm to meters
+  const robotZ = (typeof odomState !== 'undefined' && odomState.y) ? odomState.y / 1000 : 0;  // y is forward = z in 3D
+  const robotHeading = (typeof odomState !== 'undefined' && odomState.heading) ? odomState.heading : 0;
+
+  // ROBOT-CENTERED VIEW: Robot stays at origin, world moves under it
+  if (lidar3dRobot) {
+    // Robot stays at center, only rotates to show current heading
+    lidar3dRobot.position.set(0, 0, 0);
+    lidar3dRobot.rotation.y = 0;  // Robot always points "up" in view, world rotates
+  }
+
+  // Move world container in opposite direction - robot appears stationary
+  if (lidar3dWorldContainer) {
+    lidar3dWorldContainer.position.x = -robotX;
+    lidar3dWorldContainer.position.z = robotZ;
+    lidar3dWorldContainer.rotation.y = robotHeading;
+  }
+
+  // Update yellow path trail (in world coordinates)
+  if (typeof odomState !== 'undefined' && odomState.trail && odomState.trail.length > 0) {
+    const trailPositions = [];
+    odomState.trail.forEach(p => {
+      trailPositions.push(p.x / 1000, 0.05, -p.y / 1000);  // mm to meters, slight Y offset
+    });
+    // Add current position
+    trailPositions.push(robotX, 0.05, -robotZ);
+
+    if (lidar3dTrailGeom) {
+      lidar3dTrailGeom.setAttribute('position', new THREE.Float32BufferAttribute(trailPositions, 3));
+      lidar3dTrailGeom.attributes.position.needsUpdate = true;
+    }
+  }
+
+  // Clear old walls and point cloud
+  lidar3dWalls.forEach(m => {
+    if (m.parent) m.parent.remove(m);
+  });
   lidar3dWalls = [];
-  if (lidar3dPointCloud) lidar3dScene.remove(lidar3dPointCloud);
+  if (lidar3dPointCloud && lidar3dPointCloud.parent) {
+    lidar3dPointCloud.parent.remove(lidar3dPointCloud);
+  }
 
   points.sort((a, b) => a[0] - b[0]);
 
-  // Point cloud
+  // Current scan positions (relative to robot at center)
   const positions = [], colors = [];
+  // SLAM: accumulate in absolute world coordinates
+  const slamNewPoints = [];
+
   for (const [angle, dist] of points) {
+    // Local coordinates (relative to robot facing forward)
     const rad = (angle - 90) * Math.PI / 180;
-    const x = (dist / 1000) * Math.cos(rad);
-    const z = (dist / 1000) * Math.sin(rad);
-    positions.push(x, 0.24, z);
+    const localX = (dist / 1000) * Math.cos(rad);
+    const localZ = (dist / 1000) * Math.sin(rad);
+
+    // Current scan: show relative to robot (robot is at origin, points around it)
+    positions.push(localX, 0.24, -localZ);
     const c = getDistanceColor3D(dist);
     colors.push(c.r, c.g, c.b);
+
+    // SLAM: Transform to world coordinates (absolute position in world)
+    const worldX = robotX + localX * Math.cos(robotHeading) - localZ * Math.sin(robotHeading);
+    const worldZ = -robotZ + localX * Math.sin(robotHeading) + localZ * Math.cos(robotHeading);
+
+    // Add to SLAM accumulator (with spacing check)
+    if (dist > 100 && dist < 5000) {  // Only valid range points
+      slamNewPoints.push({ x: worldX, z: worldZ, color: c });
+    }
   }
+
+  // Add new SLAM points (with spacing filter)
+  for (const np of slamNewPoints) {
+    let tooClose = false;
+    // Check distance to recent points only (for performance)
+    const checkStart = Math.max(0, lidar3dSlamPoints.length - 500);
+    for (let i = checkStart; i < lidar3dSlamPoints.length; i++) {
+      const sp = lidar3dSlamPoints[i];
+      const dx = np.x - sp.x, dz = np.z - sp.z;
+      if (dx*dx + dz*dz < SLAM_POINT_SPACING * SLAM_POINT_SPACING) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (!tooClose) {
+      lidar3dSlamPoints.push(np);
+    }
+  }
+
+  // Trim SLAM points if too many
+  while (lidar3dSlamPoints.length > SLAM_MAX_POINTS) {
+    lidar3dSlamPoints.shift();
+  }
+
+  // Update SLAM point cloud visualization
+  if (lidar3dSlamCloud && lidar3dSlamPoints.length > 0) {
+    const slamPos = [], slamCol = [];
+    for (const sp of lidar3dSlamPoints) {
+      slamPos.push(sp.x, 0.01, sp.z);  // Ground level
+      slamCol.push(sp.color.r * 0.6, sp.color.g * 0.6, sp.color.b * 0.6);  // Dimmer
+    }
+    const slamGeom = new THREE.BufferGeometry();
+    slamGeom.setAttribute('position', new THREE.Float32BufferAttribute(slamPos, 3));
+    slamGeom.setAttribute('color', new THREE.Float32BufferAttribute(slamCol, 3));
+    lidar3dSlamCloud.geometry.dispose();
+    lidar3dSlamCloud.geometry = slamGeom;
+  }
+
+  // Current scan point cloud - added to scene (relative to robot at center)
   const pointGeom = new THREE.BufferGeometry();
   pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({ size: 0.06, vertexColors: true }));
-  lidar3dScene.add(lidar3dPointCloud);
+  lidar3dScene.add(lidar3dPointCloud);  // Scene, not world container - stays with robot
 
-  // Walls
+  // Walls (relative to robot at center)
   for (let i = 0; i < points.length - 1; i++) {
     const [a1, d1] = points[i], [a2, d2] = points[i + 1];
     let diff = a2 - a1; if (diff < 0) diff += 360;
     if (diff > 6) continue;
 
     const r1 = (a1 - 90) * Math.PI / 180, r2 = (a2 - 90) * Math.PI / 180;
-    const x1 = (d1 / 1000) * Math.cos(r1), z1 = (d1 / 1000) * Math.sin(r1);
-    const x2 = (d2 / 1000) * Math.cos(r2), z2 = (d2 / 1000) * Math.sin(r2);
+    const x1 = (d1 / 1000) * Math.cos(r1), z1 = -(d1 / 1000) * Math.sin(r1);
+    const x2 = (d2 / 1000) * Math.cos(r2), z2 = -(d2 / 1000) * Math.sin(r2);
 
     const wallH = 0.6;
     const wallGeom = new THREE.BufferGeometry();
@@ -1048,14 +1201,14 @@ function updateLidar3D(points) {
       transparent: true, opacity: 0.35, side: THREE.DoubleSide
     });
     const wall = new THREE.Mesh(wallGeom, wallMat);
-    lidar3dScene.add(wall);
+    lidar3dScene.add(wall);  // Scene, stays with robot
     lidar3dWalls.push(wall);
 
     // Top edge
     const edgeGeom = new THREE.BufferGeometry();
     edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
     const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: getDistanceColor3D((d1 + d2) / 2) }));
-    lidar3dScene.add(edge);
+    lidar3dScene.add(edge);  // Scene, stays with robot
     lidar3dWalls.push(edge);
   }
 }

@@ -53,22 +53,19 @@ function updateDisplay() {
 }
 
 function updateChassisDisplay() {
-  const chassis = document.getElementById('ctrlQueueDisplay');
-  if (!chassis) {
-    console.log('[CHASSIS] Element not found!');
-    return;
-  }
+  const dirEl = document.getElementById('cmdDirLine');
+  const distEl = document.getElementById('cmdDistLine');
+  const boxEl = document.getElementById('ctrlQueueDisplay');
 
-  // Always show what's selected in the chassis
-  let html = '';
-  if (currentDir) {
-    html += '<div class="tank-cmd-line">' + dirLabels[currentDir] + '</div>';
+  if (dirEl) {
+    dirEl.textContent = currentDir ? dirLabels[currentDir] : '--';
   }
-  if (currentDist) {
-    html += '<div class="tank-cmd-line">' + currentDist + '\'</div>';
+  if (distEl) {
+    distEl.textContent = currentDist ? currentDist + 'ft' : '--';
   }
-  chassis.innerHTML = html;
-  console.log('[CHASSIS] Updated:', html);
+  if (boxEl) {
+    boxEl.classList.remove('executing');
+  }
 }
 
 function removeFromQueue(index) {
@@ -115,9 +112,9 @@ function executeQueue() {
   setStatus('EXECUTING ' + dirLabels[cmd.dir] + ' ' + cmd.dist + 'ft...', 'moving');
 
   // Show command in YELLOW (executing)
-  const chassis = document.getElementById('ctrlQueueDisplay');
-  if (chassis) {
-    chassis.innerHTML = '<div class="tank-cmd-line executing">' + dirLabels[cmd.dir] + '</div><div class="tank-cmd-line executing">' + cmd.dist + '\'</div>';
+  const boxEl = document.getElementById('ctrlQueueDisplay');
+  if (boxEl) {
+    boxEl.classList.add('executing');
   }
 
   // Convert feet to meters for the robot command
@@ -158,8 +155,6 @@ function executeQueue() {
     setStatus('Complete', 'idle');
     currentDir = null;
     currentDist = null;
-    const chassis = document.getElementById('ctrlQueueDisplay');
-    if (chassis) chassis.innerHTML = '';
     updateDisplay();
   }, totalTime);
 }
@@ -168,9 +163,8 @@ function emergencyStop() {
   ws.send(JSON.stringify({ type: 'emergency_stop' }));
   currentDir = null;
   currentDist = null;
-  const chassis = document.getElementById('ctrlQueueDisplay');
-  if (chassis) chassis.innerHTML = '';
   updateDisplay();
+  setStatus('STOPPED', 'error');
 }
 
 // ============ LIGHT TOGGLE ============
@@ -328,8 +322,6 @@ function clearQueue() {
   gridOffsetX = 0;
   gridOffsetY = 0;
   robotHeading = 0;
-  const chassis = document.getElementById('ctrlQueueDisplay');
-  if (chassis) chassis.innerHTML = '';
   updateRadarRobot();
   updateDisplay();
   setStatus('Cleared', 'idle');
@@ -413,7 +405,7 @@ function updateXboxStatus(connected) {
   robotXboxConnected = connected;
   const statusEl = document.getElementById('xboxStatus');
   const stateEl = document.getElementById('xboxState');
-  const chipEl = document.getElementById('xboxChip');
+  const cardEl = document.getElementById('xboxCard');
 
   if (stateEl) {
     stateEl.textContent = connected ? '✓ Connected' : 'Offline';
@@ -425,11 +417,11 @@ function updateXboxStatus(connected) {
       statusEl.classList.remove('connected');
     }
   }
-  if (chipEl) {
+  if (cardEl) {
     if (connected) {
-      chipEl.classList.add('online');
+      cardEl.classList.add('online');
     } else {
-      chipEl.classList.remove('online');
+      cardEl.classList.remove('online');
     }
   }
 }

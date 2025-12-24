@@ -1410,6 +1410,36 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   font-size: 10px;
 }
 
+/* Command Display - Right side of chassis */
+.cmd-display-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid rgba(0, 255, 136, 0.4);
+  border-radius: 8px;
+  min-width: 50px;
+  gap: 2px;
+  margin: 0 4px;
+}
+.cmd-display-side .cmd-line {
+  font-size: 11px;
+  font-weight: 800;
+  color: #74c0fc;
+  text-align: center;
+  text-transform: uppercase;
+}
+.cmd-display-side .cmd-line:last-child {
+  color: #51cf66;
+  font-size: 13px;
+}
+.cmd-display-side.executing .cmd-line {
+  color: #fcc419 !important;
+  animation: pulse 0.5s infinite;
+}
+
 /* DISTANCE BUTTONS - Deep 3D Embossed */
 .dist-row {
   display: flex;
