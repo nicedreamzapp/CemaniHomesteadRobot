@@ -150,7 +150,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 | **2x Motor Drivers** | ZLAC8015D Dual-Channel | Modbus RTU control |
 | **Teensy 4.1** | 600MHz ARM Cortex-M7 | Main controller & Modbus master |
 | **ESP32** | Bluetooth 5.0 + WiFi | Controller + web bridge |
-| **8BitDo Ultimate 5.1** | Bluetooth | Wireless gamepad control |
+| **Xbox Controller** | Bluetooth 5.0 | Wireless gamepad control |
 
 ### Power System
 
@@ -178,18 +178,27 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 | **Jetson Orin Nano Super** | 8GB, 67 TOPS | AI brain (on robot) |
 | **VPS Server** | Ubuntu 24.04 | Remote command center |
 
+### Chassis
+
+| Component | Specs | Notes |
+|-----------|-------|-------|
+| **Frame** | 2020 Aluminum Extrusion | Lightweight, modular |
+| **Suspension** | Electric Scooter Shocks | Current limit for heavy loads |
+
+*Note: Motors rated for 600 lbs per wheel pair. Current chassis would need structural reinforcement and possible upgrade from extrusion to permanent welded design for max capacity.*
+
 ---
 
 ## Current Status
 
-**Weight:** 65 lbs | **Status:** Remote control anywhere ✅
+**Weight:** 80 lbs | **Motor Capacity:** 600 lbs (per wheel pair) | **Status:** Remote control anywhere ✅
 
 ### What's Working
 
 | Feature | Status | Notes |
 |---------|:------:|-------|
 | Tank Drive Platform | ✅ | 4WD hub motors, pulls loaded carts |
-| 8BitDo Controller | ✅ | Bluetooth via ESP32, exponential curves |
+| Xbox Controller | ✅ | Bluetooth via ESP32, exponential curves |
 | Web Command Center | ✅ | Control from anywhere, glassmorphism UI |
 | **3D LIDAR Mapping** | ✅ | Real-time 360° point cloud, obstacle visualization |
 | Dual PTZ Cameras | ✅ | RTSP streaming, ONVIF pan/tilt |
