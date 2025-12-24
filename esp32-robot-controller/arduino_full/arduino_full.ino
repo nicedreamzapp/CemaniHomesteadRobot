@@ -1,8 +1,9 @@
 /*
- * Cemani Robot Controller v3.8.0
+ * Cemani Robot Controller v3.9.0
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket + WIRELESS OTA
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.9.0 - WATCHDOG AUTO-REBOOT - reboots if WebSocket disconnected >2 minutes
  * v3.8.0 - AGGRESSIVE XBOX SCANNING - polls 5x per loop until connected
  *        - Re-enables Bluetooth scan every 2s when no controller
  *        - Instant re-scan on disconnect for fast reconnection
@@ -39,12 +40,14 @@ unsigned long lastHeartbeat = 0;
 unsigned long lastWiFiConnected = 0;
 unsigned long lastTeensyKeepalive = 0;
 unsigned long lastXboxScanLog = 0;
+unsigned long lastWsConnected = 0;  // Watchdog: track last successful WS connection
 int wifiDropCount = 0;
 const unsigned long WIFI_CHECK_INTERVAL = 2000;   // Check WiFi more often (was 10s)
 const unsigned long HEARTBEAT_INTERVAL = 10000;   // Send telemetry every 10s (was 15s)
 const unsigned long WIFI_RECONNECT_TIMEOUT = 3000; // Force reconnect if down >3s
 const unsigned long TEENSY_KEEPALIVE_INTERVAL = 1000; // Send keepalive to Teensy every 1s
 const unsigned long XBOX_SCAN_LOG_INTERVAL = 5000; // Log Xbox scan status every 5s
+const unsigned long WS_WATCHDOG_TIMEOUT = 120000; // Reboot if no WS connection for 2 minutes
 
 int16_t plx = 0, ply = 0, prx = 0, pry = 0;
 int16_t plt = 0, prt = 0;
@@ -78,7 +81,7 @@ static inline int16_t deadzone(int v) {
 void setup() {
   Serial.begin(115200);
   delay(100);  // Minimal delay for serial init
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.8.0 - AGGRESSIVE XBOX SCAN!");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.9.0 - WATCHDOG ENABLED!");
 
   // Initialize NVS - keeps paired Bluetooth devices for instant reconnection
   nvs_flash_init();
@@ -240,6 +243,16 @@ void loop() {
   // Only delay when controller is connected - maximize scan speed otherwise
   if (myGamepad) {
     delay(1);
+  }
+
+  // WATCHDOG: Reboot if WebSocket disconnected too long
+  // This prevents the ESP32 from getting stuck in a bad state
+  if (wsConnected) {
+    lastWsConnected = now;
+  } else if (WiFi.status() == WL_CONNECTED && now - lastWsConnected > WS_WATCHDOG_TIMEOUT) {
+    Serial.println("[WATCHDOG] No WebSocket for 2min - Rebooting!");
+    delay(100);
+    ESP.restart();
   }
 }
 
@@ -406,7 +419,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.8.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.9.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
