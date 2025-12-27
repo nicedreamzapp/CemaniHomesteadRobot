@@ -516,7 +516,7 @@
         </div>
         <div class="cam-overlay">
           <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
-          <div class="speaker-btn" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">🔊</div>
+          <div class="speaker-btn muted" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">🔇</div>
           <div class="ptz-overlay">
             <div class="ptz-btn empty"></div>
             <div class="ptz-btn" data-ptz2="up">&#9650;</div>
@@ -679,8 +679,15 @@
         <!-- LIDAR status and buttons floating on grid -->
         <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
         <div class="lidar-btns-row">
+          <button class="lidar3d-test-btn" onclick="runGridTest()" title="Test Grid Movement" style="background:rgba(255,200,0,0.3);border:2px solid #fc0;color:#fc0;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.7rem;font-weight:bold;margin-right:5px;">TEST GRID</button>
           <button class="lidar3d-reset-btn" onclick="resetOdometry()" title="Reset Position">RESET</button>
           <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen">⛶</button>
+        </div>
+        <!-- Debug display for container position -->
+        <div id="gridDebugDisplay" style="position:absolute;top:50px;left:10px;background:rgba(0,0,0,0.9);border:2px solid #0f0;padding:8px;font-family:monospace;font-size:12px;color:#0f0;z-index:100;border-radius:4px;">
+          <div>Container Z: <span id="debugContainerZ">0.00</span>m</div>
+          <div>Container X: <span id="debugContainerX">0.00</span>m</div>
+          <div>Test Active: <span id="debugTestActive">NO</span></div>
         </div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
@@ -801,8 +808,8 @@
 </div>
 
 <!-- Load JavaScript files in correct order: controls defines updateXboxStatus, websocket calls it -->
-<script src="js/telemetry.js?v=3"></script>
+<script src="js/telemetry.js?v=6"></script>
 <script src="js/controls.js?v=10"></script>
-<script src="js/websocket.js?v=14"></script>
+<script src="js/websocket.js?v=50"></script>
 </body>
 </html>

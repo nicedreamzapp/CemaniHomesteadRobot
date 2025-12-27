@@ -38,7 +38,7 @@ connectPtzWs();
 // ============ AUDIO PLAYER ============
 let audioContext = null;
 let isMuted = false;   // Default to unmuted
-let isMuted2 = false;  // Default to unmuted
+let isMuted2 = true;   // Default to MUTED - user can unmute by clicking speaker
 
 function initAudio() {
   if (audioContext) return;
@@ -323,6 +323,33 @@ ws.onmessage = function(e) {
   // ============ LIDAR DATA HANDLING ============
   if(d.type === 'lidar') {
     updateLidar3D(d.points);  // Use 3D visualization
+  }
+
+  // ============ DEAD RECKONING UPDATES ============
+  // When server sends dead reckoning position (from move commands, bypassing broken encoders)
+  if(d.type === 'dead_reckoning') {
+    // Use window.odomState to ensure we're updating the same object the animation loop reads
+    if (window.odomState) {
+      const prevY = window.odomState.y;
+      window.odomState.x = d.odomX;
+      window.odomState.y = d.odomY;
+      window.odomState.heading = d.odomHeading;
+      window.odomState.totalDistance = d.odomDistance || 0;
+      if (d.odomTrail) window.odomState.trail = d.odomTrail;
+      console.log('[DEAD_RECK] odomState.y: ' + prevY + ' → ' + d.odomY + 'mm (heading=' + d.odomHeadingDeg + '°)');
+
+      // Force immediate grid update - don't wait for animation loop
+      if (lidar3dWorldContainer) {
+        const newZ = d.odomY / 1000;
+        const newX = -d.odomX / 1000;
+        console.log('[DEAD_RECK] Moving container NOW: z=' + newZ.toFixed(3) + 'm, x=' + newX.toFixed(3) + 'm');
+        lidar3dWorldContainer.position.z = newZ;
+        lidar3dWorldContainer.position.x = newX;
+        lidar3dWorldContainer.rotation.y = -d.odomHeading;
+      }
+    } else {
+      console.warn('[DEAD_RECK] window.odomState not defined!');
+    }
   }
 
   if(d.type === 'status') {
@@ -929,8 +956,309 @@ window.clearLidarSlamMap = function() {
     lidar3dWorldContainer.position.set(0, 0, 0);
     lidar3dWorldContainer.rotation.y = 0;
   }
-  console.log('[SLAM] Map cleared');
+  // Also reset odomState
+  if (window.odomState) {
+    window.odomState.x = 0;
+    window.odomState.y = 0;
+    window.odomState.heading = 0;
+    window.odomState.totalDistance = 0;
+    window.odomState.trail = [{x: 0, y: 0}];
+  }
+  console.log('[SLAM] Map and odometry cleared');
 };
+
+// TEST FUNCTION: Call from browser console to test grid movement
+// Usage: testGridMove(1) to move grid 1 meter, testGridMove(-1) to move back
+window.testGridMove = function(z) {
+  if (lidar3dWorldContainer) {
+    // Temporarily stop the animation loop from overriding
+    autoAnimRunning = true;
+
+    // Also disable controls update temporarily
+    if (lidar3dControls) {
+      lidar3dControls.enabled = false;
+    }
+
+    lidar3dWorldContainer.position.z = z;
+    lidar3dWorldContainer.updateMatrixWorld(true);
+
+    // Force render
+    if (lidar3dRenderer && lidar3dScene && lidar3dCamera) {
+      lidar3dRenderer.render(lidar3dScene, lidar3dCamera);
+    }
+
+    console.log('[TEST] Moved container to z=' + z + ' and rendered');
+    console.log('[TEST] Camera pos:', JSON.stringify(lidar3dCamera.position));
+    console.log('[TEST] Controls target:', JSON.stringify(lidar3dControls?.target));
+    console.log('[TEST] Grid should have moved visually! Look at the 3D view.');
+    console.log('[TEST] Call testGridMove(0) to reset, or testStop() to resume normal');
+    return 'Container at z=' + z;
+  }
+  return 'Container not initialized';
+};
+
+// BUTTON TEST: runGridTest() - called by clicking TEST GRID button
+// This runs a very obvious visual test without needing the console
+let gridTestRunning = false;
+let gridTestStartZ = 0;
+
+window.runGridTest = function() {
+  if (!lidar3dWorldContainer) {
+    alert('3D scene not initialized yet. Wait a moment and try again.');
+    return;
+  }
+
+  if (gridTestRunning) {
+    console.log('[GRID TEST] Already running!');
+    return;
+  }
+
+  console.log('='.repeat(50));
+  console.log('[GRID TEST] Starting clickable grid movement test...');
+  console.log('[GRID TEST] Watch the green debug box in top-left of 3D view');
+  console.log('='.repeat(50));
+
+  gridTestRunning = true;
+  autoAnimRunning = true;  // Prevent normal animation from overriding
+  gridTestStartZ = lidar3dWorldContainer.position.z;
+
+  // Update debug display
+  const testActiveEl = document.getElementById('debugTestActive');
+  if (testActiveEl) testActiveEl.textContent = 'YES';
+  if (testActiveEl) testActiveEl.style.color = '#ff0';
+
+  let testZ = 0;
+  let direction = 1;  // 1 = forward, -1 = backward
+  let cycles = 0;
+
+  function testStep() {
+    if (!gridTestRunning || cycles >= 4) {
+      // Test complete
+      gridTestRunning = false;
+      autoAnimRunning = false;
+      lidar3dWorldContainer.position.z = gridTestStartZ;
+      lidar3dWorldContainer.position.x = 0;
+      if (testActiveEl) testActiveEl.textContent = 'DONE';
+      if (testActiveEl) testActiveEl.style.color = '#0f0';
+      console.log('[GRID TEST] Test complete! Grid returned to start position.');
+      console.log('[GRID TEST] If you saw the Container Z value changing but grid NOT moving,');
+      console.log('[GRID TEST] there is a Three.js rendering issue to investigate.');
+      return;
+    }
+
+    // Move grid back and forth
+    testZ += direction * 0.1;  // 0.1 meters per frame = 10cm per frame
+
+    if (testZ > 3) {
+      direction = -1;
+      cycles++;
+    } else if (testZ < -3) {
+      direction = 1;
+      cycles++;
+    }
+
+    // Set container position
+    lidar3dWorldContainer.position.z = testZ;
+    lidar3dWorldContainer.position.x = Math.sin(testZ * 2) * 0.5;  // Also sway left-right
+
+    // Update debug display
+    const zEl = document.getElementById('debugContainerZ');
+    const xEl = document.getElementById('debugContainerX');
+    if (zEl) zEl.textContent = testZ.toFixed(2);
+    if (xEl) xEl.textContent = lidar3dWorldContainer.position.x.toFixed(2);
+
+    // Force render
+    if (lidar3dRenderer && lidar3dScene && lidar3dCamera) {
+      lidar3dRenderer.render(lidar3dScene, lidar3dCamera);
+    }
+
+    requestAnimationFrame(testStep);
+  }
+
+  requestAnimationFrame(testStep);
+};
+
+// Stop test mode and resume normal operation
+window.testStop = function() {
+  autoAnimRunning = false;
+  if (lidar3dControls) {
+    lidar3dControls.enabled = true;
+  }
+  console.log('[TEST] Resumed normal operation');
+};
+
+// TEST FUNCTION: Simulate dead reckoning update
+// Usage: testOdomUpdate(914) to simulate moving forward 914mm (3ft)
+window.testOdomUpdate = function(yMM) {
+  if (window.odomState) {
+    window.odomState.y = yMM;
+    console.log('[TEST] Set odomState.y=' + yMM + 'mm');
+    return 'odomState.y=' + yMM + ', should see grid move in ~1 second';
+  }
+  return 'odomState not initialized';
+};
+
+// AUTO-ANIMATION TEST: Automatically animate robot moving forward
+// This runs 3 seconds after page load to demonstrate grid movement
+let autoAnimRunning = false;
+let autoAnimPos = 0;
+
+// Big red test box that moves with the animation
+let autoAnimTestBox = null;
+
+function startAutoAnimation() {
+  if (autoAnimRunning) return;
+  if (!lidar3dWorldContainer) {
+    console.log('[AUTO-ANIM] Waiting for 3D scene to initialize...');
+    setTimeout(startAutoAnimation, 1000);
+    return;
+  }
+
+  autoAnimRunning = true;
+  autoAnimPos = 0;
+  console.log('[AUTO-ANIM] Starting grid movement animation test...');
+
+  // Diagnostic: verify scene structure
+  console.log('[DIAG] Scene setup check:');
+  console.log('[DIAG]   lidar3dScene:', lidar3dScene ? 'EXISTS' : 'NULL');
+  console.log('[DIAG]   lidar3dWorldContainer:', lidar3dWorldContainer ? 'EXISTS' : 'NULL');
+  console.log('[DIAG]   lidar3dGrid:', lidar3dGrid ? 'EXISTS' : 'NULL');
+  if (lidar3dWorldContainer && lidar3dScene) {
+    console.log('[DIAG]   Container in scene:', lidar3dScene.children.includes(lidar3dWorldContainer) ? 'YES' : 'NO');
+  }
+  if (lidar3dGrid && lidar3dWorldContainer) {
+    console.log('[DIAG]   Grid in container:', lidar3dWorldContainer.children.includes(lidar3dGrid) ? 'YES' : 'NO');
+  }
+  console.log('[DIAG]   Container initial pos:', JSON.stringify(lidar3dWorldContainer.position));
+  if (lidar3dControls) {
+    console.log('[DIAG]   OrbitControls target:', JSON.stringify(lidar3dControls.target));
+  }
+  if (lidar3dCamera) {
+    console.log('[DIAG]   Camera pos:', JSON.stringify(lidar3dCamera.position));
+  }
+
+  // Add a highly visible test box to the world container
+  if (!autoAnimTestBox && lidar3dScene) {
+    const boxGeom = new THREE.BoxGeometry(1, 1, 1);  // 1 meter cube
+    const boxMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });  // Bright red
+    autoAnimTestBox = new THREE.Mesh(boxGeom, boxMat);
+    autoAnimTestBox.position.set(0, 0.5, -2);  // 2 meters in front of robot, 0.5m up
+    lidar3dWorldContainer.add(autoAnimTestBox);  // Add to container so it moves
+
+    // Add a wireframe to make it even more visible
+    const wireframe = new THREE.LineSegments(
+      new THREE.EdgesGeometry(boxGeom),
+      new THREE.LineBasicMaterial({ color: 0xffffff })
+    );
+    autoAnimTestBox.add(wireframe);
+
+    console.log('[AUTO-ANIM] Added 1m RED TEST BOX at z=-2 (2m in front)');
+  }
+
+  function animateStep() {
+    if (!autoAnimRunning) return;
+
+    try {
+    // Moderate speed: 30mm per frame
+    autoAnimPos += 30;
+
+    // Move diagonally AND rotate to make movement unmissable
+    const newZ = autoAnimPos / 1000;  // meters forward
+    const newX = Math.sin(autoAnimPos / 300) * 1.0;  // stronger sway left-right
+    const newRot = autoAnimPos / 3000;  // faster rotation
+
+    lidar3dWorldContainer.position.z = newZ;
+    lidar3dWorldContainer.position.x = newX;
+    lidar3dWorldContainer.rotation.y = newRot;
+
+    // Pulse the grid color to make it obvious the animation is running
+    if (lidar3dGrid) {
+      const hue = (autoAnimPos / 10) % 360;
+      // Try both material and materials array (GridHelper might have either)
+      if (lidar3dGrid.material && lidar3dGrid.material.color) {
+        lidar3dGrid.material.color.setHSL(hue / 360, 1.0, 0.5);
+      } else if (lidar3dGrid.material && Array.isArray(lidar3dGrid.material)) {
+        lidar3dGrid.material.forEach(m => {
+          if (m.color) m.color.setHSL(hue / 360, 1.0, 0.5);
+        });
+      }
+    }
+
+    // Force matrix update so getWorldPosition returns correct values
+    lidar3dWorldContainer.updateMatrixWorld(true);
+
+    // Force immediate render to see the movement
+    if (lidar3dRenderer && lidar3dScene && lidar3dCamera) {
+      lidar3dRenderer.render(lidar3dScene, lidar3dCamera);
+    }
+
+    // Also update odomState so other systems stay in sync
+    if (window.odomState) {
+      window.odomState.y = autoAnimPos;
+      window.odomState.x = newX * 1000;
+    }
+
+    // Log every 0.25 meters for more feedback
+    if (autoAnimPos % 250 === 0) {
+      // Get grid's world position to verify it's actually moving
+      const gridWorldPos = new THREE.Vector3();
+      if (lidar3dGrid) {
+        lidar3dGrid.getWorldPosition(gridWorldPos);
+      }
+      console.log('[ANIM] z=' + newZ.toFixed(2) + 'm, x=' + newX.toFixed(2) +
+        'm, gridWorldZ=' + gridWorldPos.z.toFixed(2) + 'm');
+    }
+
+    // Stop after 5 meters to make movement very obvious
+    if (autoAnimPos < 5000) {
+      requestAnimationFrame(animateStep);
+    } else {
+      console.log('='.repeat(50));
+      console.log('[ANIM] ANIMATION COMPLETE!');
+      console.log('[ANIM] Final container position: x=' +
+        lidar3dWorldContainer.position.x.toFixed(3) + ', z=' +
+        lidar3dWorldContainer.position.z.toFixed(3));
+
+      // Get grid world position
+      const gridWorldPos = new THREE.Vector3();
+      if (lidar3dGrid) {
+        lidar3dGrid.getWorldPosition(gridWorldPos);
+        console.log('[ANIM] Grid world position: z=' + gridWorldPos.z.toFixed(3));
+      }
+
+      // Check if test box exists and its position
+      if (autoAnimTestBox) {
+        const boxWorldPos = new THREE.Vector3();
+        autoAnimTestBox.getWorldPosition(boxWorldPos);
+        console.log('[ANIM] Red box world position: z=' + boxWorldPos.z.toFixed(3));
+      }
+
+      console.log('[ANIM] If grid did not visually move, check:');
+      console.log('[ANIM] 1. Is grid visible at all?');
+      console.log('[ANIM] 2. Did the red test box move?');
+      console.log('[ANIM] 3. Did the grid color change (rainbow)?');
+      console.log('='.repeat(50));
+      autoAnimRunning = false;
+    }
+    } catch (err) {
+      console.error('[ANIM] ERROR:', err);
+      autoAnimRunning = false;
+    }
+  }
+
+  requestAnimationFrame(animateStep);
+}
+
+// Stop the auto animation
+window.stopAutoAnimation = function() {
+  autoAnimRunning = false;
+  console.log('[AUTO-ANIM] Stopped');
+};
+
+// Auto animation available but not auto-starting
+// Call testGridMove(5) from console to test, or startAutoAnimation() for full animation
+window.startAutoAnimation = startAutoAnimation;
+console.log('[GRID] Test functions ready: testGridMove(5), startAutoAnimation(), testStop()');
 
 function initLidar3D() {
   const container = document.getElementById('lidar3dContainer');
@@ -982,6 +1310,7 @@ function initLidar3D() {
   lidar3dGrid = new THREE.GridHelper(gridSizeM, gridSizeFt, 0x00ffff, 0x006666);  // Cyan grid
   lidar3dGrid.position.y = 0.005;
   lidar3dWorldContainer.add(lidar3dGrid);
+
 
   // Ground (larger) - added to world container
   const groundGeom = new THREE.PlaneGeometry(30, 30);
@@ -1151,29 +1480,19 @@ function updateLidar3D(points) {
   lidar3dFrameCount++;
   document.getElementById('lidar3dStatus').textContent = 'LIDAR: ' + points.length + ' pts';
 
-  // Get current robot position from odometry (from telemetry.js odomState)
-  const robotX = (typeof odomState !== 'undefined' && odomState.x) ? odomState.x / 1000 : 0;  // mm to meters
-  const robotZ = (typeof odomState !== 'undefined' && odomState.y) ? odomState.y / 1000 : 0;  // y is forward = z in 3D
-  const robotHeading = (typeof odomState !== 'undefined' && odomState.heading) ? odomState.heading : 0;
+  // Get current robot position from odometry (use window.odomState for consistency)
+  const odom = window.odomState;
+  const robotX = odom && odom.x !== undefined ? odom.x / 1000 : 0;  // mm to meters
+  const robotZ = odom && odom.y !== undefined ? odom.y / 1000 : 0;  // y is forward = z in 3D
+  const robotHeading = odom && odom.heading !== undefined ? odom.heading : 0;
 
-  // ROBOT-CENTERED VIEW: Robot stays at origin, world moves under it
-  if (lidar3dRobot) {
-    // Robot stays at center, only rotates to show current heading
-    lidar3dRobot.position.set(0, 0, 0);
-    lidar3dRobot.rotation.y = 0;  // Robot always points "up" in view, world rotates
-  }
-
-  // Move world container in opposite direction - robot appears stationary
-  if (lidar3dWorldContainer) {
-    lidar3dWorldContainer.position.x = -robotX;
-    lidar3dWorldContainer.position.z = robotZ;
-    lidar3dWorldContainer.rotation.y = robotHeading;
-  }
+  // NOTE: World container position is now updated in animateLidar3D() every frame
+  // This ensures smooth grid movement even when LIDAR data is delayed
 
   // Update yellow path trail (in world coordinates)
-  if (typeof odomState !== 'undefined' && odomState.trail && odomState.trail.length > 0) {
+  if (odom && odom.trail && odom.trail.length > 0) {
     const trailPositions = [];
-    odomState.trail.forEach(p => {
+    odom.trail.forEach(p => {
       trailPositions.push(p.x / 1000, 0.05, -p.y / 1000);  // mm to meters, slight Y offset
     });
     // Add current position
@@ -1213,7 +1532,8 @@ function updateLidar3D(points) {
     const c = getDistanceColor3D(dist);
     colors.push(c.r, c.g, c.b);
 
-    // SLAM: Transform to world coordinates (absolute position in world)
+    // SLAM: Transform to world coordinates
+    // Points stored relative to world origin, container offset handles robot-centered view
     const worldX = robotX + localX * Math.cos(robotHeading) - localZ * Math.sin(robotHeading);
     const worldZ = -robotZ + localX * Math.sin(robotHeading) + localZ * Math.cos(robotHeading);
 
@@ -1301,9 +1621,61 @@ function updateLidar3D(points) {
   }
 }
 
+let animFrameCount = 0;
+
 function animateLidar3D() {
   if (!lidar3dInitialized) return;
   requestAnimationFrame(animateLidar3D);
+  animFrameCount++;
+
+  // UPDATE DEBUG DISPLAY every frame (regardless of test mode)
+  if (lidar3dWorldContainer && animFrameCount % 3 === 0) {  // Every 3 frames to reduce DOM updates
+    const zEl = document.getElementById('debugContainerZ');
+    const xEl = document.getElementById('debugContainerX');
+    if (zEl) zEl.textContent = lidar3dWorldContainer.position.z.toFixed(2);
+    if (xEl) xEl.textContent = lidar3dWorldContainer.position.x.toFixed(2);
+  }
+
+  // UPDATE WORLD CONTAINER POSITION EVERY FRAME from odomState
+  // Skip if auto-animation is running (it handles its own updates)
+  if (lidar3dWorldContainer && !autoAnimRunning) {
+    // Try to access global odomState from window or direct scope
+    const odom = window.odomState || (typeof odomState !== 'undefined' ? odomState : null);
+
+    if (odom && typeof odom.y === 'number' && !isNaN(odom.y)) {
+      const robotX = odom.x / 1000 || 0;  // mm to meters
+      const robotZ = odom.y / 1000 || 0;  // y is forward = z in 3D
+      const robotHeading = odom.heading || 0;
+
+      // ROBOT-CENTERED VIEW: Move world container OPPOSITE to robot movement
+      const newX = -robotX;
+      const newZ = robotZ;  // +robotZ moves world in +Z direction = backward under robot
+
+      // Log when position changes significantly
+      if (Math.abs(newZ - lidar3dWorldContainer.position.z) > 0.01) {
+        console.log('[GRID] Moving container from z=' +
+          lidar3dWorldContainer.position.z.toFixed(3) + ' to z=' + newZ.toFixed(3) +
+          ' (odom.y=' + odom.y + 'mm)');
+      }
+
+      lidar3dWorldContainer.position.x = newX;
+      lidar3dWorldContainer.position.z = newZ;
+      lidar3dWorldContainer.rotation.y = -robotHeading;
+    } else {
+      // Log periodically if odomState is not valid
+      if (animFrameCount % 300 === 0) {
+        console.log('[GRID] No valid odomState - odom:', odom, 'window.odomState:', window.odomState);
+      }
+    }
+  }
+
+  // Rotate robot to show heading direction
+  if (lidar3dRobot) {
+    const odom = window.odomState || (typeof odomState !== 'undefined' ? odomState : null);
+    const robotHeading = odom && odom.heading ? odom.heading : 0;
+    lidar3dRobot.rotation.y = robotHeading;  // Robot rotates to show direction
+  }
+
   lidar3dControls.update();
   lidar3dRenderer.render(lidar3dScene, lidar3dCamera);
 }
