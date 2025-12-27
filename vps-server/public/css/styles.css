@@ -3606,91 +3606,520 @@ input[type="text"] {
   .header-devices { display: none; }
 }
 
-/* Phone landscape / small tablet 600px-767px */
+/* ============ MOBILE STATUS ROW ============ */
+.mobile-status-row {
+  display: none; /* Hidden on desktop */
+}
+.mobile-dev {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #888;
+  padding: 3px 6px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 6px;
+}
+.mobile-dev.online {
+  color: #51cf66;
+}
+.mobile-dev.online .mobile-dev-dot {
+  background: #51cf66;
+  box-shadow: 0 0 6px #51cf66;
+}
+.mobile-dev-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff6b6b;
+}
+
+/* ============ MOBILE D-PAD CONTROLS ============ */
+.mobile-dpad {
+  display: none; /* Hidden on desktop */
+}
+
+/* Desktop-only elements */
+@media (min-width: 768px) {
+  .mobile-dpad { display: none !important; }
+  .mobile-status-row { display: none !important; }
+  .desktop-only { display: flex !important; }
+}
+
+/* ============ MOBILE STYLES - TOUCH FRIENDLY ============ */
 @media (max-width: 767px) {
+  /* Show mobile d-pad, hide desktop tank view */
+  .mobile-dpad {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px;
+  }
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* D-pad styling */
+  .dpad-row {
+    display: flex;
+    gap: 5px;
+  }
+  .dpad-btn {
+    width: 70px;
+    height: 70px;
+    background: linear-gradient(145deg, #3a5570, #253550);
+    border: 2px solid rgba(0, 255, 136, 0.5);
+    border-radius: 12px;
+    color: #0f8;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    box-shadow: 3px 3px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+    transition: all 0.1s;
+  }
+  .dpad-btn:active {
+    transform: scale(0.95);
+    background: linear-gradient(145deg, #4a6580, #354560);
+    box-shadow: 1px 1px 4px rgba(0,0,0,0.4), inset 0 2px 4px rgba(0,0,0,0.2);
+  }
+  .dpad-btn.selected {
+    background: linear-gradient(145deg, #2a6a4a, #1a5a3a) !important;
+    border-color: #0f8 !important;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+  }
+  .dpad-btn.empty {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: default;
+  }
+  .dpad-center {
+    width: 70px;
+    height: 70px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    color: #666;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .container {
     display: flex;
     flex-direction: column;
     height: auto;
     min-height: 100vh;
     padding: 8px;
-    gap: 8px;
+    gap: 10px;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
+
+  /* Header - compact for mobile */
   .header {
     flex-wrap: wrap;
     padding: 8px;
-    gap: 8px;
+    gap: 6px;
+    border-radius: 12px;
   }
   .header h1 {
-    font-size: 14px;
+    font-size: 13px;
     width: 100%;
     text-align: center;
     order: -1;
+    letter-spacing: 1px;
   }
   .header-devices { display: none; }
-  .header-right { font-size: 10px; }
-  .cameras-column {
-    flex-direction: column;
-    gap: 8px;
-    padding: 0;
-  }
-  .cam-wrapper {
-    transform: scale(1);
-    margin-bottom: 0;
-  }
-  .light-cam-wide {
-    flex-direction: column;
-    gap: 0;
-  }
-  .middle-column, .sidebar {
+  .mobile-status-row {
+    display: flex !important;
+    gap: 6px;
+    justify-content: center;
     width: 100%;
+    order: 1;
   }
-  .tank-robot-view {
-    transform: scale(0.85);
-  }
-}
-
-/* Phone portrait max 480px */
-@media (max-width: 480px) {
-  .container {
-    padding: 5px;
-    gap: 6px;
-  }
-  .header {
-    padding: 6px;
-    gap: 6px;
-  }
-  .header h1 {
-    font-size: 12px;
-  }
+  .header-left { order: 0; }
   .header-right {
+    font-size: 10px;
     flex-wrap: wrap;
     justify-content: center;
     gap: 4px;
+    width: 100%;
   }
   .info-chip {
     font-size: 9px;
-    padding: 2px 6px;
+    padding: 3px 6px;
   }
+
+  /* Cameras - stacked, reasonable height */
   .cameras-column {
-    padding: 0;
-    gap: 4px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    order: 1;
   }
   .cam-wrapper {
-    transform: scale(0.9);
+    transform: none;
+    margin-bottom: 0;
+    flex: none;
+    height: auto;
   }
-  .section-header {
+  .cam-container {
+    height: 180px;
+    min-height: 150px;
+  }
+  .cam-label-centered {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  .ptz-overlay {
+    transform: scale(0.8);
+  }
+  .coming-soon-row {
+    padding: 4px;
+  }
+  .cam-triggers {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .serial-trigger, .battery-trigger {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+
+  /* Drive System - MOBILE OPTIMIZED */
+  .middle-column {
+    width: 100%;
+    order: 2;
+    padding: 8px !important;
+  }
+  .middle-column .card {
+    position: relative !important;
+  }
+
+  /* Hide the complex tank visualization on mobile, show simplified controls */
+  .drive-header-with-temps {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px !important;
+  }
+  .header-temp-left, .header-temp-right {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+  .header-title {
+    font-size: 12px;
+  }
+
+  /* Tank robot - simplified for mobile */
+  .tank-robot-view {
+    transform: none !important;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px !important;
+    gap: 10px !important;
+    justify-content: center !important;
+  }
+
+  /* Hide the side steering buttons on mobile - use direction grid instead */
+  .tank-steer-btn {
+    display: none !important;
+  }
+
+  /* Tank body smaller */
+  .tank-body {
+    width: 70px !important;
+    height: 100px !important;
+    margin: 0 auto;
+  }
+  .tank-wheel {
+    width: 18px !important;
+    height: 35px !important;
+  }
+  .tank-track {
+    gap: 6px !important;
+  }
+  .tank-dir-btn {
+    font-size: 7px !important;
+    padding: 2px 4px !important;
+  }
+  .tank-label {
+    font-size: 8px !important;
+  }
+  .tank-wheel-temp {
+    font-size: 8px !important;
+  }
+
+  /* Hide command display on mobile */
+  .cmd-display-side {
+    display: none !important;
+  }
+
+  /* Speed row - centered */
+  .speed-row {
+    justify-content: center !important;
+    padding: 0 !important;
+    gap: 30px !important;
+    margin-top: 5px !important;
+  }
+  .speed-box {
+    flex: 0 0 auto !important;
+  }
+  .spd-val {
+    font-size: 14px !important;
+  }
+  .spd-label, .spd-unit {
+    font-size: 9px !important;
+  }
+
+  /* Distance buttons - full width row */
+  .dist-row {
+    position: static !important;
+    width: 100% !important;
+    right: auto !important;
+    top: auto !important;
+    transform: none !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    margin-top: 10px !important;
+    flex-wrap: wrap;
+  }
+  .dist-btn {
+    padding: 12px 16px !important;
+    font-size: 14px !important;
+    border-radius: 12px !important;
+    min-width: 60px;
+    touch-action: manipulation;
+  }
+
+  /* Move status - centered */
+  .move-status {
+    position: static !important;
+    width: 100% !important;
+    right: auto !important;
+    top: auto !important;
+    text-align: center !important;
+    font-size: 11px !important;
+    padding: 8px !important;
+    margin-top: 10px !important;
+  }
+
+  /* GO/STOP buttons - BIG and centered for easy touch */
+  .exec-row {
+    position: static !important;
+    width: 100% !important;
+    right: auto !important;
+    top: auto !important;
+    justify-content: center !important;
+    gap: 30px !important;
+    margin-top: 15px !important;
+    padding-bottom: 10px;
+  }
+  .exec-btn {
+    width: 90px !important;
+    height: 90px !important;
+    font-size: 16px !important;
+    touch-action: manipulation;
+  }
+  .exec-btn.go {
+    width: 90px !important;
+    height: 90px !important;
+  }
+  .exec-btn.stop {
+    width: 90px !important;
+    height: 90px !important;
+  }
+
+  /* LIDAR/3D Map - compact for mobile */
+  .light-cam-wide {
+    flex-direction: column;
+    gap: 0;
+    order: 3;
+    max-height: 350px !important;
+    min-height: 280px;
+  }
+  .lidar3d-container {
+    height: 280px !important;
+  }
+  .position-stats-bar {
+    padding: 6px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+    bottom: 4px;
+  }
+  .pos-label {
+    font-size: 7px;
+  }
+  .pos-val {
     font-size: 11px;
   }
-  .tank-robot-view {
-    transform: scale(0.7);
+  .us-badge {
+    font-size: 9px;
+    padding: 2px 4px;
   }
-  .future-sensors.horizontal {
+  .lidar-status {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+  .lidar-btns-row {
+    top: 30px !important;
+    gap: 10px !important;
+  }
+  .lidar3d-reset-btn, .lidar3d-expand-btn {
+    padding: 6px 12px !important;
+    font-size: 10px !important;
+  }
+
+  /* Sidebar hidden on mobile */
+  .sidebar {
+    display: none !important;
+  }
+}
+
+/* Phone portrait - extra small */
+@media (max-width: 480px) {
+  .container {
+    padding: 5px;
+    gap: 8px;
+  }
+  .header {
+    padding: 6px;
     gap: 4px;
   }
-  .future-chip {
+  .header h1 {
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  .header-right {
+    gap: 3px;
+  }
+  .info-chip {
+    font-size: 8px;
+    padding: 2px 5px;
+  }
+
+  /* Cameras smaller */
+  .cameras-column {
+    padding: 5px;
+    gap: 6px;
+  }
+  .cam-container {
+    height: 150px;
+    min-height: 120px;
+  }
+  .cam-label-centered {
     font-size: 9px;
-    padding: 4px 6px;
+    padding: 3px 6px;
+  }
+  .ptz-overlay {
+    transform: scale(0.7);
+  }
+  .cam-triggers {
+    gap: 4px;
+  }
+  .serial-trigger, .battery-trigger {
+    font-size: 9px;
+    padding: 5px 8px;
+  }
+
+  /* Drive controls - even bigger buttons for small screens */
+  .drive-header-with-temps {
+    padding: 6px !important;
+  }
+  .header-temp-left, .header-temp-right {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+  .header-title {
+    font-size: 11px;
+  }
+
+  /* Tank body even smaller */
+  .tank-body {
+    width: 55px !important;
+    height: 80px !important;
+  }
+  .tank-wheel {
+    width: 14px !important;
+    height: 28px !important;
+  }
+  .tank-dir-btn {
+    font-size: 6px !important;
+    padding: 1px 3px !important;
+  }
+  .tank-label {
+    font-size: 7px !important;
+  }
+  .tank-wheel-temp {
+    font-size: 7px !important;
+  }
+
+  .speed-row {
+    gap: 20px !important;
+  }
+  .spd-val {
+    font-size: 12px !important;
+  }
+
+  /* Distance buttons - larger for touch */
+  .dist-row {
+    gap: 6px !important;
+  }
+  .dist-btn {
+    padding: 14px 12px !important;
+    font-size: 13px !important;
+    min-width: 55px;
+  }
+
+  .move-status {
+    font-size: 10px !important;
+    padding: 6px !important;
+  }
+
+  /* GO/STOP - prominent */
+  .exec-row {
+    gap: 25px !important;
+  }
+  .exec-btn {
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 15px !important;
+  }
+  .exec-btn.go, .exec-btn.stop {
+    width: 80px !important;
+    height: 80px !important;
+  }
+
+  /* LIDAR smaller */
+  .light-cam-wide {
+    max-height: 300px !important;
+    min-height: 240px;
+  }
+  .lidar3d-container {
+    height: 240px !important;
+  }
+  .position-stats-bar {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+  .pos-label {
+    font-size: 6px;
+  }
+  .pos-val {
+    font-size: 10px;
+  }
+  .us-badge {
+    font-size: 8px;
   }
 }
 

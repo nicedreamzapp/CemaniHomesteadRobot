@@ -161,6 +161,9 @@ function updateJetsonStatus(online) {
   if (statusEl) statusEl.textContent = online ? 'Online' : 'Offline';
   if (cardEl) cardEl.className = 'device-chip' + (online ? ' online' : '');
   if (versionEl && online) versionEl.textContent = 'Ubuntu 22.04';
+  // Mobile status
+  const mobileJetson = document.getElementById('mobileJetson');
+  if (mobileJetson) mobileJetson.className = 'mobile-dev' + (online ? ' online' : '');
 }
 
 // ============ PTZ ============
@@ -342,11 +345,17 @@ ws.onmessage = function(e) {
     // Update ESP32 status card
     document.getElementById('esp32Status').textContent = d.connected ? 'Online' : 'Offline';
     document.getElementById('esp32Card').className = 'device-chip' + (d.connected ? ' online' : '');
+    // Mobile status
+    const mobileEsp = document.getElementById('mobileEsp32');
+    if (mobileEsp) mobileEsp.className = 'mobile-dev' + (d.connected ? ' online' : '');
 
     // Update Teensy status card
     if(d.teensyConnected !== undefined) {
       document.getElementById('teensyStatus').textContent = d.teensyConnected ? 'Online' : 'Offline';
       document.getElementById('teensyCard').className = 'device-chip' + (d.teensyConnected ? ' online' : '');
+      // Mobile status
+      const mobileTeensy = document.getElementById('mobileTeensy');
+      if (mobileTeensy) mobileTeensy.className = 'mobile-dev' + (d.teensyConnected ? ' online' : '');
     }
     if(d.teensyVersion) {
       document.getElementById('teensyVersion').textContent = 'v' + d.teensyVersion;
@@ -1195,7 +1204,7 @@ function updateLidar3D(points) {
   for (const [angle, dist] of points) {
     // Local coordinates (relative to robot facing forward)
     // LIDAR 0° = front of robot = -Z in Three.js
-    const rad = (angle + 90) * Math.PI / 180;  // +90 to align front with -Z
+    const rad = (angle - 90) * Math.PI / 180;  // Flipped back
     const localX = (dist / 1000) * Math.cos(rad);
     const localZ = (dist / 1000) * Math.sin(rad);
 
@@ -1264,7 +1273,7 @@ function updateLidar3D(points) {
     let diff = a2 - a1; if (diff < 0) diff += 360;
     if (diff > 6) continue;
 
-    const r1 = (a1 + 90) * Math.PI / 180, r2 = (a2 + 90) * Math.PI / 180;
+    const r1 = (a1 - 90) * Math.PI / 180, r2 = (a2 - 90) * Math.PI / 180;
     const x1 = (d1 / 1000) * Math.cos(r1), z1 = (d1 / 1000) * Math.sin(r1);
     const x2 = (d2 / 1000) * Math.cos(r2), z2 = (d2 / 1000) * Math.sin(r2);
 

@@ -331,11 +331,30 @@ function clearQueue() {
   serialDiv.scrollTop = serialDiv.scrollHeight;
 }
 
-// Direction button handlers
+// Direction button handlers (desktop)
 document.getElementById('dirF').onclick = () => selectDirection('F');
 document.getElementById('dirR').onclick = () => selectDirection('R');
 document.getElementById('dirB').onclick = () => selectDirection('B');
 document.getElementById('dirL').onclick = () => selectDirection('L');
+
+// Mobile D-pad direction handlers
+const mobileDirF = document.getElementById('mobileDirF');
+const mobileDirR = document.getElementById('mobileDirR');
+const mobileDirB = document.getElementById('mobileDirB');
+const mobileDirL = document.getElementById('mobileDirL');
+
+if (mobileDirF) mobileDirF.onclick = () => { selectDirection('F'); updateMobileDpad('F'); };
+if (mobileDirR) mobileDirR.onclick = () => { selectDirection('R'); updateMobileDpad('R'); };
+if (mobileDirB) mobileDirB.onclick = () => { selectDirection('B'); updateMobileDpad('B'); };
+if (mobileDirL) mobileDirL.onclick = () => { selectDirection('L'); updateMobileDpad('L'); };
+
+function updateMobileDpad(dir) {
+  // Remove selected class from all mobile d-pad buttons
+  document.querySelectorAll('.dpad-btn').forEach(btn => btn.classList.remove('selected'));
+  // Add selected class to the clicked direction
+  const btn = document.getElementById('mobileDir' + dir);
+  if (btn) btn.classList.add('selected');
+}
 
 // Distance button handlers
 document.querySelectorAll('.dist-btn').forEach(btn => {
@@ -424,6 +443,9 @@ function updateXboxStatus(connected) {
       cardEl.classList.remove('online');
     }
   }
+  // Mobile status
+  const mobileXbox = document.getElementById('mobileXbox');
+  if (mobileXbox) mobileXbox.className = 'mobile-dev' + (connected ? ' online' : '');
 }
 
 function checkLocalGamepads() {

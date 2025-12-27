@@ -4,260 +4,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CEMANI COMMAND CENTER</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/styles.css?v=1224c">
+<link rel="stylesheet" href="css/styles.css?v=1227mobile">
 <style>
-/* TWO COLUMN LAYOUT: Cameras | Drive System (wider) */
-.container {
-  grid-template-columns: minmax(300px, 1fr) minmax(400px, 600px) !important;
-  grid-template-rows: 50px auto 1fr !important;
-  grid-template-areas:
-    "header header"
-    "cams middle"
-    "cams lightcam" !important;
-}
-/* Remove padding from drive system */
-.middle-column {
-  padding: 0 !important;
-  overflow: visible !important;
-}
-.drive-panel {
-  padding-bottom: 0 !important;
-  margin-bottom: 0 !important;
-}
-/* Hide sidebar - moved to header and LIDAR */
+/* Common styles (all screen sizes) */
 .sidebar { display: none !important; }
-
-/* 3D map bigger - full card */
-.light-cam-wide {
-  max-height: 520px !important;
-  position: relative;
-}
-/* Hide the header - elements float directly on grid */
 .lidar3d-header { display: none !important; }
 .lidar3d-title { display: none !important; }
 .lidar3d-subtitle { display: none !important; }
-
-/* LIDAR status floats on grid */
-.lidar-status {
-  position: absolute !important;
-  top: 8px !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  z-index: 10;
-  background: rgba(0,0,0,0.5) !important;
-  padding: 3px 8px !important;
-  border-radius: 4px !important;
-}
-
-/* Fix ultrasonic badge positions */
-.us-badge.us-fl { top: 8px !important; left: 8px !important; }
-.us-badge.us-fr { top: 8px !important; right: 8px !important; }
-.us-badge.us-rl { bottom: 60px !important; left: 8px !important; }
-.us-badge.us-rr { bottom: 60px !important; right: 8px !important; }
-
-/* Floating buttons on grid - below LIDAR status */
-.lidar-btns-row {
-  position: absolute !important;
-  top: 38px !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  display: flex !important;
-  flex-direction: row !important;
-  gap: 20px !important;
-  z-index: 10;
-}
-.lidar3d-reset-btn, .lidar3d-expand-btn {
-  background: rgba(0,0,0,0.5) !important;
-  padding: 4px 10px !important;
-  border-radius: 4px !important;
-  position: static !important;
-  display: inline-block !important;
-  left: auto !important;
-  right: auto !important;
-  top: auto !important;
-  pointer-events: auto !important;
-  cursor: pointer !important;
-}
-.lidar-btns-row {
-  pointer-events: auto !important;
-}
-.lidar-status {
-  pointer-events: auto !important;
-}
-
-/* Drive System header with temps on sides */
-.drive-header-with-temps {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  padding: 8px 10px !important;
-}
-.header-temp-left, .header-temp-right {
-  font-size: 0.75rem;
-  color: #fc0;
-  background: rgba(0,0,0,0.3);
-  padding: 4px 10px;
-  border-radius: 6px;
-}
-.header-title {
-  color: #0f8;
-  font-weight: bold;
-  letter-spacing: 2px;
-}
-/* Hide old driver temps row */
-.driver-temps-row {
-  display: none !important;
-}
-/* Remove button outline from speed boxes */
-.speed-box {
-  background: none !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-/* Move robot visual to left */
-.tank-robot-view {
-  justify-content: flex-start !important;
-  padding-left: 10px !important;
-  gap: 4px !important;
-  position: relative !important;
-}
-/* Center CEMANI label in chassis */
-.tank-label {
-  text-align: center !important;
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-}
-/* FWD/BACK buttons at edges of chassis */
-.tank-dir-btn {
-  padding: 4px 6px !important;
-  font-size: 9px !important;
-  position: absolute !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-}
-#dirF {
-  top: 5px !important;
-}
-#dirB {
-  bottom: 5px !important;
-}
-/* Scale robot proportionally bigger */
-.tank-body {
-  height: 170px !important;
-  width: 90px !important;
-  position: relative !important;
-}
-.tank-wheel {
-  width: 28px !important;
-  height: 55px !important;
-}
-.tank-track {
-  gap: 12px !important;
-}
-/* Position L/R buttons between wheels and chassis using absolute positioning */
-.tank-steer-btn {
-  position: absolute !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
-  z-index: 10;
-}
-#dirL {
-  left: 44px !important;
-}
-#dirR {
-  left: 248px !important;
-}
-.speed-row {
-  justify-content: flex-start !important;
-  padding-left: 8px !important;
-  gap: 65px !important;
-  margin-top: -5px !important;
-}
-.speed-box {
-  background: none !important;
-  border: none !important;
-  box-shadow: none !important;
-  flex: 0 0 auto !important;
-}
-/* Pill-shaped ft buttons, horizontal row at top right */
-.dist-row {
-  position: absolute !important;
-  right: 25px !important;
-  top: 80px !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  justify-content: center !important;
-  gap: 6px !important;
-  width: 220px !important;
-  margin-top: 0 !important;
-}
-.dist-btn {
-  flex: 0 0 auto !important;
-  padding: 8px 12px !important;
-  border-radius: 20px !important;
-  font-size: 0.8rem !important;
-}
-/* Move status text - smaller, below ft buttons */
-.move-status {
-  position: absolute !important;
-  right: 25px !important;
-  top: 135px !important;
-  width: 220px !important;
-  text-align: center !important;
-  font-size: 9px !important;
-  padding: 6px 12px !important;
-}
-/* GO/STOP buttons - centered between tap direction and card bottom */
-.exec-row {
-  position: absolute !important;
-  right: 15px !important;
-  top: 180px !important;
-  width: 240px !important;
-  flex-direction: row !important;
-  justify-content: center !important;
-  align-items: center !important;
-  gap: 20px !important;
-  margin-top: 0 !important;
-}
-.exec-btn {
-  flex: 0 0 auto !important;
-  padding: 0 !important;
-  font-size: 14px !important;
-  font-weight: bold !important;
-}
-/* GO button - green light (circle) - 20% bigger */
-.exec-btn.go {
-  width: 85px !important;
-  height: 85px !important;
-  border-radius: 50% !important;
-  padding: 0 !important;
-  background: radial-gradient(circle at 30% 30%, #7fff7f, #3cb550, #228b22) !important;
-  box-shadow: 0 0 30px rgba(0, 255, 0, 0.6), inset 0 -5px 10px rgba(0,0,0,0.3) !important;
-}
-/* STOP button - stop sign (octagon) - 20% bigger */
-.exec-btn.stop {
-  width: 85px !important;
-  height: 85px !important;
-  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%) !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  background: linear-gradient(145deg, #ff4444, #cc0000) !important;
-  box-shadow: 0 0 25px rgba(255, 0, 0, 0.5) !important;
-}
-/* Make drive card relative for absolute positioning */
-.middle-column .card {
-  position: relative !important;
-}
-.lidar3d-container {
-  height: 100% !important;
-  position: absolute !important;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
+.driver-temps-row { display: none !important; }
 
 /* Serial/Code/Battery buttons in camera column */
 .cam-triggers {
@@ -291,18 +45,6 @@
   background: linear-gradient(90deg, #f44, #fc0, #0f8);
   width: 75%;
   transition: width 0.3s;
-}
-.xbox-trigger {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: linear-gradient(135deg, #2a3a4a, #1a2a3a);
-  border: 2px solid rgba(100, 200, 255, 0.5);
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: #5af;
-  font-size: 0.75rem;
-  font-weight: bold;
 }
 
 /* Position stats bar on 3D map */
@@ -351,6 +93,318 @@
 .lidar3d-reset-btn:hover {
   background: rgba(255, 100, 100, 0.4);
 }
+
+.header-temp-left, .header-temp-right {
+  font-size: 0.75rem;
+  color: #fc0;
+  background: rgba(0,0,0,0.3);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.header-title {
+  color: #0f8;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+/* ============ DESKTOP ONLY STYLES (768px+) ============ */
+@media (min-width: 768px) {
+  /* TWO COLUMN LAYOUT: Cameras | Drive System (wider) */
+  .container {
+    grid-template-columns: minmax(300px, 1fr) minmax(400px, 600px) !important;
+    grid-template-rows: 50px auto 1fr !important;
+    grid-template-areas:
+      "header header"
+      "cams middle"
+      "cams lightcam" !important;
+  }
+  /* Remove padding from drive system */
+  .middle-column {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .drive-panel {
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* 3D map bigger - full card */
+  .light-cam-wide {
+    max-height: 520px !important;
+    position: relative;
+  }
+
+  /* LIDAR status floats on grid */
+  .lidar-status {
+    position: absolute !important;
+    top: 8px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 10;
+    background: rgba(0,0,0,0.5) !important;
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+    pointer-events: auto !important;
+  }
+
+  /* Fix ultrasonic badge positions */
+  .us-badge.us-fl { top: 8px !important; left: 8px !important; }
+  .us-badge.us-fr { top: 8px !important; right: 8px !important; }
+  .us-badge.us-rl { bottom: 60px !important; left: 8px !important; }
+  .us-badge.us-rr { bottom: 60px !important; right: 8px !important; }
+
+  /* Floating buttons on grid - below LIDAR status */
+  .lidar-btns-row {
+    position: absolute !important;
+    top: 38px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 20px !important;
+    z-index: 10;
+    pointer-events: auto !important;
+  }
+  .lidar3d-reset-btn, .lidar3d-expand-btn {
+    background: rgba(0,0,0,0.5) !important;
+    padding: 4px 10px !important;
+    border-radius: 4px !important;
+    position: static !important;
+    display: inline-block !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+
+  /* Drive System header with temps on sides */
+  .drive-header-with-temps {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 8px 10px !important;
+  }
+
+  /* Remove button outline from speed boxes */
+  .speed-box {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  /* Move robot visual to left */
+  .tank-robot-view {
+    justify-content: flex-start !important;
+    padding-left: 10px !important;
+    gap: 4px !important;
+    position: relative !important;
+  }
+  /* Center CEMANI label in chassis */
+  .tank-label {
+    text-align: center !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+  }
+  /* FWD/BACK buttons at edges of chassis */
+  .tank-dir-btn {
+    padding: 4px 6px !important;
+    font-size: 9px !important;
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+  }
+  #dirF {
+    top: 5px !important;
+  }
+  #dirB {
+    bottom: 5px !important;
+  }
+  /* Scale robot proportionally bigger */
+  .tank-body {
+    height: 170px !important;
+    width: 90px !important;
+    position: relative !important;
+  }
+  .tank-wheel {
+    width: 28px !important;
+    height: 55px !important;
+  }
+  .tank-track {
+    gap: 12px !important;
+  }
+  /* Position L/R buttons between wheels and chassis using absolute positioning */
+  .tank-steer-btn {
+    position: absolute !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    z-index: 10;
+  }
+  #dirL {
+    left: 44px !important;
+  }
+  #dirR {
+    left: 248px !important;
+  }
+  .speed-row {
+    justify-content: flex-start !important;
+    padding-left: 8px !important;
+    gap: 65px !important;
+    margin-top: -5px !important;
+  }
+  .speed-box {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    flex: 0 0 auto !important;
+  }
+  /* Pill-shaped ft buttons, horizontal row at top right */
+  .dist-row {
+    position: absolute !important;
+    right: 25px !important;
+    top: 80px !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    width: 220px !important;
+    margin-top: 0 !important;
+  }
+  .dist-btn {
+    flex: 0 0 auto !important;
+    padding: 8px 12px !important;
+    border-radius: 20px !important;
+    font-size: 0.8rem !important;
+  }
+  /* Move status text - smaller, below ft buttons */
+  .move-status {
+    position: absolute !important;
+    right: 25px !important;
+    top: 135px !important;
+    width: 220px !important;
+    text-align: center !important;
+    font-size: 9px !important;
+    padding: 6px 12px !important;
+  }
+  /* GO/STOP buttons - centered between tap direction and card bottom */
+  .exec-row {
+    position: absolute !important;
+    right: 15px !important;
+    top: 180px !important;
+    width: 240px !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 20px !important;
+    margin-top: 0 !important;
+  }
+  .exec-btn {
+    flex: 0 0 auto !important;
+    padding: 0 !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+  }
+  /* GO button - green light (circle) - 20% bigger */
+  .exec-btn.go {
+    width: 85px !important;
+    height: 85px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    background: radial-gradient(circle at 30% 30%, #7fff7f, #3cb550, #228b22) !important;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.6), inset 0 -5px 10px rgba(0,0,0,0.3) !important;
+  }
+  /* STOP button - stop sign (octagon) - 20% bigger */
+  .exec-btn.stop {
+    width: 85px !important;
+    height: 85px !important;
+    clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%) !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    background: linear-gradient(145deg, #ff4444, #cc0000) !important;
+    box-shadow: 0 0 25px rgba(255, 0, 0, 0.5) !important;
+  }
+  /* Make drive card relative for absolute positioning */
+  .middle-column .card {
+    position: relative !important;
+  }
+  .lidar3d-container {
+    height: 100% !important;
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+}
+
+/* ============ MOBILE STYLES (under 768px) ============ */
+@media (max-width: 767px) {
+  .cam-triggers {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+  }
+  .battery-trigger {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+  .position-stats-bar {
+    gap: 8px;
+    padding: 6px 10px;
+    flex-wrap: wrap;
+  }
+  .pos-label {
+    font-size: 7px;
+  }
+  .pos-val {
+    font-size: 11px;
+  }
+
+  /* LIDAR overlay - mobile layout */
+  /* Buttons row - spread across with LIDAR in middle */
+  .lidar-btns-row {
+    display: flex !important;
+    position: absolute !important;
+    top: 4px !important;
+    left: 60px !important;
+    right: 60px !important;
+    transform: none !important;
+    justify-content: space-between !important;
+    z-index: 20 !important;
+    pointer-events: auto !important;
+  }
+  .lidar3d-reset-btn {
+    position: static !important;
+    font-size: 9px !important;
+    padding: 5px 10px !important;
+    pointer-events: auto !important;
+    order: 1 !important;
+  }
+  .lidar3d-expand-btn {
+    position: static !important;
+    font-size: 9px !important;
+    padding: 5px 10px !important;
+    pointer-events: auto !important;
+    order: 2 !important;
+  }
+  /* LIDAR status centered between buttons */
+  .lidar-status {
+    display: block !important;
+    position: absolute !important;
+    top: 4px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    font-size: 8px !important;
+    padding: 4px 8px !important;
+    z-index: 21 !important;
+  }
+  /* Ultrasonic badges - corners */
+  .us-badge.us-fl { top: 4px !important; left: 4px !important; font-size: 8px !important; }
+  .us-badge.us-fr { top: 4px !important; right: 4px !important; font-size: 8px !important; }
+  .us-badge.us-rl { bottom: 45px !important; left: 8px !important; font-size: 8px !important; }
+  .us-badge.us-rr { bottom: 45px !important; right: 8px !important; font-size: 8px !important; }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -370,7 +424,15 @@
     <!-- Center: Title -->
     <h1>CEMANI COMMAND CENTER</h1>
 
-    <!-- Center-Right: Device Status (moved from CONNECTION section) -->
+    <!-- Mobile: Compact device status row -->
+    <div class="mobile-status-row">
+      <div class="mobile-dev" id="mobileEsp32"><span class="mobile-dev-dot"></span>ESP</div>
+      <div class="mobile-dev" id="mobileTeensy"><span class="mobile-dev-dot"></span>TNS</div>
+      <div class="mobile-dev" id="mobileJetson"><span class="mobile-dev-dot"></span>JET</div>
+      <div class="mobile-dev" id="mobileXbox"><span class="mobile-dev-dot"></span>XBX</div>
+    </div>
+
+    <!-- Desktop: Device Status (hidden on mobile) -->
     <div class="header-devices">
       <div class="device-chip" id="esp32Card">
         <span class="dev-icon">&#128225;</span>
@@ -506,8 +568,27 @@
         <span id="batteryPercent">--</span>
       </div>
 
-      <!-- Robot Top-Down View - Tank Style with Side Wheels and Controls -->
-      <div class="tank-robot-view">
+      <!-- MOBILE D-PAD (shows only on mobile) -->
+      <div class="mobile-dpad">
+        <div class="dpad-row">
+          <div class="dpad-btn empty"></div>
+          <div class="dpad-btn" id="mobileDirF">&#9650;<br>FWD</div>
+          <div class="dpad-btn empty"></div>
+        </div>
+        <div class="dpad-row">
+          <div class="dpad-btn" id="mobileDirL">&#9664;<br>L</div>
+          <div class="dpad-center">DIR</div>
+          <div class="dpad-btn" id="mobileDirR">R<br>&#9654;</div>
+        </div>
+        <div class="dpad-row">
+          <div class="dpad-btn empty"></div>
+          <div class="dpad-btn" id="mobileDirB">BACK<br>&#9660;</div>
+          <div class="dpad-btn empty"></div>
+        </div>
+      </div>
+
+      <!-- Robot Top-Down View - Tank Style (hidden on mobile) -->
+      <div class="tank-robot-view desktop-only">
         <!-- Left Steering Button -->
         <div class="tank-steer-btn" id="dirL">&#9664; L</div>
 
