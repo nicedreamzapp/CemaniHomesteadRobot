@@ -1,0 +1,15 @@
+{
+  "vps": {
+    "wsUrl": "wss://robot.marijuanaunion.com",
+    "authUser": "",
+    "authPass": ""
+  },
+  "lidar": {
+    "port": "/dev/ttyUSB0",
+    "baudrate": 115200
+  },
+  "stream": {
+    "fps": 10,
+    "maxPoints": 360
+  }
+}

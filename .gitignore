@@ -47,4 +47,10 @@ bluepad32-template/
 mac-camera-relay/config.json
 !mac-camera-relay/config.example.json
 jetson-camera-relay/config.json
-auth.json
+!jetson-camera-relay/config.example.json
+jetson-lidar/config.json
+!jetson-lidar/config.example.json
+
+# VPS auth (contains login credentials)
+vps-server/auth.json
+!vps-server/auth.example.json
