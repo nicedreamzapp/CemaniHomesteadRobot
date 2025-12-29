@@ -16,6 +16,12 @@ let lastLidarUpdate = 0;
 const LIDAR_UPDATE_INTERVAL = 100;
 let animFrameCount = 0;
 
+// Occupancy grid visualization
+let occupancyGridMesh = null;
+let lastGridUpdate = 0;
+const GRID_UPDATE_INTERVAL = 500;  // Update visualization every 500ms
+let mappingEnabled = true;
+
 // Initialize odomState
 window.odomState = window.odomState || { x: 0, y: 0, heading: 0, totalDistance: 0, trail: [{ x: 0, y: 0 }] };
 
@@ -443,6 +449,11 @@ function updateLidar3D(points) {
     }
   }
 
+  // Update occupancy grid if enabled
+  if (mappingEnabled && window.OccupancyGrid) {
+    window.OccupancyGrid.processLidarScan(robotX, -robotZ, robotHeading, points);
+  }
+
   // Add SLAM points with spacing filter
   for (const np of slamNewPoints) {
     let tooClose = false;
@@ -566,7 +577,132 @@ function animateLidar3D() {
   }
 
   lidar3dControls.update();
+
+  // Update occupancy grid visualization
+  updateOccupancyGridVisualization();
+
   lidar3dRenderer.render(lidar3dScene, lidar3dCamera);
+}
+
+// ============ OCCUPANCY GRID VISUALIZATION ============
+function updateOccupancyGridVisualization() {
+  if (!lidar3dScene || !window.OccupancyGrid || !mappingEnabled) return;
+
+  const now = Date.now();
+  if (now - lastGridUpdate < GRID_UPDATE_INTERVAL) return;
+  lastGridUpdate = now;
+
+  // Remove old mesh
+  if (occupancyGridMesh) {
+    if (occupancyGridMesh.geometry) occupancyGridMesh.geometry.dispose();
+    if (occupancyGridMesh.material) occupancyGridMesh.material.dispose();
+    lidar3dWorldContainer.remove(occupancyGridMesh);
+  }
+
+  const cells = window.OccupancyGrid.getAllCells();
+  if (cells.length === 0) return;
+
+  const cellSize = window.OccupancyGrid.cellSize;
+  const positions = [];
+  const colors = [];
+
+  for (const cell of cells) {
+    // Create a small square for each cell
+    const x = cell.x;
+    const z = -cell.y;  // Flip Y for Three.js
+    const y = 0.02;  // Slightly above ground
+
+    // Two triangles for a quad
+    positions.push(
+      x - cellSize/2, y, z - cellSize/2,
+      x + cellSize/2, y, z - cellSize/2,
+      x + cellSize/2, y, z + cellSize/2,
+      x - cellSize/2, y, z - cellSize/2,
+      x + cellSize/2, y, z + cellSize/2,
+      x - cellSize/2, y, z + cellSize/2
+    );
+
+    // Color based on state
+    let r, g, b;
+    if (cell.state === 1) {  // FREE
+      r = 0.1; g = 0.6; b = 0.2;  // Green
+    } else if (cell.state === 2) {  // OCCUPIED
+      r = 0.8; g = 0.1; b = 0.1;  // Red
+    } else {
+      r = 0.3; g = 0.3; b = 0.3;  // Gray unknown
+    }
+
+    // Adjust brightness by confidence
+    const conf = cell.confidence || 0.5;
+    r *= conf; g *= conf; b *= conf;
+
+    // 6 vertices per cell
+    for (let i = 0; i < 6; i++) {
+      colors.push(r, g, b);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+
+  const material = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.5,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+
+  occupancyGridMesh = new THREE.Mesh(geometry, material);
+  lidar3dWorldContainer.add(occupancyGridMesh);
+
+  // Update map stats display
+  const stats = window.OccupancyGrid.getStats();
+  const statsEl = document.getElementById('mapStats');
+  if (statsEl && stats) {
+    statsEl.textContent = `Map: ${stats.freeCells} free | ${stats.occupiedCells} blocked | ${stats.coverage}`;
+  }
+}
+
+function toggleMapping(enabled) {
+  mappingEnabled = enabled;
+  console.log('[MAP] Mapping', enabled ? 'enabled' : 'disabled');
+}
+
+function saveCurrentMap(name) {
+  if (!window.OccupancyGrid) return null;
+  const json = window.OccupancyGrid.exportMap();
+  if (json) {
+    // Save to localStorage for now
+    localStorage.setItem(`robotMap_${name}`, json);
+    console.log(`[MAP] Saved map: ${name}`);
+    return true;
+  }
+  return false;
+}
+
+function loadMap(name) {
+  if (!window.OccupancyGrid) return false;
+  const json = localStorage.getItem(`robotMap_${name}`);
+  if (json) {
+    window.OccupancyGrid.importMap(json);
+    console.log(`[MAP] Loaded map: ${name}`);
+    return true;
+  }
+  return false;
+}
+
+function getStoredMaps() {
+  const maps = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('robotMap_')) {
+      maps.push(key.replace('robotMap_', ''));
+    }
+  }
+  return maps;
 }
 
 // ============ RESIZE HANDLER ============
@@ -602,5 +738,10 @@ window.lidar3dModule = {
   updateUltrasonic3D,
   resizeLidar3D,
   toggleLidar3DFullscreen,
-  getDistanceColor3D
+  getDistanceColor3D,
+  // Mapping functions
+  toggleMapping,
+  saveCurrentMap,
+  loadMap,
+  getStoredMaps
 };

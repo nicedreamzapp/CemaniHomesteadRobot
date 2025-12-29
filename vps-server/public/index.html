@@ -680,8 +680,11 @@
         <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
         <div class="lidar-btns-row">
           <button class="lidar3d-reset-btn" onclick="resetOdometry()" title="Reset Position">RESET</button>
+          <button class="lidar3d-reset-btn" onclick="saveMapPrompt()" title="Save Map">SAVE MAP</button>
+          <button class="lidar3d-reset-btn" onclick="loadMapPrompt()" title="Load Map">LOAD MAP</button>
           <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen">⛶</button>
         </div>
+        <div id="mapStats" style="position:absolute;top:35px;left:10px;font-size:0.6rem;color:#0f8;background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px;">Map: 0 cells</div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
         <div class="us-badge us-fr" id="usBadgeFR">FR: --</div>
@@ -808,8 +811,35 @@
 <script src="js/audio-player.js?v=1"></script>
 <script src="js/cameras-ptz.js?v=1"></script>
 <script src="js/lidar2d.js?v=1"></script>
-<script src="js/lidar3d.js?v=1"></script>
+<script src="js/occupancy-grid.js?v=1"></script>
+<script src="js/lidar3d.js?v=2"></script>
 <script src="js/sonar-display.js?v=1"></script>
 <script src="js/websocket.js?v=51"></script>
+<script>
+// Map save/load prompts
+function saveMapPrompt() {
+  const name = prompt('Enter map name:', 'mymap');
+  if (name && window.lidar3dModule) {
+    if (window.lidar3dModule.saveCurrentMap(name)) {
+      alert('Map saved: ' + name);
+    }
+  }
+}
+function loadMapPrompt() {
+  const maps = window.lidar3dModule ? window.lidar3dModule.getStoredMaps() : [];
+  if (maps.length === 0) {
+    alert('No saved maps found');
+    return;
+  }
+  const name = prompt('Available maps: ' + maps.join(', ') + '\n\nEnter map name to load:');
+  if (name && window.lidar3dModule) {
+    if (window.lidar3dModule.loadMap(name)) {
+      alert('Map loaded: ' + name);
+    } else {
+      alert('Map not found: ' + name);
+    }
+  }
+}
+</script>
 </body>
 </html>
