@@ -6,7 +6,6 @@ let lidar3dRobot, lidar3dWalls = [], lidar3dPointCloud;
 let lidar3dTrailLine = null, lidar3dTrailGeom = null;
 let lidar3dInitialized = false;
 let lidar3dFrameCount = 0;
-let lidar3dGrid = null;
 let lidar3dWorldContainer = null;
 let lidar3dSlamPoints = [];
 let lidar3dSlamCloud = null;
@@ -105,14 +104,7 @@ function initLidar3D() {
   lidar3dWorldContainer = new THREE.Group();
   lidar3dScene.add(lidar3dWorldContainer);
 
-  // Grid - 30ft x 30ft
-  const gridSizeFt = 30;
-  const gridSizeM = gridSizeFt * 0.3048;
-  lidar3dGrid = new THREE.GridHelper(gridSizeM, gridSizeFt, 0x00ffff, 0x006666);
-  lidar3dGrid.position.y = 0.005;
-  lidar3dWorldContainer.add(lidar3dGrid);
-
-  // Ground
+  // Ground (no grid - was not moving properly)
   const groundGeom = new THREE.PlaneGeometry(30, 30);
   const groundMat = new THREE.MeshBasicMaterial({ color: 0x0a1520, transparent: true, opacity: 0.7 });
   const ground = new THREE.Mesh(groundGeom, groundMat);
@@ -185,24 +177,27 @@ function createRobot3D() {
   lidar.position.y = 0.24;
   group.add(lidar);
 
-  // Ultrasonic cones
+  // Ultrasonic cones - point outward from corners, edges barely touch
+  // Cones face outward at ~30 degrees from the robot's diagonal corners
   const conePositions = {
-    FL: { x: -0.12, z: -0.22, rotY: Math.PI * 0.15 },
-    FR: { x: 0.12, z: -0.22, rotY: -Math.PI * 0.15 },
-    RL: { x: -0.12, z: 0.22, rotY: Math.PI - Math.PI * 0.15 },
-    RR: { x: 0.12, z: 0.22, rotY: Math.PI + Math.PI * 0.15 }
+    FL: { x: -0.15, z: -0.20, rotY: -Math.PI * 0.75 },   // Front-left, points outward-left-forward
+    FR: { x: 0.15, z: -0.20, rotY: Math.PI * 0.75 },    // Front-right, points outward-right-forward
+    RL: { x: -0.15, z: 0.20, rotY: -Math.PI * 0.25 },   // Rear-left, points outward-left-backward
+    RR: { x: 0.15, z: 0.20, rotY: Math.PI * 0.25 }      // Rear-right, points outward-right-backward
   };
 
   Object.keys(conePositions).forEach(sensor => {
     const pos = conePositions[sensor];
-    const coneGeom = new THREE.ConeGeometry(0.15, 0.5, 16, 1, true);
+    // Larger cones: radius 0.25, length 0.8
+    const coneGeom = new THREE.ConeGeometry(0.25, 0.8, 16, 1, true);
     const coneMat = new THREE.MeshBasicMaterial({
       color: 0x00ffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false
     });
     const cone = new THREE.Mesh(coneGeom, coneMat);
-    cone.rotation.x = Math.PI / 2;
-    cone.rotation.z = pos.rotY;
-    cone.position.set(pos.x, 0.1, pos.z);
+    // Point cone horizontally outward: tip points away from robot center
+    cone.rotation.x = -Math.PI / 2;  // Point along Z axis
+    cone.rotation.y = pos.rotY;       // Rotate to face outward direction
+    cone.position.set(pos.x, 0.12, pos.z);
     cone.visible = false;
     cone.userData.sensor = sensor;
     group.add(cone);
@@ -371,9 +366,11 @@ function updateUltrasonic3D(sensor, distCm) {
 
   cone.visible = true;
   const distM = distCm / 100;
-  const coneLength = Math.min(distM * 0.8, 4);
-  const coneRadius = 0.08 + (distM * 0.05);
-  cone.scale.set(coneRadius / 0.15, coneLength / 0.5, coneRadius / 0.15);
+  // Scale cone length based on distance, larger base radius
+  const coneLength = Math.min(distM * 0.9, 5);
+  const coneRadius = 0.15 + (distM * 0.08);
+  // Base cone is 0.25 radius, 0.8 length
+  cone.scale.set(coneRadius / 0.25, coneLength / 0.8, coneRadius / 0.25);
 
   let color;
   if (distCm < 50) color = 0xff0000;
@@ -381,7 +378,7 @@ function updateUltrasonic3D(sensor, distCm) {
   else if (distCm < 200) color = 0xffff00;
   else color = 0x00ffff;
   cone.material.color.setHex(color);
-  cone.material.opacity = distCm < 100 ? 0.5 : 0.25;
+  cone.material.opacity = distCm < 100 ? 0.5 : 0.3;
 }
 
 // ============ ANIMATION LOOP ============
