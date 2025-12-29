@@ -145,16 +145,18 @@ function createRobot3D() {
   const whiteMat = new THREE.MeshPhongMaterial({ color: 0xf0f0f0 });
   const blackMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
 
-  // Dimensions (in meters) - robot is roughly 50cm x 45cm, wheels are 20cm diameter
-  const frameWidth = 0.50;   // 50cm wide
-  const frameDepth = 0.45;   // 45cm deep
-  const frameHeight = 0.35;  // 35cm tall main frame
+  // Dimensions (in meters) - rectangular frame, taller than wide, wheels extend outward
+  const frameWidth = 0.30;   // 30cm wide (narrow)
+  const frameDepth = 0.45;   // 45cm deep (longer front-to-back)
+  const frameHeight = 0.40;  // 40cm tall main frame (taller)
   const wheelRadius = 0.10;  // 8-inch wheels = ~20cm diameter
   const wheelWidth = 0.06;   // 6cm wide wheels
-  const tubeSize = 0.03;     // 3cm aluminum extrusion
+  const tubeSize = 0.025;    // 2.5cm aluminum extrusion
+  const wheelOffset = 0.10;  // Wheels extend 10cm beyond frame on each side
+  const midShelfHeight = 0.18; // Mid-level shelf at 18cm
 
-  // Ground clearance - wheels lift frame up
-  const groundClearance = wheelRadius;
+  // Ground clearance
+  const groundClearance = wheelRadius * 0.5;
 
   // ===== ALUMINUM EXTRUSION FRAME =====
   // Vertical corner posts
@@ -187,6 +189,18 @@ function createRobot3D() {
     group.add(rail);
   });
 
+  // Mid-level frame (shelf at midShelfHeight)
+  [[-frameDepth/2 + tubeSize/2, groundClearance + midShelfHeight], [frameDepth/2 - tubeSize/2, groundClearance + midShelfHeight]].forEach(([z, y]) => {
+    const rail = new THREE.Mesh(railXGeom, aluminumMat);
+    rail.position.set(0, y, z);
+    group.add(rail);
+  });
+  [[-frameWidth/2 + tubeSize/2, groundClearance + midShelfHeight], [frameWidth/2 - tubeSize/2, groundClearance + midShelfHeight]].forEach(([x, y]) => {
+    const rail = new THREE.Mesh(railZGeom, aluminumMat);
+    rail.position.set(x, y, 0);
+    group.add(rail);
+  });
+
   // Top frame
   [[-frameDepth/2 + tubeSize/2, groundClearance + frameHeight - tubeSize/2], [frameDepth/2 - tubeSize/2, groundClearance + frameHeight - tubeSize/2]].forEach(([z, y]) => {
     const rail = new THREE.Mesh(railXGeom, aluminumMat);
@@ -199,43 +213,43 @@ function createRobot3D() {
     group.add(rail);
   });
 
-  // ===== LIDAR TOWER (rear center) =====
-  const towerHeight = 0.55;  // Tall tower for LIDAR
+  // ===== LIDAR TOWER (rear center - short mount) =====
+  const towerHeight = 0.18;  // Short tower - just 18cm above frame
   const towerGeom = new THREE.BoxGeometry(tubeSize, towerHeight, tubeSize);
   const tower1 = new THREE.Mesh(towerGeom, aluminumMat);
-  tower1.position.set(-0.08, groundClearance + frameHeight + towerHeight/2, frameDepth/2 - 0.08);
+  tower1.position.set(-0.06, groundClearance + frameHeight + towerHeight/2, frameDepth/2 - 0.06);
   group.add(tower1);
   const tower2 = new THREE.Mesh(towerGeom, aluminumMat);
-  tower2.position.set(0.08, groundClearance + frameHeight + towerHeight/2, frameDepth/2 - 0.08);
+  tower2.position.set(0.06, groundClearance + frameHeight + towerHeight/2, frameDepth/2 - 0.06);
   group.add(tower2);
 
-  // Tower cross beam
-  const towerBeamGeom = new THREE.BoxGeometry(0.20, tubeSize, tubeSize);
+  // Tower cross beam at top
+  const towerBeamGeom = new THREE.BoxGeometry(0.15, tubeSize, tubeSize);
   const towerBeam = new THREE.Mesh(towerBeamGeom, aluminumMat);
-  towerBeam.position.set(0, groundClearance + frameHeight + towerHeight - tubeSize/2, frameDepth/2 - 0.08);
+  towerBeam.position.set(0, groundClearance + frameHeight + towerHeight - tubeSize/2, frameDepth/2 - 0.06);
   group.add(towerBeam);
 
   // Green LED strip on tower
-  const ledGeom = new THREE.BoxGeometry(0.01, towerHeight * 0.7, 0.01);
+  const ledGeom = new THREE.BoxGeometry(0.008, towerHeight * 0.8, 0.008);
   const led = new THREE.Mesh(ledGeom, greenLedMat);
-  led.position.set(0, groundClearance + frameHeight + towerHeight * 0.4, frameDepth/2 - 0.06);
+  led.position.set(0.07, groundClearance + frameHeight + towerHeight * 0.5, frameDepth/2 - 0.06);
   group.add(led);
 
   // ===== LIDAR SENSOR (black cylinder on top of tower) =====
-  const lidarGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.04, 16);
+  const lidarGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.035, 16);
   const lidarMat = new THREE.MeshPhongMaterial({ color: 0x111111, specular: 0x222222 });
   const lidar = new THREE.Mesh(lidarGeom, lidarMat);
-  lidar.position.set(0, groundClearance + frameHeight + towerHeight + 0.02, frameDepth/2 - 0.08);
+  lidar.position.set(0, groundClearance + frameHeight + towerHeight + 0.02, frameDepth/2 - 0.06);
   group.add(lidar);
 
   // LIDAR spinning indicator
   const lidarRing = new THREE.Mesh(
-    new THREE.TorusGeometry(0.05, 0.005, 8, 24),
+    new THREE.TorusGeometry(0.04, 0.004, 8, 24),
     new THREE.MeshBasicMaterial({ color: 0x00ff88 })
   );
   lidarRing.rotation.x = Math.PI / 2;
   lidarRing.position.copy(lidar.position);
-  lidarRing.position.y += 0.025;
+  lidarRing.position.y += 0.02;
   group.add(lidarRing);
 
   // ===== PTZ CAMERA (front-left on arm) =====
@@ -268,28 +282,40 @@ function createRobot3D() {
   lens.position.set(-frameWidth/2 - 0.12, groundClearance + frameHeight * 0.7 - 0.04, -frameDepth/2 + 0.10);
   group.add(lens);
 
-  // ===== WHEELS (4 large wheels at corners) =====
+  // ===== WHEELS (4 large wheels extending outward from frame) =====
   const wheelGeom = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 24);
-  const hubGeom = new THREE.CylinderGeometry(wheelRadius * 0.4, wheelRadius * 0.4, wheelWidth + 0.01, 16);
-  const hubMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+  const hubGeom = new THREE.CylinderGeometry(wheelRadius * 0.35, wheelRadius * 0.35, wheelWidth + 0.01, 16);
+  const hubMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
+  const motorHousingMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
 
+  // Wheels extend beyond frame width
+  const totalWidth = frameWidth + wheelOffset * 2;
+  const wheelY = wheelRadius;
   const wheelPositions = [
-    [-frameWidth/2 + 0.02, wheelRadius, -frameDepth/2 + 0.05],  // Front-left
-    [frameWidth/2 - 0.02, wheelRadius, -frameDepth/2 + 0.05],   // Front-right
-    [-frameWidth/2 + 0.02, wheelRadius, frameDepth/2 - 0.05],   // Rear-left
-    [frameWidth/2 - 0.02, wheelRadius, frameDepth/2 - 0.05]     // Rear-right
+    { x: -totalWidth/2 + wheelWidth/2, z: -frameDepth/2 + 0.08, side: 'left' },   // Front-left
+    { x: totalWidth/2 - wheelWidth/2, z: -frameDepth/2 + 0.08, side: 'right' },   // Front-right
+    { x: -totalWidth/2 + wheelWidth/2, z: frameDepth/2 - 0.08, side: 'left' },    // Rear-left
+    { x: totalWidth/2 - wheelWidth/2, z: frameDepth/2 - 0.08, side: 'right' }     // Rear-right
   ];
 
   wheelPositions.forEach(pos => {
+    // Motor housing (box connecting frame to wheel)
+    const housingGeom = new THREE.BoxGeometry(wheelOffset - 0.02, 0.08, 0.10);
+    const housing = new THREE.Mesh(housingGeom, motorHousingMat);
+    const housingX = pos.side === 'left' ? -frameWidth/2 - wheelOffset/2 + 0.01 : frameWidth/2 + wheelOffset/2 - 0.01;
+    housing.position.set(housingX, groundClearance + 0.04, pos.z);
+    group.add(housing);
+
+    // Wheel
     const wheel = new THREE.Mesh(wheelGeom, wheelMat);
     wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(...pos);
+    wheel.position.set(pos.x, wheelY, pos.z);
     group.add(wheel);
 
     // Hub cap
     const hub = new THREE.Mesh(hubGeom, hubMat);
     hub.rotation.z = Math.PI / 2;
-    hub.position.set(...pos);
+    hub.position.set(pos.x, wheelY, pos.z);
     group.add(hub);
   });
 
@@ -314,17 +340,17 @@ function createRobot3D() {
   arrow.position.set(0, groundClearance + 0.01, -frameDepth/2 - 0.05);
   group.add(arrow);
 
-  // Ultrasonic cones - positioned at frame corners, point outward
+  // Ultrasonic cones - positioned at outer wheel positions, point outward
   const conePositions = {
-    FL: { x: -frameWidth/2, z: -frameDepth/2, rotY: Math.PI * 0.25 },
-    FR: { x: frameWidth/2, z: -frameDepth/2, rotY: -Math.PI * 0.25 },
-    RL: { x: -frameWidth/2, z: frameDepth/2, rotY: -Math.PI * 0.75 },
-    RR: { x: frameWidth/2, z: frameDepth/2, rotY: Math.PI * 0.75 }
+    FL: { x: -totalWidth/2, z: -frameDepth/2 + 0.05, rotY: Math.PI * 0.25 },
+    FR: { x: totalWidth/2, z: -frameDepth/2 + 0.05, rotY: -Math.PI * 0.25 },
+    RL: { x: -totalWidth/2, z: frameDepth/2 - 0.05, rotY: -Math.PI * 0.75 },
+    RR: { x: totalWidth/2, z: frameDepth/2 - 0.05, rotY: Math.PI * 0.75 }
   };
 
   Object.keys(conePositions).forEach(sensor => {
     const pos = conePositions[sensor];
-    const coneGeom = new THREE.ConeGeometry(0.25, 0.8, 16, 1, true);
+    const coneGeom = new THREE.ConeGeometry(0.20, 0.6, 16, 1, true);
     const coneMat = new THREE.MeshBasicMaterial({
       color: 0x00ffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false
     });
@@ -332,7 +358,7 @@ function createRobot3D() {
     const isFront = sensor === 'FL' || sensor === 'FR';
     cone.rotation.x = isFront ? Math.PI / 2 : -Math.PI / 2;
     cone.rotation.y = pos.rotY;
-    cone.position.set(pos.x, groundClearance + 0.15, pos.z);
+    cone.position.set(pos.x, wheelY, pos.z);
     cone.visible = false;
     cone.userData.sensor = sensor;
     group.add(cone);
