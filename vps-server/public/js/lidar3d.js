@@ -178,12 +178,12 @@ function createRobot3D() {
   group.add(lidar);
 
   // Ultrasonic cones - point outward from corners, edges barely touch
-  // Cones face outward at ~30 degrees from the robot's diagonal corners
+  // Front cones point forward-outward, rear cones point backward-outward
   const conePositions = {
-    FL: { x: -0.15, z: -0.20, rotY: -Math.PI * 0.75 },   // Front-left, points outward-left-forward
-    FR: { x: 0.15, z: -0.20, rotY: Math.PI * 0.75 },    // Front-right, points outward-right-forward
-    RL: { x: -0.15, z: 0.20, rotY: -Math.PI * 0.25 },   // Rear-left, points outward-left-backward
-    RR: { x: 0.15, z: 0.20, rotY: Math.PI * 0.25 }      // Rear-right, points outward-right-backward
+    FL: { x: -0.15, z: -0.20, rotY: Math.PI * 0.25 },    // Front-left, points left-forward
+    FR: { x: 0.15, z: -0.20, rotY: -Math.PI * 0.25 },   // Front-right, points right-forward
+    RL: { x: -0.15, z: 0.20, rotY: -Math.PI * 0.75 },   // Rear-left, points left-backward
+    RR: { x: 0.15, z: 0.20, rotY: Math.PI * 0.75 }      // Rear-right, points right-backward
   };
 
   Object.keys(conePositions).forEach(sensor => {
@@ -194,9 +194,10 @@ function createRobot3D() {
       color: 0x00ffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false
     });
     const cone = new THREE.Mesh(coneGeom, coneMat);
-    // Point cone horizontally outward: tip points away from robot center
-    cone.rotation.x = -Math.PI / 2;  // Point along Z axis
-    cone.rotation.y = pos.rotY;       // Rotate to face outward direction
+    // Front cones: wide base outward. Rear cones: tip outward (as they were)
+    const isFront = sensor === 'FL' || sensor === 'FR';
+    cone.rotation.x = isFront ? Math.PI / 2 : -Math.PI / 2;
+    cone.rotation.y = pos.rotY;
     cone.position.set(pos.x, 0.12, pos.z);
     cone.visible = false;
     cone.userData.sensor = sensor;
