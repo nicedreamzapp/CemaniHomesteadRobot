@@ -1,25 +1,31 @@
-# URGENT: LIDAR Grid Movement Bug - START HERE
+# Robot LIDAR Grid Movement - ENCODER-BASED
 
-## IMMEDIATE ACTION REQUIRED
-When this project opens, **immediately read `LIDAR_GRID_MOVEMENT_DEBUG.md`** and continue debugging the grid movement issue. The user has been working on this for 2+ days.
+## Current Status (Dec 29, 2024)
+Encoder-based odometry is now **ENABLED**. The 3D LIDAR grid will move when the robot's wheels actually turn (based on encoder readings from the Teensy), not when commands are sent.
 
-## The Problem (Summary)
-The 3D LIDAR grid should move under the robot when it drives. Console logs show position values ARE changing, but the grid does NOT visually move. This is a bizarre Three.js rendering mystery.
-
-## Current State (v50)
-- Yellow "TEST GRID" button added to 3D view
-- Green debug display shows Container Z/X values
-- All test infrastructure is deployed to VPS
-- 15+ debugging attempts documented in `LIDAR_GRID_MOVEMENT_DEBUG.md`
-
-## Next Steps
-1. Read `LIDAR_GRID_MOVEMENT_DEBUG.md` for full context
-2. Ask user: "When you click TEST GRID, do the numbers in the green debug box change?"
-3. If yes (numbers change but no visual) → Three.js rendering issue
-4. If no (numbers don't change) → JavaScript execution issue
-5. Follow the "What To Try Next" section in the debug doc
+## How It Works
+1. Teensy sends TELEM messages with encoder positions (posL, posR) every ~200ms
+2. Server calculates delta movement from previous encoder readings
+3. Server broadcasts `dead_reckoning` message with updated position
+4. UI updates grid position in animation loop from `window.odomState`
 
 ## Key Files
-- `vps-server/public/js/websocket.js` - 3D LIDAR visualization (lines 920-1700)
-- `vps-server/public/index.html` - UI with TEST GRID button
-- `LIDAR_GRID_MOVEMENT_DEBUG.md` - Full debug documentation
+- `vps-server/server.js` - Encoder processing (lines 395-475)
+- `vps-server/public/js/websocket.js` - 3D LIDAR visualization
+- `teensy-robot/src/telemetry.cpp` - Teensy TELEM format (line 196)
+
+## Debug Logs
+When robot moves, you should see:
+```
+[ENC] posL=10985 posR=11140 prevL=10980 prevR=11135 dL=5 dR=5
+[ODOM] Movement detected: x=15mm, y=20mm, heading=0.5°
+```
+
+## If Grid Doesn't Move
+1. Check encoder values are changing: `pm2 logs robot | grep ENC`
+2. Verify TELEM messages: `pm2 logs robot | grep TELEM`
+3. The grid only moves when encoder deltas are non-zero
+
+## Deployment Note
+Server runs from `/opt/robot-server/` (not /opt/robot/)
+Deploy with: `scp server.js root@72.60.124.34:/opt/robot-server/server.js && ssh root@72.60.124.34 "pm2 restart robot"`

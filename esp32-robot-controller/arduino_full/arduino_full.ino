@@ -1,8 +1,9 @@
 /*
- * Cemani Robot Controller v3.9.0
+ * Cemani Robot Controller v3.10.0
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket + WIRELESS OTA
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.10.0 - BROWNOUT DETECTION DISABLED - prevents resets during motor startup
  * v3.9.0 - WATCHDOG AUTO-REBOOT - reboots if WebSocket disconnected >2 minutes
  * v3.8.0 - AGGRESSIVE XBOX SCANNING - polls 5x per loop until connected
  *        - Re-enables Bluetooth scan every 2s when no controller
@@ -17,6 +18,10 @@
  *
  * SETUP: Copy credentials.h.example to credentials.h and add your WiFi passwords
  */
+
+// Disable brownout detector - prevents ESP32 reset when motors cause voltage drop
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 #include <WiFi.h>
 #include <WiFiMulti.h>
@@ -79,9 +84,12 @@ static inline int16_t deadzone(int v) {
 }
 
 void setup() {
+  // Disable brownout detector - prevents resets when motors cause voltage dips
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
   delay(100);  // Minimal delay for serial init
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.9.0 - WATCHDOG ENABLED!");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.10.0 - BROWNOUT DISABLED!");
 
   // Initialize NVS - keeps paired Bluetooth devices for instant reconnection
   nvs_flash_init();

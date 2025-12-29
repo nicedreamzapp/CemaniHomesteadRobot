@@ -1,0 +1,103 @@
+// ============ SHARED STATE MODULE ============
+// Robot, Camera, Teensy state and broadcast function
+
+const WebSocket = require("ws");
+
+// ============ ROBOT STATE ============
+let robotSocket = null;
+let robotStatus = {
+  connected: false,
+  version: "unknown",
+  wifi: "unknown",
+  rssi: 0,
+  ip: "unknown",
+  uptime: 0,
+  controller: "none",
+  lastSeen: null
+};
+
+// ============ TEENSY STATE ============
+let teensyStatus = {
+  connected: false,
+  lastSeen: 0,
+  version: "unknown"
+};
+const TEENSY_TIMEOUT_MS = 5000;
+
+// ============ CAMERA STATE ============
+let cameraSocket = null;
+let cameraStatus = {
+  connected: false,
+  ip: "unknown",
+  streaming: false
+};
+
+// Per-camera streaming status with timeout detection
+const perCameraStatus = {
+  1: { streaming: false, lastFrame: 0 },
+  2: { streaming: false, lastFrame: 0 }
+};
+const CAMERA_TIMEOUT_MS = 3000;
+
+// WebSocket server reference (set by main server.js)
+let wss = null;
+
+// ============ SETTERS ============
+function setWss(server) {
+  wss = server;
+}
+
+function setRobotSocket(socket) {
+  robotSocket = socket;
+}
+
+function setCameraSocket(socket) {
+  cameraSocket = socket;
+}
+
+// ============ GETTERS ============
+function getRobotSocket() {
+  return robotSocket;
+}
+
+function getCameraSocket() {
+  return cameraSocket;
+}
+
+function getWss() {
+  return wss;
+}
+
+// ============ BROADCAST ============
+function broadcast(data, skip = null) {
+  if (!wss) return;
+  const msg = JSON.stringify(data);
+  wss.clients.forEach(c => {
+    if (c !== skip && c.readyState === WebSocket.OPEN) {
+      c.send(msg);
+    }
+  });
+}
+
+module.exports = {
+  // State objects
+  robotStatus,
+  teensyStatus,
+  cameraStatus,
+  perCameraStatus,
+
+  // Constants
+  TEENSY_TIMEOUT_MS,
+  CAMERA_TIMEOUT_MS,
+
+  // Socket getters/setters
+  setWss,
+  setRobotSocket,
+  setCameraSocket,
+  getRobotSocket,
+  getCameraSocket,
+  getWss,
+
+  // Broadcast
+  broadcast
+};
