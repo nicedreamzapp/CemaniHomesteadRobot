@@ -5,11 +5,12 @@
 ### Autonomous Tank Platform for Homestead Automation
 
 ![Made with](https://img.shields.io/badge/Made_with-Blood_Sweat_Tears-red?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Remote_Control_Live-green?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Autonomous_Mapping-green?style=for-the-badge)
 ![Power](https://img.shields.io/badge/Power-24V_LiFePO4-orange?style=for-the-badge)
 ![Remote](https://img.shields.io/badge/Remote-Control_From_Anywhere-blue?style=for-the-badge)
 ![LIDAR](https://img.shields.io/badge/LIDAR-360°_3D_Mapping-purple?style=for-the-badge)
-![Sonar](https://img.shields.io/badge/Sonar-4x_Ultrasonic-cyan?style=for-the-badge)
+![AI](https://img.shields.io/badge/AI-YOLOv8_601_Classes-yellow?style=for-the-badge)
+![Sensors](https://img.shields.io/badge/Sensors-GPS_Compass_Sonar-cyan?style=for-the-badge)
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
 
@@ -102,40 +103,50 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 |----------|----------|
 | **Controls** | Tank drive with L/R steering, distance presets (0.5ft/1ft/3ft/10ft), GO/STOP buttons |
 | **LIDAR** | Real-time 3D point cloud visualization, 360° scanning, obstacle detection |
+| **AI Detection** | YOLOv8 on dual cameras, 601 classes, indoor/outdoor filtering, bounding boxes |
+| **Autonomous** | MAP mode for sensor fusion navigation, emergency STOP button |
 | **Telemetry** | Motor RPM, battery voltage (%), driver temps, WiFi signal, uptime |
 | **Cameras** | Dual PTZ with RTSP streaming, ONVIF pan/tilt, two-way audio |
 | **Sonar** | 4x ultrasonic sensors with color-coded proximity badges (FL/FR/RL/RR) |
+| **GPS** | Real-time position, satellite count, heading from compass |
 | **Dev Tools** | Serial monitor popup, code editor, wireless compile & upload |
 | **Tracking** | Position tracker with X/Y coordinates, heading, trip distance, encoder ticks |
 
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    ANYWHERE IN THE WORLD                     │
-│                                                              │
-│   Browser ──HTTPS/WebSocket──► VPS Server (Node.js)         │
-│                                      │                       │
-│                               WebSocket                      │
-│                                      ▼                       │
-│   ┌────────────────────────────────────────────────────┐    │
-│   │                  ROBOT HARDWARE                     │    │
-│   │                                                     │    │
-│   │  8BitDo Controller ◄──Bluetooth──► ESP32           │    │
-│   │                                      │              │    │
-│   │                                   Serial            │    │
-│   │                                      ▼              │    │
-│   │                                  Teensy 4.1         │    │
-│   │                                      │              │    │
-│   │                                   Modbus            │    │
-│   │                                      ▼              │    │
-│   │                              ZLAC8015D Drivers      │    │
-│   │                                      │              │    │
-│   │                    ┌─────────────────┼─────────────┐│    │
-│   │                    ▼         ▼       ▼         ▼   ││    │
-│   │                 [FL]      [FR]    [RL]      [RR]   ││    │
-│   └────────────────────────────────────────────────────┘│    │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                      ANYWHERE IN THE WORLD                         │
+│                                                                    │
+│   Browser ──HTTPS/WebSocket──► VPS Server (Node.js)               │
+│                                      │                             │
+│                               WebSocket                            │
+│                                      ▼                             │
+│   ┌────────────────────────────────────────────────────────────┐  │
+│   │                     ROBOT HARDWARE                          │  │
+│   │                                                             │  │
+│   │  ┌─────────────────────────────────────────────────────┐   │  │
+│   │  │ JETSON ORIN NANO                                    │   │  │
+│   │  │  • YOLOv8 Object Detection (601 classes)            │   │  │
+│   │  │  • Sensor Fusion (LIDAR + cameras + GPS + sonar)    │   │  │
+│   │  │  • Autonomous Navigation                            │   │  │
+│   │  └─────────────────────────────────────────────────────┘   │  │
+│   │                          │                                  │  │
+│   │  8BitDo Controller ◄──Bluetooth──► ESP32 ◄───► Cameras     │  │
+│   │                                      │         (2x PTZ)     │  │
+│   │                                   Serial                    │  │
+│   │                                      ▼                      │  │
+│   │                              Teensy 4.1                     │  │
+│   │                       ┌──────────┴──────────┐               │  │
+│   │                    Modbus              Sensors               │  │
+│   │                       ▼                   ▼                  │  │
+│   │               ZLAC8015D Drivers    GPS + Compass             │  │
+│   │                       │            4x Ultrasonic             │  │
+│   │         ┌─────────────┼─────────────┐  LIDAR                 │  │
+│   │         ▼         ▼   ▼         ▼   │                        │  │
+│   │      [FL]      [FR] [RL]      [RR]  │                        │  │
+│   └─────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -168,8 +179,20 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 |-----------|-------|--------|
 | **RPLidar A1** | 360°, 12m range, 8000 samples/sec | ✅ Working |
 | **4x Ultrasonic** | JSN-SR04T-V3.0, 21-600cm | ✅ Working |
-| **2x PTZ Cameras** | Sricam 1080p RTSP/ONVIF | ✅ Working |
-| **GPS Module** | u-blox NEO-M8N | 🔜 Next |
+| **2x PTZ Cameras** | Sricam 1080p RTSP/ONVIF + YOLOv8 | ✅ AI Detection |
+| **GPS Module** | u-blox NEO-M8N | ✅ Working |
+| **Compass** | QMC5883L Digital | ✅ Working |
+
+### AI Object Detection
+
+| Feature | Details |
+|---------|---------|
+| **Model** | YOLOv8n with Open Images v7 |
+| **Classes** | 601 objects (people, animals, vehicles, furniture, etc.) |
+| **Indoor Filter** | 168 classes (furniture, appliances, household items) |
+| **Outdoor Filter** | 195 classes (animals, vehicles, plants, structures) |
+| **Dual Camera** | Front + Rear simultaneous detection |
+| **Inference** | 5 FPS on Jetson Orin Nano |
 
 ### Computing
 
@@ -201,6 +224,10 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 | Xbox Controller | ✅ | Bluetooth via ESP32, exponential curves |
 | Web Command Center | ✅ | Control from anywhere, glassmorphism UI |
 | **3D LIDAR Mapping** | ✅ | Real-time 360° point cloud, obstacle visualization |
+| **AI Object Detection** | ✅ | YOLOv8 on both cameras, 601 classes |
+| **Indoor/Outdoor Filter** | ✅ | Context-aware detection filtering |
+| **GPS + Compass** | ✅ | Position and heading awareness |
+| **Autonomous Mapping** | ✅ | Sensor fusion navigation (LIDAR+cameras+sonar) |
 | Dual PTZ Cameras | ✅ | RTSP streaming, ONVIF pan/tilt |
 | Audio Streaming | ✅ | Hear surroundings through browser |
 | Wireless Programming | ✅ | Flash Teensy from browser |
@@ -213,10 +240,9 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 | Feature | Status | Notes |
 |---------|:------:|-------|
-| GPS Navigation | 🔜 | All-weather positioning |
-| SLAM Navigation | 🔜 | Using LIDAR for autonomous mapping |
-| Predator Detection | 🔜 | YOLOv8 on Jetson |
-| Autonomous Patrol | 🔜 | Waypoint navigation |
+| Waypoint Navigation | 🔜 | Save and replay GPS routes |
+| Predator Detection | 🔜 | Alert on coyote/hawk detection |
+| Autonomous Patrol | 🔜 | Scheduled patrol routes |
 
 ---
 
@@ -239,7 +265,11 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 ✅ Phase 6.12: Ultrasonic proximity sensors
 ✅ Phase 6.13: 3D LIDAR mapping with real-time visualization
 ✅ Phase 6.14: Position tracking with odometry
-🔜 Phase 7:   Autonomous patrol (Jetson + SLAM + GPS)
+✅ Phase 6.15: GPS + Compass integration
+✅ Phase 6.16: YOLOv8 object detection (601 classes, dual cameras)
+✅ Phase 6.17: Indoor/outdoor detection filtering
+✅ Phase 6.18: Autonomous mapping with sensor fusion
+🔜 Phase 7:   Waypoint navigation + patrol routes
 🔜 Phase 8:   Deterrent system (siren, strobes)
 ```
 
@@ -345,14 +375,18 @@ void setDriverSpeed(uint8_t driver_id, int16_t rpm) {
 
 ```
 CemaniHomesteadRobot/
-├── teensy-robot/           # Motor control firmware (PlatformIO)
-├── esp32-robot-controller/ # Bluepad32 + WiFi + WebSocket
-├── vps-server/             # Node.js server + Command Center UI
-├── jetson-lidar/           # LIDAR processing on Jetson Orin Nano
-├── jetson-camera-relay/    # Camera relay for Jetson
-├── mac-camera-relay/       # Camera relay for Mac
-├── ZLAC8015D-V2.0/         # Driver documentation
-└── docs/                   # Images and diagrams
+├── teensy-robot/              # Motor control firmware (PlatformIO)
+├── esp32-robot-controller/    # Bluepad32 + WiFi + WebSocket
+├── vps-server/                # Node.js server + Command Center UI
+├── jetson-object-detection/   # YOLOv8 detection + autonomous navigation
+│   ├── detect.py              # Dual-camera object detection (601 classes)
+│   ├── autonomous.py          # Sensor fusion autonomous mapping
+│   └── setup.sh               # Jetson setup script
+├── jetson-lidar/              # LIDAR processing on Jetson Orin Nano
+├── jetson-camera-relay/       # Camera relay for Jetson
+├── mac-camera-relay/          # Camera relay for Mac
+├── ZLAC8015D-V2.0/            # Driver documentation
+└── docs/                      # Images and diagrams
 ```
 
 ---
@@ -363,14 +397,17 @@ CemaniHomesteadRobot/
 - [x] LIDAR integration with 3D visualization
 - [x] Position tracking with odometry
 - [x] Jetson Orin Nano integration
+- [x] GPS + Compass sensors
+- [x] YOLOv8 object detection (601 classes)
+- [x] Indoor/outdoor detection filtering
+- [x] Sensor fusion autonomous mapping
 
 ### Next Up
-- [ ] GPS module installation
-- [ ] SLAM-based autonomous navigation
-- [ ] YOLOv8 predator detection
+- [ ] Waypoint save/replay navigation
+- [ ] Predator alert system (coyote, hawk)
+- [ ] Scheduled patrol routes
 
 ### Future
-- [ ] Autonomous patrol routes
 - [ ] Siren + strobe deterrents
 - [ ] Train body for kids
 - [ ] Fish-controlled mode (because why not)
