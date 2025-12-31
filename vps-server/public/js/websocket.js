@@ -41,6 +41,11 @@ ws.onmessage = function(e) {
     if (window.lidar2dModule) window.lidar2dModule.drawLidarPoints(d.points);
   }
 
+  // Object detection from Jetson
+  if (d.type === 'detections') {
+    handleDetections(d.camera, d.detections);
+  }
+
   // Dead reckoning (encoder-based position)
   if (d.type === 'dead_reckoning') {
     handleDeadReckoning(d);
@@ -59,6 +64,11 @@ ws.onmessage = function(e) {
         window.camerasPtzModule.initCam1();
       }
     }
+  }
+
+  // Compass auto-calibration status
+  if (d.type === 'compass_cal') {
+    updateCompassCalStatus(d.status);
   }
 
   // Camera streams
@@ -157,6 +167,34 @@ function handleSerialData(d) {
     return;
   }
 
+  // Parse COMPASS data: COMPASS,heading,x,y,z
+  if (d.data && d.data.startsWith('COMPASS,')) {
+    const parts = d.data.split(',');
+    if (parts.length >= 5 && window.lidar3dModule) {
+      const heading = parseFloat(parts[1]);
+      const x = parseInt(parts[2]);
+      const y = parseInt(parts[3]);
+      const z = parseInt(parts[4]);
+      window.lidar3dModule.updateCompass(heading, x, y, z);
+    }
+    return;
+  }
+
+  // Parse GPS data: GPS,valid,lat,lon,sats,lastLat,lastLon
+  if (d.data && d.data.startsWith('GPS,')) {
+    const parts = d.data.split(',');
+    if (parts.length >= 7 && window.lidar3dModule) {
+      const valid = parseInt(parts[1]) === 1;
+      const lat = parseFloat(parts[2]);
+      const lon = parseFloat(parts[3]);
+      const sats = parseInt(parts[4]);
+      const lastLat = parseFloat(parts[5]);
+      const lastLon = parseFloat(parts[6]);
+      window.lidar3dModule.updateGps(valid, lat, lon, sats, lastLat, lastLon);
+    }
+    return;
+  }
+
   // Skip version in serial
   if (d.data && d.data.startsWith('TEENSY_VERSION,')) return;
 
@@ -201,67 +239,96 @@ function handleDeadReckoning(d) {
   }
 }
 
-// ============ STATUS UPDATE HANDLER ============
+// ============ STATUS UPDATE HANDLER (with debouncing) ============
+let lastEsp32Online = false;  // Start false so first status update triggers UI
+let lastTeensyOnline = false;
+let esp32OfflineTimeout = null;
+let teensyOfflineTimeout = null;
+const STATUS_DEBOUNCE_MS = 5000;  // Don't show offline for 5 seconds
+
 function handleStatusUpdate(d) {
-  document.getElementById('status').textContent = d.connected ? 'ONLINE' : 'OFFLINE';
-  document.getElementById('status').className = 'status-text ' + (d.connected ? 'online' : '');
+  // Debounced ESP32 status - only show offline after 5 seconds
+  if (d.connected) {
+    if (esp32OfflineTimeout) { clearTimeout(esp32OfflineTimeout); esp32OfflineTimeout = null; }
+    if (!lastEsp32Online) {
+      lastEsp32Online = true;
+      updateEsp32UI(true);
+    }
+  } else {
+    if (lastEsp32Online && !esp32OfflineTimeout) {
+      esp32OfflineTimeout = setTimeout(() => {
+        lastEsp32Online = false;
+        updateEsp32UI(false);
+      }, STATUS_DEBOUNCE_MS);
+    }
+  }
 
-  const statusDot = document.getElementById('statusDot');
-  if (statusDot) statusDot.className = 'status-dot ' + (d.connected ? 'online' : 'offline');
-
-  const esp32Mini = document.getElementById('esp32StatusMini');
-  const teensyMini = document.getElementById('teensyStatusMini');
-  if (esp32Mini) esp32Mini.textContent = d.connected ? 'OK' : '--';
-  if (teensyMini) teensyMini.textContent = d.teensyConnected ? 'OK' : '--';
-
-  document.getElementById('esp32Status').textContent = d.connected ? 'Online' : 'Offline';
-  document.getElementById('esp32Card').className = 'device-chip' + (d.connected ? ' online' : '');
-
-  const mobileEsp = document.getElementById('mobileEsp32');
-  if (mobileEsp) mobileEsp.className = 'mobile-dev' + (d.connected ? ' online' : '');
-
+  // Debounced Teensy status
   if (d.teensyConnected !== undefined) {
-    document.getElementById('teensyStatus').textContent = d.teensyConnected ? 'Online' : 'Offline';
-    document.getElementById('teensyCard').className = 'device-chip' + (d.teensyConnected ? ' online' : '');
-    const mobileTeensy = document.getElementById('mobileTeensy');
-    if (mobileTeensy) mobileTeensy.className = 'mobile-dev' + (d.teensyConnected ? ' online' : '');
+    if (d.teensyConnected) {
+      if (teensyOfflineTimeout) { clearTimeout(teensyOfflineTimeout); teensyOfflineTimeout = null; }
+      if (!lastTeensyOnline) {
+        lastTeensyOnline = true;
+        updateTeensyUI(true, d.teensyVersion);
+      }
+    } else {
+      if (lastTeensyOnline && !teensyOfflineTimeout) {
+        teensyOfflineTimeout = setTimeout(() => {
+          lastTeensyOnline = false;
+          updateTeensyUI(false);
+        }, STATUS_DEBOUNCE_MS);
+      }
+    }
   }
   if (d.teensyVersion) {
     document.getElementById('teensyVersion').textContent = 'v' + d.teensyVersion;
   }
 
+  // Always update other info if connected
   if (d.connected) {
     if (d.wifi && d.wifi !== 'unknown') document.getElementById('wifi').textContent = d.wifi;
     if (d.rssi) document.getElementById('rssi').textContent = d.rssi + ' dBm';
     if (d.ip && d.ip !== 'unknown') document.getElementById('ip').textContent = d.ip;
     if (d.version && d.version !== 'unknown') {
       document.getElementById('version').textContent = 'v' + d.version;
-      document.getElementById('esp32Version').textContent = 'v' + d.version;
+      const v = document.getElementById('esp32Version');
+      if (v) v.textContent = 'v' + d.version;
     }
     if (d.uptime) {
       var mins = Math.floor(d.uptime / 60);
       document.getElementById('uptime').textContent = mins + 'm';
     }
-  } else {
-    document.getElementById('wifi').textContent = '--';
-    document.getElementById('rssi').textContent = '--';
-    document.getElementById('ip').textContent = '--';
-    document.getElementById('version').textContent = '--';
-    document.getElementById('uptime').textContent = '--';
   }
 
   if (d.camera && window.camerasPtzModule) {
     window.camerasPtzModule.updateCam1Status(d.camera.connected, d.camera.streaming);
-    if (d.camera.streaming && !window.camerasPtzModule.getCam1Active()) {
-      window.camerasPtzModule.initCam1();
-    }
   }
 
-  if (!d.connected) {
-    if (typeof updateXboxStatus === 'function') updateXboxStatus(false);
-  } else if (d.controller) {
-    if (typeof updateXboxStatus === 'function') updateXboxStatus(d.controller === 'connected');
+  if (d.controller && typeof updateXboxStatus === 'function') {
+    updateXboxStatus(d.controller === 'connected');
   }
+}
+
+function updateEsp32UI(online) {
+  document.getElementById('status').textContent = online ? 'ONLINE' : 'OFFLINE';
+  document.getElementById('status').className = 'status-text ' + (online ? 'online' : '');
+  const statusDot = document.getElementById('statusDot');
+  if (statusDot) statusDot.className = 'status-dot ' + (online ? 'online' : 'offline');
+  const esp32Mini = document.getElementById('esp32StatusMini');
+  if (esp32Mini) esp32Mini.textContent = online ? 'OK' : '--';
+  document.getElementById('esp32Status').textContent = online ? 'Online' : 'Offline';
+  document.getElementById('esp32Card').className = 'device-chip' + (online ? ' online' : '');
+  const mobileEsp = document.getElementById('mobileEsp32');
+  if (mobileEsp) mobileEsp.className = 'mobile-dev' + (online ? ' online' : '');
+}
+
+function updateTeensyUI(online, version) {
+  const teensyMini = document.getElementById('teensyStatusMini');
+  if (teensyMini) teensyMini.textContent = online ? 'OK' : '--';
+  document.getElementById('teensyStatus').textContent = online ? 'Online' : 'Offline';
+  document.getElementById('teensyCard').className = 'device-chip' + (online ? ' online' : '');
+  const mobileTeensy = document.getElementById('mobileTeensy');
+  if (mobileTeensy) mobileTeensy.className = 'mobile-dev' + (online ? ' online' : '');
 }
 
 // ============ GLOBAL FUNCTIONS ============
@@ -279,4 +346,117 @@ function toggleLidar3DFullscreen() {
   if (window.lidar3dModule) window.lidar3dModule.toggleLidar3DFullscreen();
 }
 
-console.log('[WS] Modular WebSocket v51 loaded');
+// Auto-calibration status handler (compass auto-calibrates while driving)
+function updateCompassCalStatus(status) {
+  const calState = document.getElementById('calState');
+  if (!calState) return;
+
+  if (status === 'SAVED' || status === 'COMPLETE') {
+    calState.textContent = '✓';
+    calState.style.color = '#0f8';
+  } else if (status === 'CALIBRATING') {
+    calState.textContent = '...';
+    calState.style.color = '#fc0';
+  } else {
+    calState.textContent = '--';
+    calState.style.color = '#888';
+  }
+}
+
+// ============ OBJECT DETECTION HANDLER ============
+// Stores current detections for each camera
+let cameraDetections = { 1: [], 2: [] };
+
+// Living creatures (drawn with circle around head)
+const livingClasses = ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+  'elephant', 'bear', 'zebra', 'giraffe', 'rabbit', 'duck', 'chicken', 'deer'];
+
+function handleDetections(cameraId, detections) {
+  cameraDetections[cameraId] = detections;
+
+  // Update detection overlay on camera canvas
+  drawDetectionOverlay(cameraId, detections);
+
+  // Update detection list panel
+  updateDetectionPanel(cameraId, detections);
+}
+
+function drawDetectionOverlay(cameraId, detections) {
+  const canvasId = cameraId === 1 ? 'overlayCanvas1' : 'overlayCanvas2';
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  // Match canvas size to container
+  const container = canvas.parentElement;
+  if (container) {
+    canvas.width = container.clientWidth || 320;
+    canvas.height = container.clientHeight || 180;
+  }
+
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Clear previous overlays
+  ctx.clearRect(0, 0, w, h);
+
+  detections.forEach(det => {
+    const cx = det.bbox.x * w;
+    const cy = det.bbox.y * h;
+    const bw = det.bbox.w * w;
+    const bh = det.bbox.h * h;
+    const x1 = cx - bw/2;
+    const y1 = cy - bh/2;
+
+    // Label: "ClassName 0.85" (like original - no % sign)
+    const label = det.class + ' ' + det.confidence.toFixed(2);
+    const textX = Math.max(0, Math.min(cx - 50, w - 100));
+
+    if (livingClasses.includes(det.class)) {
+      // Living: gold circle around head, label above
+      const headRadius = bw * 0.2;
+      const headY = y1 + headRadius;
+
+      ctx.beginPath();
+      ctx.arc(cx, headY, headRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgb(255, 196, 64)';  // Gold (BGR 255,196,64)
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const textY = Math.max(headY - headRadius - 10, 20);
+      ctx.font = '500 12px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, textX, textY);
+    } else {
+      // Non-living: just label at center
+      const textY = Math.max(cy, 20);
+      ctx.font = '500 12px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, textX, textY);
+    }
+  });
+}
+
+function updateDetectionPanel(cameraId, detections) {
+  const panel = document.getElementById('detectionPanel' + cameraId);
+  if (!panel) return;
+
+  if (detections.length === 0) {
+    panel.innerHTML = '';
+    return;
+  }
+
+  // Group by class and show count - clean white text
+  const counts = {};
+  detections.forEach(d => {
+    counts[d.class] = (counts[d.class] || 0) + 1;
+  });
+
+  let items = [];
+  for (const [cls, count] of Object.entries(counts)) {
+    items.push(cls + (count > 1 ? ' x' + count : ''));
+  }
+  panel.innerHTML = items.join(', ');
+}
+
+console.log('[WS] Modular WebSocket v54 - Object detection + mapping mode');

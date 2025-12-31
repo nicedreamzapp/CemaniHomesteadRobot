@@ -5,6 +5,7 @@
 #include "movement.h"
 #include "modbus.h"
 #include "config.h"
+#include "safety.h"
 
 // Movement state variables
 bool discreteMoveActive = false;
@@ -323,6 +324,17 @@ void updateDiscreteMove() {
 
   uint32_t now = millis();
   uint32_t elapsed = now - discreteMoveStartTime;
+
+  // ===== SAFETY CHECK DURING DISCRETE MOVEMENT =====
+  // Check for obstacles while moving
+  int16_t moveSpeed = discreteMoveBackward ? -DISCRETE_MOVE_RPM : DISCRETE_MOVE_RPM;
+  if (discreteMovePhase == 2 && safetyCheck(moveSpeed, moveSpeed)) {
+    // Safety triggered - stop discrete movement
+    fullStopMotors();
+    Serial.println("[MOVE] Stopped by safety system!");
+    Serial1.println("MOVE_STOPPED,SAFETY");
+    return;
+  }
 
   if (discreteMovePhase == 1) {
     // Turning phase

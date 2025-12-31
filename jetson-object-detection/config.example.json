@@ -1,0 +1,22 @@
+{
+  "cameras": [
+    {
+      "id": 1,
+      "name": "Front",
+      "rtsp_url": "rtsp://USER:PASSWORD@CAMERA_IP:554/onvif1"
+    },
+    {
+      "id": 2,
+      "name": "Rear",
+      "rtsp_url": "rtsp://USER:PASSWORD@CAMERA_IP:554/onvif1"
+    }
+  ],
+  "vps_ws_url": "ws://YOUR_VPS_IP:3001",
+  "model_path": "yolov8n-oiv7.pt",
+  "inference_size": 640,
+  "confidence_threshold": 0.05,
+  "small_object_threshold": 0.03,
+  "iou_threshold": 0.4,
+  "inference_interval_ms": 200,
+  "max_detections_per_frame": 20
+}

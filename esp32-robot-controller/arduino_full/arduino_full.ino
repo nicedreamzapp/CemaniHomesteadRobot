@@ -1,8 +1,13 @@
 /*
- * Cemani Robot Controller v3.10.0
+ * Cemani Robot Controller v3.13.0
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket + WIRELESS OTA
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * v3.13.0 - SERIAL FORWARDING THROTTLE - only forward ONE message per loop
+ *         - Prevents "message too big" (1009) errors from buffer overflow
+ * v3.12.0 - Increased loop delay to 10ms for WebSocket stability
+ * v3.11.0 - WEBSOCKET STABILITY FIX - added 5ms loop delay to prevent WebSocket starvation
+ *         - Reduced aggressive Bluetooth polling that was interfering with WiFi
  * v3.10.0 - BROWNOUT DETECTION DISABLED - prevents resets during motor startup
  * v3.9.0 - WATCHDOG AUTO-REBOOT - reboots if WebSocket disconnected >2 minutes
  * v3.8.0 - AGGRESSIVE XBOX SCANNING - polls 5x per loop until connected
@@ -89,7 +94,7 @@ void setup() {
 
   Serial.begin(115200);
   delay(100);  // Minimal delay for serial init
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.10.0 - BROWNOUT DISABLED!");
+  Serial.println("\n[ESP32] Cemani Robot Controller v3.13.0 - SERIAL THROTTLE FIX!");
 
   // Initialize NVS - keeps paired Bluetooth devices for instant reconnection
   nvs_flash_init();
@@ -176,16 +181,11 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // XBOX PRIORITY: If no controller, poll Bluetooth aggressively
-  // This is the key to fast Xbox connection - don't let WiFi slow us down
-  if (!myGamepad) {
-    // Aggressive Bluetooth polling - multiple updates per loop iteration
-    for (int i = 0; i < 5; i++) {
-      BP32.update();
-      if (myGamepad) break;  // Connected! Stop polling
-      delayMicroseconds(500);  // 0.5ms between polls
-    }
+  // XBOX: Poll Bluetooth - but don't starve WiFi/WebSocket
+  // Single update per loop is enough - aggressive polling was causing WiFi issues
+  BP32.update();
 
+  if (!myGamepad) {
     // Re-enable scanning periodically in case it got disabled
     static unsigned long lastScanEnable = 0;
     if (now - lastScanEnable > 2000) {
@@ -198,9 +198,6 @@ void loop() {
       Serial.println("[BP32] Scanning for Xbox controller...");
       lastXboxScanLog = now;
     }
-  } else {
-    // Controller connected - normal single update
-    BP32.update();
   }
 
   webSocket.loop();
@@ -248,10 +245,9 @@ void loop() {
   }
   forwardTeensySerial();
 
-  // Only delay when controller is connected - maximize scan speed otherwise
-  if (myGamepad) {
-    delay(1);
-  }
+  // CRITICAL: Always delay to let WebSocket process properly
+  // Without this, the tight loop starves WebSocket and causes disconnects
+  delay(10);  // 10ms delay prevents WebSocket starvation (was 5ms - not enough)
 
   // WATCHDOG: Reboot if WebSocket disconnected too long
   // This prevents the ESP32 from getting stuck in a bad state
@@ -427,7 +423,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.9.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.13.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +
@@ -437,9 +433,11 @@ void sendTelemetry() {
 }
 
 void forwardTeensySerial() {
-  while (teensySerial.available()) {
+  // Only forward ONE message per loop to avoid overwhelming WebSocket
+  // This prevents "message too big" errors (1009)
+  if (teensySerial.available()) {
     String line = teensySerial.readStringUntil('\n');
-    line.trim();  // Remove \r and whitespace
+    line.trim();
     if (line.length() > 0 && wsConnected) {
       String escaped = escapeForJson(line);
       String msg = "{\"type\":\"serial\",\"data\":\"" + escaped + "\"}";
@@ -538,6 +536,17 @@ void handleFlashMessage(uint8_t* payload, size_t length) {
     if (dataStart > 8 && dataEnd > dataStart) {
       String cmd = msg.substring(dataStart, dataEnd);
       teensySerial.println(cmd);
+    }
+  }
+
+  // Serial command pass-through to Teensy (for compass calibration, etc)
+  if (msg.indexOf("\"type\":\"serial_cmd\"") != -1) {
+    int cmdStart = msg.indexOf("\"cmd\":\"") + 7;
+    int cmdEnd = msg.indexOf("\"", cmdStart);
+    if (cmdStart > 7 && cmdEnd > cmdStart) {
+      String cmd = msg.substring(cmdStart, cmdEnd);
+      teensySerial.println(cmd);
+      Serial.println("[SERIAL_CMD] " + cmd);
     }
   }
 

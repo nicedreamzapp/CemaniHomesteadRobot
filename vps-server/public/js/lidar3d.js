@@ -20,10 +20,18 @@ let animFrameCount = 0;
 let occupancyGridMesh = null;
 let lastGridUpdate = 0;
 const GRID_UPDATE_INTERVAL = 500;  // Update visualization every 500ms
-let mappingEnabled = true;
+let mappingEnabled = false;  // Disabled - was cluttering the view
 
 // Initialize odomState
 window.odomState = window.odomState || { x: 0, y: 0, heading: 0, totalDistance: 0, trail: [{ x: 0, y: 0 }] };
+
+// GPS and Compass state
+window.gpsState = window.gpsState || { valid: false, lat: 0, lon: 0, sats: 0, lastLat: 0, lastLon: 0 };
+window.compassState = window.compassState || { heading: 0, x: 0, y: 0, z: 0 };
+
+// Compass visual elements
+let compassRose = null;
+let compassNeedle = null;
 
 // ============ RESET FUNCTION ============
 window.clearLidarSlamMap = function() {
@@ -121,18 +129,18 @@ function initLidar3D() {
   lidar3dRobot = createRobot3D();
   lidar3dScene.add(lidar3dRobot);
 
-  // Trail line
-  lidar3dTrailGeom = new THREE.BufferGeometry();
-  const trailMat = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8 });
-  lidar3dTrailLine = new THREE.Line(lidar3dTrailGeom, trailMat);
-  lidar3dWorldContainer.add(lidar3dTrailLine);
+  // Trail line - DISABLED (was cluttering the view)
+  // lidar3dTrailGeom = new THREE.BufferGeometry();
+  // const trailMat = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8 });
+  // lidar3dTrailLine = new THREE.Line(lidar3dTrailGeom, trailMat);
+  // lidar3dWorldContainer.add(lidar3dTrailLine);
 
-  // SLAM point cloud
-  lidar3dSlamCloud = new THREE.Points(
-    new THREE.BufferGeometry(),
-    new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, opacity: 0.8 })
-  );
-  lidar3dWorldContainer.add(lidar3dSlamCloud);
+  // SLAM point cloud - DISABLED (was cluttering the view)
+  // lidar3dSlamCloud = new THREE.Points(
+  //   new THREE.BufferGeometry(),
+  //   new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, opacity: 0.8 })
+  // );
+  // lidar3dWorldContainer.add(lidar3dSlamCloud);
 
   lidar3dInitialized = true;
   animateLidar3D();
@@ -727,6 +735,54 @@ function toggleLidar3DFullscreen() {
   }
 }
 
+// ============ COMPASS UPDATE ============
+function updateCompass(heading, x, y, z) {
+  window.compassState = { heading, x, y, z };
+
+  // Update compass display in UI
+  const compassEl = document.getElementById('compassHeading');
+  if (compassEl) {
+    compassEl.textContent = heading.toFixed(0);
+  }
+
+  // Update compass needle rotation
+  const needleEl = document.getElementById('compassNeedle');
+  if (needleEl) {
+    needleEl.style.transform = `rotate(${heading}deg)`;
+  }
+
+  // Update cardinal direction
+  const dirEl = document.getElementById('compassDir');
+  if (dirEl) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const idx = Math.round(heading / 45) % 8;
+    dirEl.textContent = dirs[idx];
+  }
+}
+
+// ============ GPS UPDATE ============
+function updateGps(valid, lat, lon, sats, lastLat, lastLon) {
+  window.gpsState = { valid, lat, lon, sats, lastLat, lastLon };
+
+  // Use last valid position if current is invalid
+  const displayLat = (valid && lat !== 0) ? lat : lastLat;
+  const displayLon = (valid && lon !== 0) ? lon : lastLon;
+
+  // Update GPS display in UI
+  const latEl = document.getElementById('gpsLat');
+  const lonEl = document.getElementById('gpsLon');
+  const satsEl = document.getElementById('gpsSats');
+  const statusEl = document.getElementById('gpsStatus');
+
+  if (latEl) latEl.textContent = displayLat.toFixed(6);
+  if (lonEl) lonEl.textContent = displayLon.toFixed(6);
+  if (satsEl) satsEl.textContent = sats;
+  if (statusEl) {
+    statusEl.textContent = valid ? 'FIX' : (lastLat !== 0 ? 'LAST' : 'NO FIX');
+    statusEl.style.color = valid ? '#0f8' : (lastLat !== 0 ? '#fc0' : '#f44');
+  }
+}
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', initLidar3D);
 setTimeout(initLidar3D, 500);
@@ -743,5 +799,8 @@ window.lidar3dModule = {
   toggleMapping,
   saveCurrentMap,
   loadMap,
-  getStoredMaps
+  getStoredMaps,
+  // GPS/Compass functions
+  updateCompass,
+  updateGps
 };

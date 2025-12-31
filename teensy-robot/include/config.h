@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.40"
+#define TEENSY_VERSION "3.70"  // Autonomous navigation + LIDAR mapping
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true

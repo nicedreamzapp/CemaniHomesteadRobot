@@ -133,7 +133,9 @@ wss.on("connection", (ws, req) => {
     }
   });
 
-  ws.on("close", () => {
+  ws.on("close", (code, reason) => {
+    ws.closeCode = code;
+    ws.closeReason = reason ? reason.toString() : '';
     handleDisconnect(ws);
   });
 });
@@ -211,6 +213,15 @@ function handleMessage(ws, data) {
     }
   }
 
+  // Serial command to Teensy (via ESP32)
+  if (data.type === "serial_cmd") {
+    const rs = state.getRobotSocket();
+    if (rs && rs.readyState === WebSocket.OPEN) {
+      rs.send(JSON.stringify({ type: "serial_cmd", cmd: data.cmd }));
+      console.log("[SERIAL_CMD]", data.cmd);
+    }
+  }
+
   // Emergency stop
   if (data.type === "emergency_stop") {
     const rs = state.getRobotSocket();
@@ -240,6 +251,101 @@ function handleMessage(ws, data) {
   }
   if (data.type === "lidar" && ws.isJetsonLidar) {
     state.broadcast({ type: "lidar", points: data.points, count: data.count }, ws);
+  }
+
+  // Jetson object detection
+  if (data.type === "identify" && data.device === "jetson-detection") {
+    ws.isJetsonDetection = true;
+    console.log("[JETSON] Object detection connected");
+  }
+  if (data.type === "JETSON_REGISTER") {
+    ws.isJetsonDetection = true;
+    console.log("[JETSON] Object detection registered with capabilities:", data.capabilities);
+  }
+  if (data.type === "DETECTIONS") {
+    // Mark sender as detection source if not already identified
+    if (!ws.isJetsonDetection) {
+      ws.isJetsonDetection = true;
+      console.log("[JETSON] Object detection connected via detections");
+    }
+    // Log priority detections
+    const priority = data.detections.filter(d => d.is_priority);
+    if (priority.length > 0) {
+      console.log(`[DETECT] CAM${data.camera} PRIORITY: ${priority.map(p => p.class).join(', ')}`);
+    }
+    // Broadcast to all browsers
+    state.broadcast({
+      type: "detections",
+      camera: data.camera,
+      detections: data.detections,
+      count: data.count
+    }, ws);
+  }
+
+  // Detection settings from browser - broadcast to Jetson
+  if (data.type === "detection_settings") {
+    console.log(`[DETECT] Settings: filter=${data.filter_mode}, confidence=${data.confidence}`);
+    // Send to all Jetson detection clients
+    wss.clients.forEach(client => {
+      if (client.isJetsonDetection && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: "DETECTION_SETTINGS",
+          filter_mode: data.filter_mode,
+          confidence: data.confidence
+        }));
+      }
+    });
+  }
+
+  // Autonomous navigation registration
+  if (data.type === "JETSON_REGISTER" && data.device === "autonomous") {
+    ws.isAutonomous = true;
+    console.log("[AUTONOMOUS] Navigator connected");
+    state.broadcast({ type: "autonomous_status", connected: true });
+  }
+
+  // Autonomous commands from Jetson -> Robot
+  if (data.type === "autonomous_cmd") {
+    const rs = state.getRobotSocket();
+    if (rs && rs.readyState === WebSocket.OPEN) {
+      // Map autonomous commands to serial commands
+      const cmdMap = {
+        "STOP": "STOP",
+        "FORWARD": `AUTO_FWD,${data.value}`,
+        "REVERSE": `AUTO_REV,${data.value}`,
+        "TURN_LEFT": `AUTO_LEFT,${data.value}`,
+        "TURN_RIGHT": `AUTO_RIGHT,${data.value}`
+      };
+      const serialCmd = cmdMap[data.cmd] || "STOP";
+      rs.send(JSON.stringify({ type: "serial_cmd", cmd: serialCmd }));
+      console.log(`[AUTONOMOUS] ${data.cmd} -> ${serialCmd}`);
+    }
+  }
+
+  // Autonomous control from browser -> Jetson
+  if (data.type === "autonomous_control") {
+    console.log(`[AUTONOMOUS] Control: ${data.cmd}`);
+    // Broadcast to autonomous navigator
+    wss.clients.forEach(client => {
+      if (client.isAutonomous && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: "AUTONOMOUS_CONTROL",
+          cmd: data.cmd
+        }));
+      }
+    });
+    // Also send mode change to robot
+    const rs = state.getRobotSocket();
+    if (rs && rs.readyState === WebSocket.OPEN) {
+      if (data.cmd === "START") {
+        rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
+      } else if (data.cmd === "STOP" || data.cmd === "PAUSE") {
+        rs.send(JSON.stringify({ type: "serial_cmd", cmd: "STOP" }));
+        rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MANUAL" }));
+      }
+    }
+    // Broadcast status to browsers
+    state.broadcast({ type: "autonomous_status", running: data.cmd === "START" });
   }
 
   // Status request
@@ -309,6 +415,45 @@ function handleSerialData(data, ws) {
       state.teensyStatus.lastSeen = Date.now();
       console.log(`[TEENSY] Version: ${state.teensyStatus.version}`);
       state.broadcast({ type: "status", ...state.robotStatus, camera: state.cameraStatus, teensyConnected: state.teensyStatus.connected, teensyVersion: state.teensyStatus.version });
+    }
+  }
+
+  // Handle compass auto-calibration status
+  if (data.data && data.data.startsWith("COMPASS_CAL,")) {
+    const parts = data.data.split(",");
+    const status = parts[1];  // SAVED, COMPLETE, STARTED
+    console.log(`[COMPASS] Calibration: ${status}`);
+    state.broadcast({ type: "compass_cal", status: status });
+  }
+
+  // Handle compass data: COMPASS,heading,x,y,z
+  if (data.data && data.data.startsWith("COMPASS,")) {
+    const parts = data.data.split(",");
+    if (parts.length >= 5) {
+      const heading = parseFloat(parts[1]);
+      console.log(`[COMPASS] Heading: ${heading.toFixed(1)}°`);
+      state.broadcast({ type: "compass", heading: heading, x: parseInt(parts[2]), y: parseInt(parts[3]), z: parseInt(parts[4]) });
+    }
+  }
+
+  // Handle I2C scan results
+  if (data.data && data.data.startsWith("I2C_SCAN,")) {
+    console.log(`[I2C] ${data.data}`);
+    state.broadcast({ type: "i2c_scan", data: data.data });
+  }
+
+  // Handle GPS data: GPS,valid,lat,lon,sats,lastLat,lastLon
+  if (data.data && data.data.startsWith("GPS,")) {
+    const parts = data.data.split(",");
+    if (parts.length >= 5) {
+      const valid = parts[1] === "1";
+      const lat = parseFloat(parts[2]);
+      const lon = parseFloat(parts[3]);
+      const sats = parseInt(parts[4]);
+      if (valid && lat !== 0 && lon !== 0) {
+        console.log(`[GPS] ${lat.toFixed(6)}, ${lon.toFixed(6)} (${sats} sats)`);
+      }
+      state.broadcast({ type: "gps", valid: valid, lat: lat, lon: lon, sats: sats });
     }
   }
 
@@ -442,6 +587,8 @@ function handleDisconnect(ws) {
   const cameraSocket = state.getCameraSocket();
 
   if (ws.isRobot && ws === robotSocket) {
+    const connectedMs = Date.now() - (ws.connectedAt || 0);
+    console.log(`[ROBOT] ESP32 disconnected after ${connectedMs}ms, closeCode: ${ws.closeCode}, closeReason: ${ws.closeReason || 'none'}`);
     state.setRobotSocket(null);
     state.robotStatus.connected = false;
     state.robotStatus.wifi = "unknown";
@@ -451,7 +598,6 @@ function handleDisconnect(ws) {
     state.robotStatus.uptime = 0;
     state.robotStatus.controller = "none";
     state.broadcast({ type: "status", ...state.robotStatus, camera: state.cameraStatus });
-    console.log("[ROBOT] ESP32 disconnected");
   }
 
   if (ws.isCamera && ws === cameraSocket) {

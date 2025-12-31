@@ -22,7 +22,7 @@ let teensyStatus = {
   lastSeen: 0,
   version: "unknown"
 };
-const TEENSY_TIMEOUT_MS = 5000;
+const TEENSY_TIMEOUT_MS = 15000;  // Increased to prevent jumpy status
 
 // ============ CAMERA STATE ============
 let cameraSocket = null;
@@ -69,10 +69,16 @@ function getWss() {
 }
 
 // ============ BROADCAST ============
+// IMPORTANT: Always skip robot and camera sockets!
+// The ESP32 has a small WebSocket buffer and will disconnect if overwhelmed
+// with broadcasts (status updates, LIDAR data, etc) it doesn't need.
 function broadcast(data, skip = null) {
   if (!wss) return;
   const msg = JSON.stringify(data);
   wss.clients.forEach(c => {
+    // Skip the robot socket (ESP32) - it can't handle receiving broadcasts
+    // Skip the camera socket - it only sends frames, doesn't need status
+    if (c === robotSocket || c === cameraSocket) return;
     if (c !== skip && c.readyState === WebSocket.OPEN) {
       c.send(msg);
     }

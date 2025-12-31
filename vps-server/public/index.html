@@ -405,6 +405,12 @@
   .us-badge.us-rl { bottom: 45px !important; left: 8px !important; font-size: 8px !important; }
   .us-badge.us-rr { bottom: 45px !important; right: 8px !important; font-size: 8px !important; }
 }
+
+/* Emergency Stop pulse animation */
+@keyframes pulse-stop {
+  0%, 100% { box-shadow: 0 0 12px rgba(255,0,0,0.4); }
+  50% { box-shadow: 0 0 20px rgba(255,0,0,0.7); }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -485,11 +491,22 @@
   <div class="cameras-column glass">
     <!-- FRONT CAM -->
     <div class="cam-wrapper">
-      <div class="cam-label-centered">&#9650; FRONT CAM</div>
+      <div class="cam-label-centered" style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">
+        <span>&#9650; FRONT CAM</span>
+        <!-- Detection filter - tiny liquid glass -->
+        <div id="detectionFilter" style="display:flex;gap:2px;background:rgba(255,255,255,0.1);backdrop-filter:blur(4px);border-radius:3px;padding:1px 3px;font-size:8px;">
+          <span id="filterAll" onclick="setDetectionFilter('all')" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:rgba(255,200,0,0.8);color:#000;">ALL</span>
+          <span id="filterIn" onclick="setDetectionFilter('indoor')" style="padding:1px 4px;border-radius:2px;cursor:pointer;color:#5af;">IN</span>
+          <span id="filterOut" onclick="setDetectionFilter('outdoor')" style="padding:1px 4px;border-radius:2px;cursor:pointer;color:#0f8;">OUT</span>
+          <span id="confDisplay" style="padding:1px 3px;color:#888;cursor:pointer;" onclick="cycleConfidence()" title="Click to cycle confidence">5%</span>
+        </div>
+      </div>
       <div class="cam-container" id="cam1-container">
         <div class="cam-video">
           <div id="cam1-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+          <canvas id="overlayCanvas1" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
         </div>
+        <div id="detectionPanel1" style="position:absolute;bottom:2px;left:2px;font-size:10px;color:#0f8;background:rgba(0,0,0,0.6);padding:2px 4px;border-radius:3px;max-width:90%;overflow:hidden;white-space:nowrap;"></div>
         <div class="cam-overlay">
           <div class="cam-status-badge" id="cam1-status">OFFLINE</div>
           <div class="ptz-overlay">
@@ -513,7 +530,9 @@
       <div class="cam-container" id="cam2-container">
         <div class="cam-video">
           <div id="cam2-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+          <canvas id="overlayCanvas2" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
         </div>
+        <div id="detectionPanel2" style="position:absolute;bottom:2px;left:2px;font-size:10px;color:#0f8;background:rgba(0,0,0,0.6);padding:2px 4px;border-radius:3px;max-width:90%;overflow:hidden;white-space:nowrap;"></div>
         <div class="cam-overlay">
           <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
           <div class="speaker-btn muted" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">🔇</div>
@@ -667,6 +686,8 @@
         <button class="exec-btn go" onclick="executeQueue()">GO</button>
         <button class="exec-btn stop" onclick="emergencyStop()">STOP</button>
       </div>
+
+      <!-- MODE/DETECTION controls moved to camera header -->
     </div>
 
   </div>
@@ -679,25 +700,65 @@
         <!-- LIDAR status and buttons floating on grid -->
         <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
         <div class="lidar-btns-row">
-          <button class="lidar3d-reset-btn" onclick="resetOdometry()" title="Reset Position">RESET</button>
-          <button class="lidar3d-reset-btn" onclick="saveMapPrompt()" title="Save Map">SAVE MAP</button>
-          <button class="lidar3d-reset-btn" onclick="loadMapPrompt()" title="Load Map">LOAD MAP</button>
           <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen">⛶</button>
         </div>
-        <div id="mapStats" style="position:absolute;top:35px;left:10px;font-size:0.6rem;color:#0f8;background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px;">Map: 0 cells</div>
+        <!-- Compass and GPS combined - above ultrasonic badges -->
+        <div id="compassGpsDisplay" style="position:absolute;bottom:90px;right:10px;background:rgba(0,0,0,0.75);border:1px solid rgba(0,255,136,0.4);border-radius:8px;padding:8px;display:flex;align-items:center;gap:12px;">
+          <!-- Compass -->
+          <div style="position:relative;width:50px;height:50px;border:1px solid #0f8;border-radius:50%;">
+            <div id="compassNeedle" style="width:3px;height:18px;background:linear-gradient(to bottom, #f44 50%, #aaa 50%);position:absolute;left:50%;top:8px;margin-left:-1.5px;transform-origin:bottom center;transition:transform 0.15s;"></div>
+            <div style="position:absolute;top:1px;left:50%;transform:translateX(-50%);font-size:0.4rem;color:#f44;font-weight:bold;">N</div>
+            <div style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);font-size:0.35rem;color:#666;">S</div>
+            <div style="position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:0.35rem;color:#666;">W</div>
+            <div style="position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:0.35rem;color:#666;">E</div>
+          </div>
+          <!-- Heading + GPS -->
+          <div style="font-size:0.55rem;color:#0f8;line-height:1.4;">
+            <div style="font-weight:bold;font-size:0.75rem;"><span id="compassHeading">0</span>° <span id="compassDir" style="color:#5af;">N</span></div>
+            <div style="color:#888;font-size:0.45rem;">GPS <span id="gpsStatus" style="color:#f44;">--</span> <span id="gpsSats" style="color:#fc0;">0</span>sat</div>
+            <div style="color:#5af;font-size:0.4rem;"><span id="gpsLat">0.00000</span>, <span id="gpsLon">0.00000</span></div>
+          </div>
+          <!-- Hidden for JS compatibility -->
+          <span id="calState" style="display:none;"></span>
+        </div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
         <div class="us-badge us-fr" id="usBadgeFR">FR: --</div>
         <div class="us-badge us-rl" id="usBadgeRL">RL: --</div>
         <div class="us-badge us-rr" id="usBadgeRR">RR: --</div>
-        <!-- Position stats bar at bottom -->
-        <div class="position-stats-bar">
-          <div class="pos-stat"><span class="pos-label">X</span><span class="pos-val" id="odomX">0.0</span></div>
-          <div class="pos-stat"><span class="pos-label">Y</span><span class="pos-val" id="odomY">0.0</span></div>
-          <div class="pos-stat"><span class="pos-label">HDG</span><span class="pos-val"><span id="odomHeading">0</span>&deg;</span></div>
-          <div class="pos-stat"><span class="pos-label">TRIP</span><span class="pos-val"><span id="odomTripDist">0.0</span>ft</span></div>
-          <div class="pos-stat"><span class="pos-label">L TICKS</span><span class="pos-val" id="encL">0</span></div>
-          <div class="pos-stat"><span class="pos-label">R TICKS</span><span class="pos-val" id="encR">0</span></div>
+
+        <!-- MAP MODE + EMERGENCY STOP - Bottom Center (small pills) -->
+        <div id="mapModeControls" style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;z-index:20;">
+          <!-- MAP MODE Button - small pill -->
+          <button id="mapModeBtn" onclick="toggleMapMode()" style="
+            padding:4px 10px;
+            font-size:9px;
+            font-weight:bold;
+            border-radius:12px;
+            border:1px solid rgba(90,170,255,0.5);
+            background:rgba(20,40,60,0.8);
+            backdrop-filter:blur(4px);
+            color:#5af;
+            cursor:pointer;
+          ">🗺️ MAP</button>
+
+          <!-- EMERGENCY STOP Button - small red pill -->
+          <button id="emergencyStopBtn" onclick="emergencyStopMapping()" style="
+            padding:4px 8px;
+            font-size:9px;
+            font-weight:bold;
+            border-radius:12px;
+            border:1px solid rgba(255,60,60,0.7);
+            background:linear-gradient(145deg, #c62828, #b71c1c);
+            color:#fff;
+            cursor:pointer;
+            box-shadow:0 0 8px rgba(255,0,0,0.3);
+          ">🛑</button>
+        </div>
+
+        <!-- Map Mode Status Indicator -->
+        <div id="mapModeStatus" style="position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font-size:8px;color:#888;display:none;">
+          <span id="mapStatusText">Mapping</span>
         </div>
       </div>
     </div>
@@ -814,7 +875,7 @@
 <script src="js/occupancy-grid.js?v=1"></script>
 <script src="js/lidar3d.js?v=2"></script>
 <script src="js/sonar-display.js?v=1"></script>
-<script src="js/websocket.js?v=51"></script>
+<script src="js/websocket.js?v=58"></script>
 <script>
 // Map save/load prompts
 function saveMapPrompt() {
@@ -839,6 +900,188 @@ function loadMapPrompt() {
       alert('Map not found: ' + name);
     }
   }
+}
+
+// Mode switching: MANUAL (Xbox) vs MAPPING (slow autonomous)
+let currentRobotMode = 'MANUAL';
+function setMode(mode) {
+  currentRobotMode = mode;
+  // Send to robot via WebSocket
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'MODE_' + mode }));
+  }
+  // Update UI
+  const btnManual = document.getElementById('btnManual');
+  const btnMapping = document.getElementById('btnMapping');
+  const modeStatus = document.getElementById('modeStatus');
+  if (mode === 'MANUAL') {
+    btnManual.style.background = '#0f8';
+    btnManual.style.color = '#000';
+    btnMapping.style.background = 'transparent';
+    btnMapping.style.color = '#4af';
+    modeStatus.textContent = 'Manual Mode (Xbox)';
+    modeStatus.style.color = '#0f8';
+  } else {
+    btnManual.style.background = 'transparent';
+    btnManual.style.color = '#0f8';
+    btnMapping.style.background = '#4af';
+    btnMapping.style.color = '#000';
+    modeStatus.textContent = 'Mapping Mode (Slow + Safety)';
+    modeStatus.style.color = '#4af';
+  }
+}
+
+// Detection controls (master for both cameras)
+let currentDetectionFilter = 'all';
+let currentConfidence = 5;
+const confidenceLevels = [5, 15, 30, 50, 75];
+let confIndex = 0;
+
+function setDetectionFilter(mode) {
+  currentDetectionFilter = mode;
+  // Send to server (which broadcasts to Jetson)
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'detection_settings',
+      filter_mode: mode,
+      confidence: currentConfidence / 100
+    }));
+    console.log('[DETECTION] Sent filter:', mode, 'conf:', currentConfidence);
+  } else {
+    console.log('[DETECTION] WebSocket not ready');
+  }
+  // Update tiny UI buttons
+  const filterAll = document.getElementById('filterAll');
+  const filterIn = document.getElementById('filterIn');
+  const filterOut = document.getElementById('filterOut');
+  if (!filterAll) return;
+
+  // Reset all
+  filterAll.style.background = 'transparent';
+  filterAll.style.color = '#fc0';
+  filterIn.style.background = 'transparent';
+  filterIn.style.color = '#5af';
+  filterOut.style.background = 'transparent';
+  filterOut.style.color = '#0f8';
+
+  // Highlight selected
+  if (mode === 'all') {
+    filterAll.style.background = 'rgba(255,200,0,0.8)';
+    filterAll.style.color = '#000';
+  } else if (mode === 'indoor') {
+    filterIn.style.background = 'rgba(90,170,255,0.8)';
+    filterIn.style.color = '#000';
+  } else if (mode === 'outdoor') {
+    filterOut.style.background = 'rgba(0,255,136,0.8)';
+    filterOut.style.color = '#000';
+  }
+}
+
+function cycleConfidence() {
+  confIndex = (confIndex + 1) % confidenceLevels.length;
+  currentConfidence = confidenceLevels[confIndex];
+  const confDisplay = document.getElementById('confDisplay');
+  if (confDisplay) confDisplay.textContent = currentConfidence + '%';
+  // Send to Jetson
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'detection_settings',
+      filter_mode: currentDetectionFilter,
+      confidence: currentConfidence / 100
+    }));
+    console.log('[DETECTION] Confidence:', currentConfidence);
+  }
+}
+
+function updateConfidence(value) {
+  currentConfidence = parseInt(value);
+  const confDisplay = document.getElementById('confDisplay');
+  if (confDisplay) confDisplay.textContent = value + '%';
+}
+
+// ========== AUTONOMOUS MAP MODE ==========
+let mapModeActive = false;
+
+function toggleMapMode() {
+  mapModeActive = !mapModeActive;
+  const btn = document.getElementById('mapModeBtn');
+  const status = document.getElementById('mapModeStatus');
+  const statusText = document.getElementById('mapStatusText');
+
+  if (mapModeActive) {
+    // Activate AUTONOMOUS MAPPING
+    btn.style.background = 'rgba(90,170,255,0.9)';
+    btn.style.color = '#000';
+    btn.style.borderColor = '#5af';
+    btn.innerHTML = '🗺️ ON';
+    status.style.display = 'block';
+    statusText.textContent = 'Autonomous • LIDAR active';
+    statusText.style.color = '#5af';
+
+    // Send autonomous START command
+    if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'autonomous_control', cmd: 'START' }));
+      console.log('[MAP] Autonomous mapping started');
+    }
+  } else {
+    // Deactivate - stop autonomous, back to manual
+    btn.style.background = 'rgba(20,40,60,0.8)';
+    btn.style.color = '#5af';
+    btn.style.borderColor = 'rgba(90,170,255,0.5)';
+    btn.innerHTML = '🗺️ MAP';
+    status.style.display = 'none';
+
+    // Send autonomous STOP command
+    if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
+      console.log('[MAP] Autonomous mapping stopped');
+    }
+  }
+}
+
+// ========== EMERGENCY STOP ==========
+function emergencyStopMapping() {
+  // IMMEDIATELY stop all movement
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    // Stop autonomous navigation first
+    ws.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
+    // Send emergency stop command
+    ws.send(JSON.stringify({ type: 'emergency_stop' }));
+    // Also send direct motor stop
+    ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
+    // Switch back to manual mode
+    ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'MODE_MANUAL' }));
+    console.log('[EMERGENCY] STOP command sent!');
+  }
+
+  // Update UI
+  mapModeActive = false;
+  const btn = document.getElementById('mapModeBtn');
+  const status = document.getElementById('mapModeStatus');
+  const statusText = document.getElementById('mapStatusText');
+  const stopBtn = document.getElementById('emergencyStopBtn');
+
+  // Reset map button
+  btn.style.background = 'rgba(20,40,60,0.8)';
+  btn.style.color = '#5af';
+  btn.style.borderColor = 'rgba(90,170,255,0.5)';
+  btn.innerHTML = '🗺️ MAP';
+
+  // Flash stop button to confirm
+  stopBtn.style.background = '#fff';
+  stopBtn.style.color = '#b71c1c';
+  setTimeout(() => {
+    stopBtn.style.background = 'linear-gradient(145deg, #d32f2f, #b71c1c)';
+    stopBtn.style.color = '#fff';
+  }, 200);
+
+  // Show stopped status briefly
+  status.style.display = 'block';
+  statusText.textContent = '⛔ STOPPED - Manual control';
+  statusText.style.color = '#f44';
+  setTimeout(() => {
+    status.style.display = 'none';
+  }, 3000);
 }
 </script>
 </body>

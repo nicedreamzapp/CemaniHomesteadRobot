@@ -51,6 +51,13 @@ jetson-camera-relay/config.json
 jetson-lidar/config.json
 !jetson-lidar/config.example.json
 
+# Jetson object detection config (contains camera credentials)
+jetson-object-detection/config.json
+!jetson-object-detection/config.example.json
+
+# Logs
+*.log
+
 # VPS auth (contains login credentials)
 vps-server/auth.json
 !vps-server/auth.example.json
