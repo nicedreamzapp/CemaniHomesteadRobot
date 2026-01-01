@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.71"  // MAP button auto-enables motors
+#define TEENSY_VERSION "3.80"  // Collision detection + faster telemetry
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
