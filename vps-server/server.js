@@ -346,11 +346,18 @@ function handleMessage(ws, data) {
 
           // Send commands every 300ms (Teensy timeout is 500ms)
           global.autoDirection = "FWD";  // Track current direction
+          global.autoCmdCount = 0;
           global.autoInterval = setInterval(() => {
             const robotSock = state.getRobotSocket();
             if (robotSock && robotSock.readyState === WebSocket.OPEN) {
               // Send current direction command at 8 RPM (50% faster than 5)
-              robotSock.send(JSON.stringify({ type: "serial_cmd", cmd: `AUTO_${global.autoDirection},8` }));
+              const cmd = `AUTO_${global.autoDirection},8`;
+              robotSock.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
+              global.autoCmdCount++;
+              // Log every 10th command to avoid spam
+              if (global.autoCmdCount % 10 === 0) {
+                console.log(`[AUTO-DRIVE] Sent ${global.autoCmdCount} cmds, current: ${cmd}`);
+              }
             } else {
               console.log(`[AUTONOMOUS] Robot disconnected - stopping auto loop`);
               clearInterval(global.autoInterval);
