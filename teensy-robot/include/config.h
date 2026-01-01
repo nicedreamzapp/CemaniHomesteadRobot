@@ -84,7 +84,7 @@
 #define REG_DRIVER_TEMP     0x20B0  // Driver temperature (0.1C)
 
 // Telemetry update interval
-#define TELEMETRY_INTERVAL  1000   // Read telemetry every 1 second
+#define TELEMETRY_INTERVAL  150    // Read telemetry every 150ms for fast collision detection
 
 // ===== SAFETY WATCHDOG =====
 // Auto-stop motors if no commands received within timeout

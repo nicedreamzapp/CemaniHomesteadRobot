@@ -16,6 +16,10 @@
 #define TILT_TORQUE_MIN 5         // Minimum torque to consider wheel on ground
 #define TILT_TORQUE_IMBALANCE 50  // Max torque difference before tilt warning
 
+// Collision detection thresholds (torque in 0.1A units)
+#define COLLISION_TORQUE_THRESHOLD 120  // Torque spike = hitting something (12A)
+#define COLLISION_RECOVERY_MS 600       // How long to reverse after collision
+
 // Safety states
 enum SafetyState {
   SAFETY_OK = 0,
@@ -23,6 +27,8 @@ enum SafetyState {
   SAFETY_OBSTACLE_REAR,
   SAFETY_TILT_LEFT,
   SAFETY_TILT_RIGHT,
+  SAFETY_COLLISION,       // Hit something - torque spike detected
+  SAFETY_COLLISION_RECOVERY,  // Reversing after collision
   SAFETY_ESTOP
 };
 
@@ -42,6 +48,10 @@ float safetyGetSpeedLimit(bool movingForward);
 
 // Check for tilt using motor torque
 bool safetyCheckTilt(int16_t torqueL, int16_t torqueR);
+
+// Check for collision (torque spike on both motors)
+// Returns recovery speed: 0 = no collision, negative = reverse, positive = forward
+int16_t safetyCheckCollision(int16_t torqueL, int16_t torqueR, int16_t currentSpeedL, int16_t currentSpeedR);
 
 // Send safety status to ESP32
 void safetySendStatus();

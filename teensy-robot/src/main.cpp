@@ -756,7 +756,7 @@ void loop() {
       newRight = constrain(newRight, -maxSpeed, maxSpeed);
 
       // ===== SAFETY SYSTEM CHECK =====
-      // Only active in MAPPING mode - Xbox manual control has no auto-stop
+      // Obstacle avoidance only in MAPPING mode
       if (currentMode == MODE_MAPPING) {
         if (safetyCheck(newLeft, newRight)) {
           newLeft = 0;
@@ -770,7 +770,17 @@ void loop() {
           }
         }
       }
-      // In MANUAL mode: no safety override - full Xbox control
+
+      // ===== COLLISION DETECTION - ALWAYS ACTIVE =====
+      // Works in all modes - if we hit something, auto-reverse
+      extern int16_t telemetry_torqueL;
+      extern int16_t telemetry_torqueR;
+      int16_t collisionSpeed = safetyCheckCollision(telemetry_torqueL, telemetry_torqueR, lastLeftSpeed, lastRightSpeed);
+      if (collisionSpeed != 0) {
+        // Override with collision recovery movement
+        newLeft = collisionSpeed;
+        newRight = collisionSpeed;
+      }
 
       // Always send 0 when target is 0 to ensure motors stop
       // Otherwise only send if change > 2 to reduce noise

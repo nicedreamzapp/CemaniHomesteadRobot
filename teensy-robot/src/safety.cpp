@@ -165,6 +165,58 @@ bool safetyCheckTilt(int16_t torqueL, int16_t torqueR) {
   return false;
 }
 
+// Collision detection and auto-recovery
+static uint32_t collisionStartTime = 0;
+static int16_t collisionRecoveryDirection = 0;  // -1 = was going forward (reverse), +1 = was going back (forward)
+
+int16_t safetyCheckCollision(int16_t torqueL, int16_t torqueR, int16_t currentSpeedL, int16_t currentSpeedR) {
+  uint32_t now = millis();
+
+  // If in recovery mode, continue recovering
+  if (currentSafetyState == SAFETY_COLLISION_RECOVERY) {
+    if (now - collisionStartTime < COLLISION_RECOVERY_MS) {
+      // Still recovering - return recovery speed
+      return collisionRecoveryDirection * 15;  // Slow recovery speed (15 RPM)
+    } else {
+      // Recovery complete
+      currentSafetyState = SAFETY_OK;
+      safetyOverride = false;
+      collisionRecoveryDirection = 0;
+      Serial.println("[SAFETY] Collision recovery complete");
+      Serial1.println("SAFETY,COLLISION_RECOVERY_DONE");
+      return 0;
+    }
+  }
+
+  // Check for new collision (high torque on either motor while moving)
+  int16_t absL = abs(torqueL);
+  int16_t absR = abs(torqueR);
+  bool motorsActive = (abs(currentSpeedL) > 5 || abs(currentSpeedR) > 5);
+
+  if (!motorsActive) return 0;
+
+  // Collision = high torque spike
+  if (absL > COLLISION_TORQUE_THRESHOLD || absR > COLLISION_TORQUE_THRESHOLD) {
+    currentSafetyState = SAFETY_COLLISION;
+    safetyOverride = true;
+    collisionStartTime = now;
+
+    // Determine recovery direction (opposite of current travel)
+    bool wasGoingForward = (currentSpeedL > 0 || currentSpeedR > 0);
+    collisionRecoveryDirection = wasGoingForward ? -1 : 1;
+
+    Serial.printf("[SAFETY] COLLISION! Torque spike L:%d R:%d - reversing %s\n",
+                  absL, absR, wasGoingForward ? "backward" : "forward");
+    Serial1.printf("SAFETY,COLLISION,%d,%d,%s\n", absL, absR, wasGoingForward ? "REVERSE" : "FORWARD");
+
+    // Immediately transition to recovery
+    currentSafetyState = SAFETY_COLLISION_RECOVERY;
+    return collisionRecoveryDirection * 15;
+  }
+
+  return 0;  // No collision
+}
+
 void safetySendStatus() {
   uint32_t now = millis();
   if (now - lastStatusSend < 500) return;  // Max 2Hz
@@ -178,6 +230,8 @@ void safetySendStatus() {
     case SAFETY_OBSTACLE_REAR: stateStr = "OBSTACLE_REAR"; break;
     case SAFETY_TILT_LEFT: stateStr = "TILT_LEFT"; break;
     case SAFETY_TILT_RIGHT: stateStr = "TILT_RIGHT"; break;
+    case SAFETY_COLLISION: stateStr = "COLLISION"; break;
+    case SAFETY_COLLISION_RECOVERY: stateStr = "COLLISION_RECOVERY"; break;
     case SAFETY_ESTOP: stateStr = "ESTOP"; break;
     default: stateStr = "UNKNOWN"; break;
   }
