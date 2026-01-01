@@ -117,8 +117,12 @@ wss.on("connection", (ws, req) => {
       }
       const data = JSON.parse(msg);
 
-      if (data.type !== 'lidar' && data.type !== 'serial') {
-        console.log("[MSG]", data.type, JSON.stringify(data).substring(0, 100));
+      // Log ALL messages for debugging
+      console.log("[MSG]", data.type, JSON.stringify(data).substring(0, 100));
+
+      // Extra debug for registration
+      if (data.type && data.type.includes("REGISTER")) {
+        console.log("[DEBUG REGISTER]", JSON.stringify(data));
       }
 
       handleMessage(ws, data);
@@ -251,6 +255,45 @@ function handleMessage(ws, data) {
   }
   if (data.type === "lidar" && ws.isJetsonLidar) {
     state.broadcast({ type: "lidar", points: data.points, count: data.count }, ws);
+
+    // LIDAR SAFETY: Check for obstacles in MAP mode
+    // Only active when robot is in mapping mode
+    if (state.robotStatus.mode === "mapping") {
+      const LIDAR_STOP_CM = 40;  // 16 inches = stop distance
+      const points = data.points || [];
+
+      // Check front and rear sectors
+      let minFrontDist = 9999;
+      let minRearDist = 9999;
+
+      for (const p of points) {
+        const angle = p[0] || p.angle || 0;
+        const dist = (p[1] || p.distance || 0) / 10;  // mm to cm
+
+        if (dist <= 0) continue;
+
+        // Front sector: 0-60° or 300-360°
+        if ((angle >= 0 && angle <= 60) || (angle >= 300 && angle <= 360)) {
+          if (dist < minFrontDist) minFrontDist = dist;
+        }
+
+        // Rear sector: 120-240°
+        if (angle >= 120 && angle <= 240) {
+          if (dist < minRearDist) minRearDist = dist;
+        }
+      }
+
+      // Emergency stop if obstacle too close (front or rear)
+      const minDist = Math.min(minFrontDist, minRearDist);
+      if (minDist < LIDAR_STOP_CM) {
+        const rs = state.getRobotSocket();
+        if (rs && rs.readyState === 1) {
+          rs.send(JSON.stringify({ type: "serial_cmd", cmd: "STOP" }));
+          const direction = minFrontDist < minRearDist ? "FRONT" : "REAR";
+          console.log(`[LIDAR SAFETY] STOP! ${direction} obstacle at ${minDist.toFixed(0)}cm`);
+        }
+      }
+    }
   }
 
   // Jetson object detection
@@ -259,8 +302,15 @@ function handleMessage(ws, data) {
     console.log("[JETSON] Object detection connected");
   }
   if (data.type === "JETSON_REGISTER") {
-    ws.isJetsonDetection = true;
-    console.log("[JETSON] Object detection registered with capabilities:", data.capabilities);
+    console.log("[JETSON_REGISTER] Received:", JSON.stringify(data));
+    if (data.device === "autonomous") {
+      ws.isAutonomous = true;
+      console.log("[AUTONOMOUS] Navigator connected!");
+      state.broadcast({ type: "autonomous_status", connected: true });
+    } else {
+      ws.isJetsonDetection = true;
+      console.log("[JETSON] Object detection registered with capabilities:", data.capabilities);
+    }
   }
   if (data.type === "DETECTIONS") {
     // Mark sender as detection source if not already identified
@@ -295,13 +345,6 @@ function handleMessage(ws, data) {
         }));
       }
     });
-  }
-
-  // Autonomous navigation registration
-  if (data.type === "JETSON_REGISTER" && data.device === "autonomous") {
-    ws.isAutonomous = true;
-    console.log("[AUTONOMOUS] Navigator connected");
-    state.broadcast({ type: "autonomous_status", connected: true });
   }
 
   // Autonomous commands from Jetson -> Robot
