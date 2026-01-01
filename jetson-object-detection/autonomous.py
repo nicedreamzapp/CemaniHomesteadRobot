@@ -22,9 +22,9 @@ CRITICAL_DISTANCE_CM = 30  # Emergency backup (~12 inches)
 TURN_THRESHOLD_CM = 120    # Need 1.2m clear to keep going forward
 OPEN_PATH_CM = 200         # Consider path "open" if >2m clear
 SCAN_SECTORS = 12          # Divide 360° into sectors
-SPEED_SLOW = 3             # Slow speed (original)
-SPEED_NORMAL = 5           # Normal mapping speed (original)
-SPEED_FAST = 5             # Same as normal - no fast mode
+SPEED_SLOW = 5             # Slow speed
+SPEED_NORMAL = 10          # Normal mapping speed
+SPEED_FAST = 15            # Fast when path is wide open
 MIN_FORWARD_TIME = 2.0     # Commit to forward for 2 seconds minimum
 MIN_TURN_TIME = 0.8        # Commit to turn for 0.8 seconds
 
