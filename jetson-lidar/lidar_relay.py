@@ -22,8 +22,8 @@ EXCLUDE_MIN = 205
 EXCLUDE_MAX = 220
 EXCLUDE_DIST = 400
 
-# Send rate limiting
-SEND_INTERVAL = 0.10  # Send data every 100ms (10 fps)
+# Send rate limiting - REAL-TIME response
+SEND_INTERVAL = 0.033  # Send data every 33ms (~30 fps)
 
 
 class LidarRelay:
@@ -161,7 +161,7 @@ class LidarRelay:
                         if now - self.last_send >= SEND_INTERVAL:
                             self.send_lidar_data()
                             self.last_send = now
-                    time.sleep(0.05)
+                    time.sleep(0.02)  # Faster loop for lower latency
 
             except Exception as e:
                 print(f"WebSocket error: {e}")

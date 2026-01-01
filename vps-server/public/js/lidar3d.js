@@ -13,14 +13,15 @@ let lidar3dUltrasonicCones = { FL: null, FR: null, RL: null, RR: null };
 const SLAM_MAX_POINTS = 50000;
 const SLAM_POINT_SPACING = 0.03;
 let lastLidarUpdate = 0;
-const LIDAR_UPDATE_INTERVAL = 100;
+const LIDAR_UPDATE_INTERVAL = 33;  // ~30fps for smooth real-time display
 let animFrameCount = 0;
 
 // Occupancy grid visualization
 let occupancyGridMesh = null;
 let lastGridUpdate = 0;
 const GRID_UPDATE_INTERVAL = 500;  // Update visualization every 500ms
-let mappingEnabled = false;  // Disabled - was cluttering the view
+let mappingEnabled = true;  // Enabled - builds occupancy grid as robot explores
+let showOccupancyGrid = false;  // Disabled - don't show green/red floor tiles (clutters view)
 
 // Initialize odomState
 window.odomState = window.odomState || { x: 0, y: 0, heading: 0, totalDistance: 0, trail: [{ x: 0, y: 0 }] };
@@ -594,7 +595,8 @@ function animateLidar3D() {
 
 // ============ OCCUPANCY GRID VISUALIZATION ============
 function updateOccupancyGridVisualization() {
-  if (!lidar3dScene || !window.OccupancyGrid || !mappingEnabled) return;
+  // Only show visualization if explicitly enabled (mapping still runs in background)
+  if (!lidar3dScene || !window.OccupancyGrid || !showOccupancyGrid) return;
 
   const now = Date.now();
   if (now - lastGridUpdate < GRID_UPDATE_INTERVAL) return;

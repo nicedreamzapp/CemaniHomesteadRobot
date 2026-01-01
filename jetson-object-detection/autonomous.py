@@ -3,6 +3,7 @@
 Autonomous Mapping Navigation - Jetson
 FULL SENSOR FUSION: LIDAR + Cameras + GPS + Compass + Ultrasonics
 Uses all available data to navigate safely and build maps
+LIDAR data received via VPS (lidar_relay.py handles hardware)
 """
 
 import json
@@ -11,19 +12,15 @@ import math
 import threading
 import websocket
 from collections import deque
-from rplidar import RPLidar
 
 # VPS WebSocket
 VPS_WS = "ws://72.60.124.34:3001"
 
-# LIDAR device
-LIDAR_PORT = '/dev/ttyUSB0'
-
-# Navigation parameters
-SAFE_DISTANCE_CM = 60      # Start slowing down
-STOP_DISTANCE_CM = 35      # Hard stop
-CRITICAL_DISTANCE_CM = 25  # Emergency backup
-TURN_THRESHOLD_CM = 80     # Need this much space to go forward
+# Navigation parameters - CONSERVATIVE to avoid hitting tables/furniture
+SAFE_DISTANCE_CM = 80      # Start slowing down (was 60)
+STOP_DISTANCE_CM = 50      # Hard stop (was 35)
+CRITICAL_DISTANCE_CM = 40  # Emergency backup (was 25)
+TURN_THRESHOLD_CM = 100    # Need this much space to go forward (was 80)
 SCAN_SECTORS = 12          # Divide 360° into sectors
 SPEED_SLOW = 3             # Slow speed (RPM-ish value)
 SPEED_NORMAL = 5           # Normal mapping speed
@@ -71,6 +68,14 @@ class SensorState:
         self.position_history = deque(maxlen=20)
         self.stuck_count = 0
 
+        # Torque monitoring for collision detection
+        self.torque_left = 0
+        self.torque_right = 0
+        self.torque_history = deque(maxlen=10)
+        self.torque_updated = 0
+        self.collision_detected = False
+        self.last_direction = "STOP"  # Track: FORWARD, REVERSE, LEFT, RIGHT, STOP
+
     def update_lidar(self, sectors):
         self.lidar_sectors = sectors
         self.lidar_updated = time.time()
@@ -113,6 +118,29 @@ class SensorState:
         avg = sum(headings) / len(headings)
         variance = sum((h - avg) ** 2 for h in headings) / len(headings)
         return variance < 2  # Very little heading change
+
+    def update_torque(self, torque_l, torque_r):
+        """Update torque readings and check for collision"""
+        self.torque_left = torque_l
+        self.torque_right = torque_r
+        self.torque_updated = time.time()
+
+        # Track torque history for spike detection
+        max_torque = max(abs(torque_l), abs(torque_r))
+        self.torque_history.append(max_torque)
+
+        # Collision detection: torque spike above threshold
+        # Normal driving torque is low (1-5), collision causes spike (15+)
+        TORQUE_COLLISION_THRESHOLD = 12.0
+        if max_torque > TORQUE_COLLISION_THRESHOLD:
+            self.collision_detected = True
+            print(f"[COLLISION] Torque spike detected! L:{torque_l:.1f} R:{torque_r:.1f}")
+            return True
+        return False
+
+    def clear_collision(self):
+        """Clear collision flag after handling"""
+        self.collision_detected = False
 
 sensors = SensorState()
 
@@ -275,18 +303,23 @@ def send_command(cmd, value=0):
 
 def stop_robot():
     send_command("STOP")
+    sensors.last_direction = "STOP"
 
 def move_forward(speed=SPEED_NORMAL):
     send_command("FORWARD", speed)
+    sensors.last_direction = "FORWARD"
 
 def turn_left(speed=SPEED_SLOW):
     send_command("TURN_LEFT", speed)
+    sensors.last_direction = "LEFT"
 
 def turn_right(speed=SPEED_SLOW):
     send_command("TURN_RIGHT", speed)
+    sensors.last_direction = "RIGHT"
 
 def reverse(speed=SPEED_SLOW):
     send_command("REVERSE", speed)
+    sensors.last_direction = "REVERSE"
 
 # ========== MAIN NAVIGATION STEP ==========
 def navigate_step():
@@ -296,6 +329,28 @@ def navigate_step():
     if paused:
         stop_robot()
         return "PAUSED"
+
+    # COLLISION RECOVERY: If we hit something, go the opposite direction
+    if sensors.collision_detected:
+        last_dir = sensors.last_direction
+        print(f"[NAV] Collision recovery - was going {last_dir}")
+        stop_robot()
+        time.sleep(0.2)
+
+        if last_dir == "REVERSE":
+            # Was reversing, go forward
+            move_forward(SPEED_SLOW)
+            time.sleep(0.5)
+            print("[NAV] Collision while reversing - moved forward")
+        else:
+            # Was going forward/turning, back up
+            reverse(SPEED_SLOW)
+            time.sleep(0.5)
+            print("[NAV] Collision while moving forward - backed up")
+
+        stop_robot()
+        sensors.clear_collision()
+        return f"COLLISION RECOVERY (was {last_dir})"
 
     # Record position for stuck detection
     sensors.record_position()
@@ -440,16 +495,37 @@ def ws_listener():
                         msg.get("sats", 0)
                     )
 
-                # Ultrasonic data (from telemetry - need to parse)
+                # Teensy telemetry - extract torque for collision detection
                 elif msg_type == "teensy_telemetry":
-                    # Extract ultrasonic values if present
-                    pass  # Will add if available in telemetry
+                    torque_l = msg.get("torqueL", 0)
+                    torque_r = msg.get("torqueR", 0)
+                    if sensors.update_torque(torque_l, torque_r):
+                        # Collision detected! Emergency stop
+                        stop_robot()
+                        print("[COLLISION] Emergency stop triggered by torque spike!")
+
+                # Ultrasonic data from server
+                elif msg_type == "ultrasonic":
+                    sensors.update_ultrasonics(
+                        msg.get("fl", 999),
+                        msg.get("fr", 999),
+                        msg.get("rl", 999),
+                        msg.get("rr", 999)
+                    )
 
                 # Object detection data
                 elif msg_type == "detections":
                     cam_id = msg.get("camera", 1)
                     detections = msg.get("detections", [])
                     sensors.update_detections(cam_id, detections)
+
+                # LIDAR data from lidar_relay.py via VPS
+                elif msg_type == "lidar":
+                    points = msg.get("points", [])
+                    if points:
+                        # Convert to (angle, distance) tuples - distance in mm
+                        scan_data = [(p.get("angle", 0), p.get("distance", 0)) for p in points]
+                        process_scan(scan_data)
 
             except:
                 pass
@@ -484,48 +560,43 @@ def run_navigation():
     print("=" * 60)
     print("  AUTONOMOUS MAPPING - FULL SENSOR FUSION")
     print("  Sensors: LIDAR + Cameras + GPS + Compass + Ultrasonics")
+    print("  LIDAR data via lidar_relay.py (no direct hardware access)")
     print("  Press 🛑 STOP on UI or physical kill switch to stop")
     print("=" * 60)
 
     # Connect to VPS
     connect_ws()
 
-    # Start WebSocket listener for sensor data
+    # Start WebSocket listener for sensor data (including LIDAR)
     running = True
     paused = True
     ws_thread = threading.Thread(target=ws_listener, daemon=True)
     ws_thread.start()
 
     print("[NAV] Waiting for START command from UI...")
+    print("[NAV] LIDAR data comes from lidar_relay.py via VPS")
 
-    # Connect to LIDAR
-    lidar = None
+    last_nav_time = 0
+    nav_interval = 0.15  # Navigate every 150ms
+
     try:
-        lidar = RPLidar(LIDAR_PORT)
-        lidar.clear_input()
-        print(f"[LIDAR] Connected to {LIDAR_PORT}")
+        while running:
+            time.sleep(0.05)
 
-        scan_data = []
-
-        for scan in lidar.iter_scans():
-            if not running:
-                break
-
-            # Collect scan points
-            for _, angle, distance in scan:
-                scan_data.append((angle, distance))
-
-            # Process every ~100 points
-            if len(scan_data) >= 100:
-                process_scan(scan_data)
-                scan_data = []
-
-                if not paused and running:
+            # Run navigation at fixed interval when not paused
+            now = time.time()
+            if not paused and running and (now - last_nav_time) > nav_interval:
+                # Check if we have recent LIDAR data
+                if sensors.lidar_updated > 0 and (now - sensors.lidar_updated) < 2.0:
                     status = navigate_step()
                     if "FORWARD" in status or "TURN" in status or "REVERSE" in status:
                         print(f"[NAV] {status}")
-
-                time.sleep(0.05)
+                    last_nav_time = now
+                elif sensors.lidar_updated == 0:
+                    # No LIDAR data yet - wait
+                    pass
+                else:
+                    print("[NAV] Warning: LIDAR data stale")
 
     except KeyboardInterrupt:
         print("\n[NAV] Interrupted by user")
@@ -536,12 +607,6 @@ def run_navigation():
     finally:
         running = False
         stop_robot()
-        if lidar:
-            try:
-                lidar.stop()
-                lidar.disconnect()
-            except:
-                pass
         print("[NAV] Shutdown complete")
 
 if __name__ == "__main__":

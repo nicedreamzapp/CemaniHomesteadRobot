@@ -78,8 +78,9 @@ function broadcast(data, skip = null) {
   wss.clients.forEach(c => {
     // Skip the robot socket (ESP32) - it can't handle receiving broadcasts
     // Skip the camera socket - it only sends frames, doesn't need status
-    if (c === robotSocket || c === cameraSocket) return;
-    if (c !== skip && c.readyState === WebSocket.OPEN) {
+    // Check both the socket reference AND the isRobot/isCamera flags
+    if (c === robotSocket || c === cameraSocket || c.isRobot || c.isCamera) return;
+    if (c !== skip && c.readyState === WebSocket.OPEN && c.isBrowser) {
       c.send(msg);
     }
   });

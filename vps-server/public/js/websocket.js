@@ -5,6 +5,8 @@
 const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const ws = new WebSocket(wsProtocol + '//' + location.host);
 ws.binaryType = 'arraybuffer';
+// Make ws globally accessible for inline scripts
+window.ws = ws;
 
 // ============ MESSAGE HANDLER ============
 ws.onopen = () => {
@@ -46,6 +48,36 @@ ws.onmessage = function(e) {
     handleDetections(d.camera, d.detections);
   }
 
+  // Autonomous mapping errors (only show if robot not connected)
+  if (d.type === 'autonomous_error') {
+    console.error('[AUTONOMOUS] Error:', d.error);
+    alert('MAP MODE ERROR: ' + d.error);
+    // Reset the MAP button UI
+    if (typeof mapModeActive !== 'undefined') {
+      mapModeActive = false;
+      const btn = document.getElementById('mapModeBtn');
+      if (btn) {
+        btn.style.background = 'rgba(20,40,60,0.8)';
+        btn.style.color = '#5af';
+        btn.innerHTML = '🗺️ MAP';
+      }
+    }
+  }
+
+  // Autonomous status updates
+  if (d.type === 'autonomous_status') {
+    console.log('[AUTONOMOUS] Status:', d);
+    const status = document.getElementById('mapModeStatus');
+    const statusText = document.getElementById('mapStatusText');
+    if (d.running !== undefined && status && statusText) {
+      status.style.display = d.running ? 'block' : 'none';
+      if (d.running) {
+        statusText.textContent = d.mode === 'direct' ? 'Direct control (no Jetson)' : 'Autonomous active';
+        statusText.style.color = d.mode === 'direct' ? '#fc0' : '#5af';
+      }
+    }
+  }
+
   // Dead reckoning (encoder-based position)
   if (d.type === 'dead_reckoning') {
     handleDeadReckoning(d);
@@ -84,6 +116,20 @@ ws.onmessage = function(e) {
         window.camerasPtzModule.updateJetsonStatus(false);
       }
     }
+  }
+
+  // Ultrasonic sensor data - update UI badges
+  if (d.type === 'ultrasonic') {
+    const flBadge = document.getElementById('usBadgeFL');
+    const frBadge = document.getElementById('usBadgeFR');
+    const rlBadge = document.getElementById('usBadgeRL');
+    const rrBadge = document.getElementById('usBadgeRR');
+    if (flBadge) flBadge.textContent = d.fl > 0 ? `FL: ${Math.round(d.fl)}cm` : 'FL: --';
+    if (frBadge) frBadge.textContent = d.fr > 0 ? `FR: ${Math.round(d.fr)}cm` : 'FR: --';
+    if (rlBadge) rlBadge.textContent = d.rl > 0 ? `RL: ${Math.round(d.rl)}cm` : 'RL: --';
+    if (rrBadge) rrBadge.textContent = d.rr > 0 ? `RR: ${Math.round(d.rr)}cm` : 'RR: --';
+    // Store for autonomous use
+    window.ultrasonicState = { fl: d.fl, fr: d.fr, rl: d.rl, rr: d.rr, timestamp: d.timestamp };
   }
 
   // Driver telemetry

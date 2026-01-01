@@ -85,7 +85,7 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "status", ...state.robotStatus, camera: state.cameraStatus }));
   ws.isAlive = true;
   ws.missedPings = 0;
-  ws.isBrowser = true;
+  ws.isBrowser = false;  // Don't assume browser - wait for identification to prevent flooding ESP32
   ws.on("pong", () => { ws.isAlive = true; ws.missedPings = 0; });
 
   ws.on("message", (msg, isBinary) => {
@@ -322,30 +322,81 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Autonomous control from browser -> Jetson
+  // Autonomous control from browser -> Jetson (or direct to robot)
   if (data.type === "autonomous_control") {
-    console.log(`[AUTONOMOUS] Control: ${data.cmd}`);
-    // Broadcast to autonomous navigator
-    wss.clients.forEach(client => {
-      if (client.isAutonomous && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: "AUTONOMOUS_CONTROL",
-          cmd: data.cmd
-        }));
-      }
-    });
-    // Also send mode change to robot
+    // Count how many autonomous clients are connected
+    let autoCount = 0;
+    wss.clients.forEach(c => { if (c.isAutonomous && c.readyState === WebSocket.OPEN) autoCount++; });
+    console.log(`[AUTONOMOUS] Control: ${data.cmd} -> ${autoCount} autonomous clients connected`);
+
     const rs = state.getRobotSocket();
-    if (rs && rs.readyState === WebSocket.OPEN) {
-      if (data.cmd === "START") {
+
+    if (data.cmd === "START") {
+      // Switch robot to mapping mode
+      if (rs && rs.readyState === WebSocket.OPEN) {
         rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
-      } else if (data.cmd === "STOP" || data.cmd === "PAUSE") {
+        console.log(`[AUTONOMOUS] Sent MODE_MAPPING to robot`);
+
+        // If no autonomous.py, start direct control loop
+        if (autoCount === 0) {
+          console.log(`[AUTONOMOUS] No Jetson navigator - starting direct control loop`);
+
+          // Clear any existing interval
+          if (global.autoInterval) clearInterval(global.autoInterval);
+
+          // Send commands every 300ms (Teensy timeout is 500ms)
+          global.autoDirection = "FWD";  // Track current direction
+          global.autoInterval = setInterval(() => {
+            const robotSock = state.getRobotSocket();
+            if (robotSock && robotSock.readyState === WebSocket.OPEN) {
+              // Send current direction command at 8 RPM (50% faster than 5)
+              robotSock.send(JSON.stringify({ type: "serial_cmd", cmd: `AUTO_${global.autoDirection},8` }));
+            } else {
+              console.log(`[AUTONOMOUS] Robot disconnected - stopping auto loop`);
+              clearInterval(global.autoInterval);
+              global.autoInterval = null;
+            }
+          }, 300);
+
+          // Send first command immediately at 8 RPM
+          rs.send(JSON.stringify({ type: "serial_cmd", cmd: "AUTO_FWD,8" }));
+          state.broadcast({ type: "autonomous_status", running: true, mode: "direct" });
+        }
+      } else {
+        console.log(`[AUTONOMOUS] ⚠️  Robot not connected!`);
+        state.broadcast({ type: "autonomous_error", error: "Robot not connected" });
+      }
+
+      // Also broadcast to Jetson autonomous.py if connected
+      wss.clients.forEach(client => {
+        if (client.isAutonomous && client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: "AUTONOMOUS_CONTROL", cmd: data.cmd }));
+          console.log(`[AUTONOMOUS] Sent START to Jetson navigator`);
+        }
+      });
+
+    } else if (data.cmd === "STOP" || data.cmd === "PAUSE") {
+      // Stop the auto command loop
+      if (global.autoInterval) {
+        clearInterval(global.autoInterval);
+        global.autoInterval = null;
+        console.log(`[AUTONOMOUS] Stopped auto command loop`);
+      }
+
+      // Stop robot
+      if (rs && rs.readyState === WebSocket.OPEN) {
         rs.send(JSON.stringify({ type: "serial_cmd", cmd: "STOP" }));
         rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MANUAL" }));
+        console.log(`[AUTONOMOUS] Sent STOP + MODE_MANUAL to robot`);
       }
+      // Notify Jetson
+      wss.clients.forEach(client => {
+        if (client.isAutonomous && client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: "AUTONOMOUS_CONTROL", cmd: data.cmd }));
+        }
+      });
+      state.broadcast({ type: "autonomous_status", running: false });
     }
-    // Broadcast status to browsers
-    state.broadcast({ type: "autonomous_status", running: data.cmd === "START" });
   }
 
   // Status request
@@ -442,6 +493,47 @@ function handleSerialData(data, ws) {
     state.broadcast({ type: "i2c_scan", data: data.data });
   }
 
+  // Handle SAFETY messages for autonomous obstacle avoidance
+  if (data.data && data.data.startsWith("SAFETY,")) {
+    const parts = data.data.split(",");
+    const safetyType = parts[1];
+    console.log(`[SAFETY] ${safetyType}`);
+
+    // If we're in autonomous mode and hit an obstacle, change direction
+    if (global.autoInterval) {
+      if (safetyType === "OBSTACLE_FRONT") {
+        // Back up, then turn
+        console.log(`[AUTONOMOUS] Front obstacle - backing up and turning`);
+        global.autoDirection = "REV";
+        // After 1.5 seconds of reversing, turn left
+        setTimeout(() => {
+          if (global.autoInterval) {
+            global.autoDirection = "LEFT";
+            console.log(`[AUTONOMOUS] Turning left`);
+            // After 1 second of turning, go forward again
+            setTimeout(() => {
+              if (global.autoInterval) {
+                global.autoDirection = "FWD";
+                console.log(`[AUTONOMOUS] Resuming forward`);
+              }
+            }, 1000);
+          }
+        }, 1500);
+      } else if (safetyType === "OBSTACLE_REAR") {
+        // Go forward and turn
+        console.log(`[AUTONOMOUS] Rear obstacle - going forward`);
+        global.autoDirection = "FWD";
+      } else if (safetyType === "CLEAR") {
+        // Obstacle cleared, resume forward
+        if (global.autoDirection !== "FWD") {
+          console.log(`[AUTONOMOUS] Obstacle cleared - resuming forward`);
+          global.autoDirection = "FWD";
+        }
+      }
+    }
+    state.broadcast({ type: "safety", status: safetyType, distance: parts[2] || 0 });
+  }
+
   // Handle GPS data: GPS,valid,lat,lon,sats,lastLat,lastLon
   if (data.data && data.data.startsWith("GPS,")) {
     const parts = data.data.split(",");
@@ -454,6 +546,26 @@ function handleSerialData(data, ws) {
         console.log(`[GPS] ${lat.toFixed(6)}, ${lon.toFixed(6)} (${sats} sats)`);
       }
       state.broadcast({ type: "gps", valid: valid, lat: lat, lon: lon, sats: sats });
+    }
+  }
+
+  // Parse SONAR messages for ultrasonic sensor data
+  if (data.data && data.data.startsWith("SONAR,")) {
+    const parts = data.data.split(",");
+    if (parts.length >= 5) {
+      const sonarData = {
+        type: "ultrasonic",
+        fl: parseFloat(parts[1]) || 0,
+        fr: parseFloat(parts[2]) || 0,
+        rl: parseFloat(parts[3]) || 0,
+        rr: parseFloat(parts[4]) || 0,
+        timestamp: Date.now()
+      };
+      state.broadcast(sonarData, ws);
+      // Log occasionally for debugging
+      if (Math.random() < 0.1) {
+        console.log(`[SONAR] FL:${sonarData.fl} FR:${sonarData.fr} RL:${sonarData.rl} RR:${sonarData.rr} cm`);
+      }
     }
   }
 

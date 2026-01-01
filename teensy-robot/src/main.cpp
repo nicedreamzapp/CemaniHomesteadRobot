@@ -585,6 +585,11 @@ void loop() {
       }
       else if (strcmp(buf, "MODE_MAPPING") == 0) {
         currentMode = MODE_MAPPING;
+        // Auto-enable motors when entering mapping mode
+        if (!motorsEnabled || emergencyStop) {
+          Serial.println("[MODE] Enabling motors for mapping mode...");
+          fullReset();
+        }
         Serial.println("[MODE] Switched to MAPPING (slow speed, safety active)");
         Serial1.println("MODE,MAPPING");
       }
