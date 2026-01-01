@@ -16,13 +16,17 @@ import websocket
 VPS_WS = "ws://72.60.124.34:3001"
 
 # Navigation parameters - 16 inches = 40cm stop distance
-SAFE_DISTANCE_CM = 60      # Start slowing down (~24 inches)
+SAFE_DISTANCE_CM = 50      # Start slowing down (~20 inches)
 STOP_DISTANCE_CM = 40      # Hard stop (~16 inches)
 CRITICAL_DISTANCE_CM = 30  # Emergency backup (~12 inches)
-TURN_THRESHOLD_CM = 80     # Need this much space to go forward
+TURN_THRESHOLD_CM = 150    # Need 1.5m clear to go full speed
+OPEN_PATH_CM = 200         # Consider path "open" if >2m clear
 SCAN_SECTORS = 12          # Divide 360° into sectors
-SPEED_SLOW = 3             # Slow speed
-SPEED_NORMAL = 5           # Normal mapping speed
+SPEED_SLOW = 4             # Slow speed
+SPEED_NORMAL = 8           # Normal mapping speed
+SPEED_FAST = 12            # Fast when path is clear
+MIN_FORWARD_TIME = 1.0     # Commit to forward for at least 1 second
+MIN_TURN_TIME = 0.5        # Commit to turn for at least 0.5 second
 
 # ========== SENSOR STATE ==========
 class SensorState:
@@ -49,6 +53,9 @@ class SensorState:
         self.last_direction = "STOP"
         self.stuck_count = 0
         self.position_history = deque(maxlen=20)
+        self.committed_action = None      # Current committed action
+        self.commit_until = 0             # Time when commitment expires
+        self.last_open_direction = None   # Remember which way was open
 
 sensors = SensorState()
 
@@ -253,18 +260,24 @@ class AutonomousNavigator:
         sensors.last_direction = "REVERSE"
 
     def find_best_direction(self):
-        """Find the safest direction to move"""
+        """Find the most open direction to move - prefer long clear paths"""
         front = self.get_front_distance()
         rear = self.get_rear_distance()
         left = self.get_left_distance()
         right = self.get_right_distance()
 
-        # Score each direction (higher = better)
+        # Strong preference for forward if path is reasonably clear
+        # Only turn if forward is really blocked
+        if front > TURN_THRESHOLD_CM:
+            return "FORWARD", front, front, left, right, rear
+
+        # Forward is somewhat blocked - find the most open direction
+        # Heavily prefer forward over turning
         scores = {
-            "FORWARD": front * 1.5,    # Prefer forward
+            "FORWARD": front * 2.0,    # Strong forward preference
             "LEFT": left * 1.0,
             "RIGHT": right * 1.0,
-            "REVERSE": rear * 0.5,     # Penalize reverse
+            "REVERSE": rear * 0.3,     # Really penalize reverse
         }
 
         best = max(scores, key=scores.get)
@@ -272,90 +285,137 @@ class AutonomousNavigator:
 
         return best, best_dist, front, left, right, rear
 
+    def find_open_path(self):
+        """Look for the most open direction using all LIDAR sectors"""
+        # Find sector with maximum distance
+        max_dist = 0
+        best_sector = 0
+
+        for sector, dist in sensors.lidar_sectors.items():
+            if dist > max_dist:
+                max_dist = dist
+                best_sector = sector
+
+        # Convert sector to direction (0=front, 3=left, 6=rear, 9=right)
+        if best_sector in [0, 1, 11]:
+            return "FORWARD", max_dist
+        elif best_sector in [2, 3, 4]:
+            return "LEFT", max_dist
+        elif best_sector in [5, 6, 7]:
+            return "REVERSE", max_dist
+        else:  # 8, 9, 10
+            return "RIGHT", max_dist
+
     def navigate_step(self):
-        """One step of autonomous navigation"""
+        """One step of autonomous navigation - commit to directions, find open paths"""
         if self.paused:
             self.stop_robot()
             return "PAUSED"
+
+        now = time.time()
 
         # Collision recovery
         if sensors.collision_detected:
             print(f"[NAV] Collision recovery - was going {sensors.last_direction}")
             self.stop_robot()
-            time.sleep(0.2)
-
-            if sensors.last_direction == "REVERSE":
-                self.move_forward(SPEED_SLOW)
-            else:
-                self.reverse(SPEED_SLOW)
-            time.sleep(0.5)
+            sensors.committed_action = None
+            time.sleep(0.3)
+            self.reverse(SPEED_SLOW)
+            time.sleep(0.8)
             self.stop_robot()
             sensors.collision_detected = False
             return "COLLISION_RECOVERY"
 
-        # Get distances
-        best_dir, best_dist, front, left, right, rear = self.find_best_direction()
+        # Get distances - use LIDAR primarily, ultrasonics as backup
+        front = self.get_front_distance()
+        rear = self.get_rear_distance()
+        left = self.get_left_distance()
+        right = self.get_right_distance()
 
-        # Log distances periodically
-        print(f"[NAV] F:{front:.0f} L:{left:.0f} R:{right:.0f} B:{rear:.0f} cm")
+        # Find the most open path using all LIDAR data
+        open_dir, open_dist = self.find_open_path()
 
-        # CRITICAL: Emergency stop if too close
-        if front < CRITICAL_DISTANCE_CM:
+        # CRITICAL: Emergency stop if too close (only check LIDAR, not ultrasonics)
+        lidar_front = 999
+        for sector in [0, 11, 1]:
+            if sector in sensors.lidar_sectors:
+                lidar_front = min(lidar_front, sensors.lidar_sectors[sector])
+
+        if lidar_front < CRITICAL_DISTANCE_CM:
             self.stop_robot()
-            time.sleep(0.2)
-
-            if rear > SAFE_DISTANCE_CM:
-                self.reverse()
-                time.sleep(0.4)
-                return f"EMERGENCY REVERSE (front={front:.0f}cm)"
-            else:
-                # Trapped - spin to find exit
-                if right > left:
-                    self.turn_right()
+            sensors.committed_action = None
+            # Find best escape direction
+            if open_dist > SAFE_DISTANCE_CM:
+                sensors.last_open_direction = open_dir
+                if open_dir == "LEFT":
+                    self.turn_left(SPEED_SLOW)
+                elif open_dir == "RIGHT":
+                    self.turn_right(SPEED_SLOW)
                 else:
-                    self.turn_left()
-                time.sleep(0.4)
-                return "EMERGENCY SPIN"
+                    self.reverse(SPEED_SLOW)
+                sensors.commit_until = now + 0.8
+                return f"ESCAPE {open_dir} (front={lidar_front:.0f}cm, open={open_dist:.0f}cm)"
+            return f"BLOCKED (front={lidar_front:.0f}cm)"
 
-        # Normal navigation
-        if best_dir == "FORWARD":
-            if front > TURN_THRESHOLD_CM:
-                self.move_forward(SPEED_NORMAL)
-                return f"FORWARD (clear: {front:.0f}cm)"
-            elif front > SAFE_DISTANCE_CM:
-                self.move_forward(SPEED_SLOW)
-                return f"FORWARD_SLOW ({front:.0f}cm)"
+        # If we're committed to an action and it's still safe, continue
+        if sensors.committed_action and now < sensors.commit_until:
+            # But check if we're about to hit something
+            if sensors.committed_action == "FORWARD" and lidar_front < STOP_DISTANCE_CM:
+                sensors.committed_action = None  # Abort forward
             else:
-                # Need to turn
-                if right > left:
-                    self.turn_right()
-                    time.sleep(0.3)
-                    return f"TURN_RIGHT (front blocked: {front:.0f}cm)"
+                return f"COMMITTED {sensors.committed_action}"
+
+        # Decide new action - prefer the most open direction
+        if lidar_front > OPEN_PATH_CM:
+            # Wide open ahead - go fast!
+            self.move_forward(SPEED_FAST)
+            sensors.committed_action = "FORWARD"
+            sensors.commit_until = now + MIN_FORWARD_TIME * 2  # Commit longer when open
+            return f"FORWARD_FAST (clear: {lidar_front:.0f}cm)"
+
+        elif lidar_front > TURN_THRESHOLD_CM:
+            # Good path ahead
+            self.move_forward(SPEED_NORMAL)
+            sensors.committed_action = "FORWARD"
+            sensors.commit_until = now + MIN_FORWARD_TIME
+            return f"FORWARD (clear: {lidar_front:.0f}cm)"
+
+        elif lidar_front > SAFE_DISTANCE_CM:
+            # Slowing down, path narrowing
+            self.move_forward(SPEED_SLOW)
+            sensors.committed_action = "FORWARD"
+            sensors.commit_until = now + MIN_FORWARD_TIME * 0.5
+            return f"FORWARD_SLOW ({lidar_front:.0f}cm)"
+
+        else:
+            # Need to turn - find best direction
+            # Use the open path finder
+            if open_dist > TURN_THRESHOLD_CM:
+                if open_dir == "LEFT":
+                    self.turn_left(SPEED_NORMAL)
+                    sensors.committed_action = "LEFT"
+                elif open_dir == "RIGHT":
+                    self.turn_right(SPEED_NORMAL)
+                    sensors.committed_action = "RIGHT"
                 else:
-                    self.turn_left()
-                    time.sleep(0.3)
-                    return f"TURN_LEFT (front blocked: {front:.0f}cm)"
-
-        elif best_dir == "LEFT":
-            self.turn_left()
-            time.sleep(0.3)
-            return f"TURN_LEFT (best: {left:.0f}cm)"
-
-        elif best_dir == "RIGHT":
-            self.turn_right()
-            time.sleep(0.3)
-            return f"TURN_RIGHT (best: {right:.0f}cm)"
-
-        elif best_dir == "REVERSE":
-            self.reverse()
-            time.sleep(0.4)
-            return f"REVERSE (only option: {rear:.0f}cm)"
-
-        return "IDLE"
+                    self.reverse(SPEED_SLOW)
+                    sensors.committed_action = "REVERSE"
+                sensors.commit_until = now + MIN_TURN_TIME
+                return f"TURN_{open_dir} (open path: {open_dist:.0f}cm)"
+            else:
+                # No good path - turn toward more space
+                if right > left:
+                    self.turn_right(SPEED_SLOW)
+                    sensors.committed_action = "RIGHT"
+                else:
+                    self.turn_left(SPEED_SLOW)
+                    sensors.committed_action = "LEFT"
+                sensors.commit_until = now + MIN_TURN_TIME
+                return f"SEARCHING (best: {max(left,right):.0f}cm)"
 
     def navigation_loop(self):
         """Main navigation loop"""
-        nav_interval = 0.15  # 150ms between nav decisions
+        nav_interval = 0.1  # 100ms between nav checks (but commits last longer)
         last_nav = 0
 
         while self.running:
@@ -369,7 +429,8 @@ class AutonomousNavigator:
                 # Check if we have recent LIDAR data
                 if sensors.lidar_updated > 0 and (now - sensors.lidar_updated) < 2.0:
                     status = self.navigate_step()
-                    if "FORWARD" in status or "TURN" in status or "REVERSE" in status or "EMERGENCY" in status:
+                    # Only log when action changes (not COMMITTED messages)
+                    if "COMMITTED" not in status:
                         print(f"[NAV] {status}")
                     last_nav = now
                 elif sensors.lidar_updated == 0:

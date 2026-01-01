@@ -7,6 +7,10 @@
 #include "config.h"
 #include "safety.h"
 
+// Access mode from main.cpp - safety only active in MAPPING mode
+enum ControlMode { MODE_MANUAL = 0, MODE_MAPPING = 1 };
+extern ControlMode currentMode;
+
 // Movement state variables
 bool discreteMoveActive = false;
 int discreteTurnDegrees = 0;
@@ -326,9 +330,9 @@ void updateDiscreteMove() {
   uint32_t elapsed = now - discreteMoveStartTime;
 
   // ===== SAFETY CHECK DURING DISCRETE MOVEMENT =====
-  // Check for obstacles while moving
+  // Only check obstacles in MAPPING mode - manual mode has full control
   int16_t moveSpeed = discreteMoveBackward ? -DISCRETE_MOVE_RPM : DISCRETE_MOVE_RPM;
-  if (discreteMovePhase == 2 && safetyCheck(moveSpeed, moveSpeed)) {
+  if (currentMode == MODE_MAPPING && discreteMovePhase == 2 && safetyCheck(moveSpeed, moveSpeed)) {
     // Safety triggered - stop discrete movement
     fullStopMotors();
     Serial.println("[MOVE] Stopped by safety system!");
