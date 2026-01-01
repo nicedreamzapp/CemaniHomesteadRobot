@@ -104,7 +104,7 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 | **Controls** | Tank drive with L/R steering, distance presets (0.5ft/1ft/3ft/10ft), GO/STOP buttons |
 | **LIDAR** | Real-time 3D point cloud visualization, 360° scanning, obstacle detection |
 | **AI Detection** | YOLOv8 on dual cameras, 601 classes, indoor/outdoor filtering, bounding boxes |
-| **Autonomous** | MAP mode for sensor fusion navigation, emergency STOP button |
+| **Autonomous** | MAP mode with 40cm (16") stop distance, collision recovery, sensor fusion navigation |
 | **Telemetry** | Motor RPM, battery voltage (%), driver temps, WiFi signal, uptime |
 | **Cameras** | Dual PTZ with RTSP streaming, ONVIF pan/tilt, two-way audio |
 | **Sonar** | 4x ultrasonic sensors with color-coded proximity badges (FL/FR/RL/RR) |
@@ -177,8 +177,8 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 | Component | Specs | Status |
 |-----------|-------|--------|
-| **RPLidar A1** | 360°, 12m range, 8000 samples/sec | ✅ Working |
-| **4x Ultrasonic** | JSN-SR04T-V3.0, 21-600cm | ✅ Working |
+| **RPLidar A1** | 360°, 12m range, 40cm stop distance | ✅ Working |
+| **4x Ultrasonic** | JSN-SR04T-V3.0, 30-600cm, 40cm stop | ✅ Working |
 | **2x PTZ Cameras** | Sricam 1080p RTSP/ONVIF + YOLOv8 | ✅ AI Detection |
 | **GPS Module** | u-blox NEO-M8N | ✅ Working |
 | **Compass** | QMC5883L Digital | ✅ Working |

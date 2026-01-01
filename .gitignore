@@ -61,3 +61,39 @@ jetson-object-detection/config.json
 # VPS auth (contains login credentials)
 vps-server/auth.json
 !vps-server/auth.example.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# SSH keys and secrets
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+known_hosts
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Personal/private data
+private/
+secrets/
+*.secret
+
+# Jetson logs and runtime files
+jetson-*/nohup.out
+jetson-*/*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Temporary files from Claude Code sessions
+/tmp/claude/
