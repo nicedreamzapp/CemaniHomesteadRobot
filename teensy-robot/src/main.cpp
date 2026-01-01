@@ -771,15 +771,17 @@ void loop() {
         }
       }
 
-      // ===== COLLISION DETECTION - ALWAYS ACTIVE =====
-      // Works in all modes - if we hit something, auto-reverse
-      extern int16_t telemetry_torqueL;
-      extern int16_t telemetry_torqueR;
-      int16_t collisionSpeed = safetyCheckCollision(telemetry_torqueL, telemetry_torqueR, lastLeftSpeed, lastRightSpeed);
-      if (collisionSpeed != 0) {
-        // Override with collision recovery movement
-        newLeft = collisionSpeed;
-        newRight = collisionSpeed;
+      // ===== COLLISION DETECTION - MAP MODE ONLY =====
+      // Only auto-reverse in mapping mode - manual Xbox control has full control
+      if (currentMode == MODE_MAPPING) {
+        extern int16_t telemetry_torqueL;
+        extern int16_t telemetry_torqueR;
+        int16_t collisionSpeed = safetyCheckCollision(telemetry_torqueL, telemetry_torqueR, lastLeftSpeed, lastRightSpeed);
+        if (collisionSpeed != 0) {
+          // Override with collision recovery movement
+          newLeft = collisionSpeed;
+          newRight = collisionSpeed;
+        }
       }
 
       // Always send 0 when target is 0 to ensure motors stop

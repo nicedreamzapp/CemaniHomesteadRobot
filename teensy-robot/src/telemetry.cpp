@@ -115,9 +115,19 @@ void readDriverTelemetry() {
         }
       }
       break;
+    case 7:
+      // Actual torque LEFT (Driver 2) - register 0x20AD (0.1A units)
+      val = readModbusRegister(2, REG_TORQUE_ACT_L);
+      if (val >= 0) telemetry_torqueL = (int16_t)val;
+      break;
+    case 8:
+      // Actual torque RIGHT (Driver 1) - register 0x20AD
+      val = readModbusRegister(1, REG_TORQUE_ACT_L);
+      if (val >= 0) telemetry_torqueR = (int16_t)val;
+      break;
   }
 
-  telemReadIndex = (telemReadIndex + 1) % 7;  // 7 cases now (0-6)
+  telemReadIndex = (telemReadIndex + 1) % 9;  // 9 cases now (0-8)
 }
 
 // LiFePO4 voltage to percentage lookup table (8S pack)

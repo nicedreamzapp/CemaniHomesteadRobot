@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.80"  // Collision detection + faster telemetry
+#define TEENSY_VERSION "3.81"  // Actually reading torque + MAP-mode-only collision
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
