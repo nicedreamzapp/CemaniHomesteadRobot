@@ -17,16 +17,16 @@ VPS_WS = "ws://72.60.124.34:3001"
 
 # Navigation parameters - 16 inches = 40cm stop distance
 SAFE_DISTANCE_CM = 50      # Start slowing down (~20 inches)
-STOP_DISTANCE_CM = 40      # Hard stop (~16 inches)
+STOP_DISTANCE_CM = 40      # Hard stop (~16 inches) - ultrasonics trigger this
 CRITICAL_DISTANCE_CM = 30  # Emergency backup (~12 inches)
-TURN_THRESHOLD_CM = 150    # Need 1.5m clear to go full speed
+TURN_THRESHOLD_CM = 120    # Need 1.2m clear to keep going forward
 OPEN_PATH_CM = 200         # Consider path "open" if >2m clear
 SCAN_SECTORS = 12          # Divide 360° into sectors
-SPEED_SLOW = 4             # Slow speed
-SPEED_NORMAL = 8           # Normal mapping speed
-SPEED_FAST = 12            # Fast when path is clear
-MIN_FORWARD_TIME = 1.0     # Commit to forward for at least 1 second
-MIN_TURN_TIME = 0.5        # Commit to turn for at least 0.5 second
+SPEED_SLOW = 3             # Slow speed (original)
+SPEED_NORMAL = 5           # Normal mapping speed (original)
+SPEED_FAST = 5             # Same as normal - no fast mode
+MIN_FORWARD_TIME = 2.0     # Commit to forward for 2 seconds minimum
+MIN_TURN_TIME = 0.8        # Commit to turn for 0.8 seconds
 
 # ========== SENSOR STATE ==========
 class SensorState:
@@ -335,15 +335,23 @@ class AutonomousNavigator:
         # Find the most open path using all LIDAR data
         open_dir, open_dist = self.find_open_path()
 
-        # CRITICAL: Emergency stop if too close (only check LIDAR, not ultrasonics)
+        # Get LIDAR front distance for navigation
         lidar_front = 999
         for sector in [0, 11, 1]:
             if sector in sensors.lidar_sectors:
                 lidar_front = min(lidar_front, sensors.lidar_sectors[sector])
 
-        if lidar_front < CRITICAL_DISTANCE_CM:
+        # CRITICAL: Use BOTH LIDAR and ultrasonics for emergency stops
+        # Ultrasonics are great for catching things LIDAR might miss
+        us_front = min(sensors.us_fl if sensors.us_fl > 0 else 999,
+                       sensors.us_fr if sensors.us_fr > 0 else 999)
+        min_front = min(lidar_front, us_front)  # Use closest reading from either sensor
+
+        # Emergency stop if EITHER lidar or ultrasonic detects obstacle too close
+        if min_front < CRITICAL_DISTANCE_CM:
             self.stop_robot()
             sensors.committed_action = None
+            print(f"[NAV] EMERGENCY STOP! lidar={lidar_front:.0f}cm, ultrasonic={us_front:.0f}cm")
             # Find best escape direction
             if open_dist > SAFE_DISTANCE_CM:
                 sensors.last_open_direction = open_dir
@@ -354,14 +362,15 @@ class AutonomousNavigator:
                 else:
                     self.reverse(SPEED_SLOW)
                 sensors.commit_until = now + 0.8
-                return f"ESCAPE {open_dir} (front={lidar_front:.0f}cm, open={open_dist:.0f}cm)"
-            return f"BLOCKED (front={lidar_front:.0f}cm)"
+                return f"ESCAPE {open_dir} (front={min_front:.0f}cm, open={open_dist:.0f}cm)"
+            return f"BLOCKED (front={min_front:.0f}cm)"
 
         # If we're committed to an action and it's still safe, continue
         if sensors.committed_action and now < sensors.commit_until:
-            # But check if we're about to hit something
-            if sensors.committed_action == "FORWARD" and lidar_front < STOP_DISTANCE_CM:
-                sensors.committed_action = None  # Abort forward
+            # But check if we're about to hit something (use both sensors)
+            if sensors.committed_action == "FORWARD" and min_front < STOP_DISTANCE_CM:
+                sensors.committed_action = None  # Abort forward - obstacle detected
+                print(f"[NAV] Abort forward - obstacle at {min_front:.0f}cm")
             else:
                 return f"COMMITTED {sensors.committed_action}"
 
