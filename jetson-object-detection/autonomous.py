@@ -16,11 +16,12 @@ from collections import deque
 # VPS WebSocket
 VPS_WS = "ws://72.60.124.34:3001"
 
-# Navigation parameters - CONSERVATIVE to avoid hitting tables/furniture
-SAFE_DISTANCE_CM = 80      # Start slowing down (was 60)
-STOP_DISTANCE_CM = 50      # Hard stop (was 35)
-CRITICAL_DISTANCE_CM = 40  # Emergency backup (was 25)
-TURN_THRESHOLD_CM = 100    # Need this much space to go forward (was 80)
+# Navigation parameters - TIGHT to avoid hitting tables/furniture
+# 16 inches = 40cm, 12 inches = 30cm
+SAFE_DISTANCE_CM = 60      # Start slowing down (~24 inches)
+STOP_DISTANCE_CM = 40      # Hard stop (~16 inches)
+CRITICAL_DISTANCE_CM = 30  # Emergency backup (~12 inches)
+TURN_THRESHOLD_CM = 80     # Need this much space to go forward
 SCAN_SECTORS = 12          # Divide 360° into sectors
 SPEED_SLOW = 3             # Slow speed (RPM-ish value)
 SPEED_NORMAL = 5           # Normal mapping speed

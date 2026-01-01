@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.84"  // Fixed ultrasonic cross-talk (raised min range, increased interval)
+#define TEENSY_VERSION "3.85"  // Ultrasonic stop at 40cm (16 inches) in MAP mode only
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
