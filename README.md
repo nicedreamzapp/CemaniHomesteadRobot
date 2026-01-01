@@ -189,8 +189,8 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 |---------|---------|
 | **Model** | YOLOv8n with Open Images v7 |
 | **Classes** | 601 objects (people, animals, vehicles, furniture, etc.) |
-| **Indoor Filter** | 168 classes (furniture, appliances, household items) |
-| **Outdoor Filter** | 195 classes (animals, vehicles, plants, structures) |
+| **Indoor Filter** | 516 classes (furniture, appliances, household items, food, people) |
+| **Outdoor Filter** | 468 classes (animals, vehicles, plants, structures, people) |
 | **Dual Camera** | Front + Rear simultaneous detection |
 | **Inference** | 5 FPS on Jetson Orin Nano |
 
