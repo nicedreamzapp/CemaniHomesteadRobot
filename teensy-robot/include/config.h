@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.81"  // Actually reading torque + MAP-mode-only collision
+#define TEENSY_VERSION "3.82"  // Relaxed ultrasonic thresholds (20cm stop)
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
