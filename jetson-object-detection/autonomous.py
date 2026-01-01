@@ -341,11 +341,14 @@ class AutonomousNavigator:
             if sector in sensors.lidar_sectors:
                 lidar_front = min(lidar_front, sensors.lidar_sectors[sector])
 
-        # CRITICAL: Use BOTH LIDAR and ultrasonics for emergency stops
-        # Ultrasonics are great for catching things LIDAR might miss
+        # Use ultrasonics only for VERY close emergency stops (< 25cm)
+        # LIDAR is more reliable for general navigation
         us_front = min(sensors.us_fl if sensors.us_fl > 0 else 999,
                        sensors.us_fr if sensors.us_fr > 0 else 999)
-        min_front = min(lidar_front, us_front)  # Use closest reading from either sensor
+        # Trust LIDAR for navigation, ultrasonics only for emergency
+        min_front = lidar_front
+        if us_front < 25:  # Ultrasonic emergency override only when VERY close
+            min_front = us_front
 
         # Emergency stop if EITHER lidar or ultrasonic detects obstacle too close
         if min_front < CRITICAL_DISTANCE_CM:
