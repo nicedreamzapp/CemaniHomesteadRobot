@@ -341,17 +341,34 @@ class AutonomousNavigator:
             if sector in sensors.lidar_sectors:
                 lidar_front = min(lidar_front, sensors.lidar_sectors[sector])
 
-        # Use ultrasonics only for VERY close emergency stops (< 25cm)
-        # LIDAR is more reliable for general navigation
+        # Get all ultrasonic readings
         us_front = min(sensors.us_fl if sensors.us_fl > 0 else 999,
                        sensors.us_fr if sensors.us_fr > 0 else 999)
-        # Trust LIDAR for navigation, ultrasonics only for emergency
-        min_front = lidar_front
-        if us_front < 25:  # Ultrasonic emergency override only when VERY close
-            min_front = us_front
+        us_rear = min(sensors.us_rl if sensors.us_rl > 0 else 999,
+                      sensors.us_rr if sensors.us_rr > 0 else 999)
 
-        # Emergency stop if EITHER lidar or ultrasonic detects obstacle too close
-        if min_front < CRITICAL_DISTANCE_CM:
+        # If ultrasonics see obstacle in front, find clear direction
+        if us_front < STOP_DISTANCE_CM and us_front > 0:
+            print(f"[NAV] Ultrasonic obstacle front: {us_front:.0f}cm - finding clear path")
+            # Check which way is clearer
+            if us_rear > SAFE_DISTANCE_CM:
+                # Back up to get room
+                self.reverse(SPEED_SLOW)
+                sensors.committed_action = "REVERSE"
+                sensors.commit_until = now + 1.0
+                return f"BACKUP (ultrasonic front={us_front:.0f}cm, rear clear={us_rear:.0f}cm)"
+            elif open_dist > TURN_THRESHOLD_CM:
+                # Turn toward open path
+                if open_dir == "LEFT":
+                    self.turn_left(SPEED_NORMAL)
+                elif open_dir == "RIGHT":
+                    self.turn_right(SPEED_NORMAL)
+                sensors.committed_action = open_dir
+                sensors.commit_until = now + MIN_TURN_TIME
+                return f"TURN_{open_dir} (ultrasonic blocked, open={open_dist:.0f}cm)"
+
+        # Emergency stop if LIDAR sees something very close
+        if lidar_front < CRITICAL_DISTANCE_CM:
             self.stop_robot()
             sensors.committed_action = None
             print(f"[NAV] EMERGENCY STOP! lidar={lidar_front:.0f}cm, ultrasonic={us_front:.0f}cm")
