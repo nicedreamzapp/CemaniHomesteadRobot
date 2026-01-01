@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.82"  // Relaxed ultrasonic thresholds (20cm stop)
+#define TEENSY_VERSION "3.83"  // Disabled ultrasonic obstacle detection (reading ground)
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true

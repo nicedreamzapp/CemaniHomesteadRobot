@@ -10,8 +10,7 @@
 SafetyState currentSafetyState = SAFETY_OK;
 bool safetyOverride = false;
 
-// Last alert time (to avoid spamming)
-static uint32_t lastAlertTime = 0;
+// Last status send time
 static uint32_t lastStatusSend = 0;
 
 // Smoothed obstacle distances (to reduce noise)
@@ -34,8 +33,16 @@ static float smoothDistance(float newVal, float prevSmooth) {
 }
 
 bool safetyCheck(int16_t targetSpeedL, int16_t targetSpeedR) {
-  uint32_t now = millis();
+  // DISABLED: Ultrasonic obstacle detection
+  // The sensors are reading the ground, causing constant false stops
+  // Rely on LIDAR + torque-based collision detection instead
+  // TODO: Re-enable after tilting sensors up physically
 
+  // Silence unused parameter warnings
+  (void)targetSpeedL;
+  (void)targetSpeedR;
+
+  /*
   // Update smoothed distances
   smoothFL = smoothDistance(distFL, smoothFL);
   smoothFR = smoothDistance(distFR, smoothFR);
@@ -79,6 +86,7 @@ bool safetyCheck(int16_t targetSpeedL, int16_t targetSpeedR) {
       return true;  // Stop!
     }
   }
+  */
 
   // Check tilt using motor torque (from telemetry)
   extern int16_t telemetry_torqueL;
