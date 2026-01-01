@@ -367,27 +367,42 @@ class AutonomousNavigator:
                 sensors.commit_until = now + MIN_TURN_TIME
                 return f"TURN_{open_dir} (ultrasonic blocked, open={open_dist:.0f}cm)"
 
-        # Emergency stop if LIDAR sees something very close
-        if lidar_front < CRITICAL_DISTANCE_CM:
-            self.stop_robot()
+        # LIDAR says too close - back up or go around
+        if lidar_front < STOP_DISTANCE_CM:
+            print(f"[NAV] LIDAR obstacle: {lidar_front:.0f}cm - finding escape")
             sensors.committed_action = None
-            print(f"[NAV] EMERGENCY STOP! lidar={lidar_front:.0f}cm, ultrasonic={us_front:.0f}cm")
-            # Find best escape direction
-            if open_dist > SAFE_DISTANCE_CM:
-                sensors.last_open_direction = open_dir
+
+            # First choice: back up if rear is clear
+            if us_rear > SAFE_DISTANCE_CM:
+                self.reverse(SPEED_NORMAL)
+                sensors.committed_action = "REVERSE"
+                sensors.commit_until = now + 1.0
+                return f"BACKUP (lidar front={lidar_front:.0f}cm, rear clear={us_rear:.0f}cm)"
+
+            # Second choice: turn toward open path
+            if open_dist > TURN_THRESHOLD_CM:
                 if open_dir == "LEFT":
-                    self.turn_left(SPEED_SLOW)
+                    self.turn_left(SPEED_NORMAL)
                 elif open_dir == "RIGHT":
-                    self.turn_right(SPEED_SLOW)
+                    self.turn_right(SPEED_NORMAL)
                 else:
                     self.reverse(SPEED_SLOW)
-                sensors.commit_until = now + 0.8
-                return f"ESCAPE {open_dir} (front={min_front:.0f}cm, open={open_dist:.0f}cm)"
-            return f"BLOCKED (front={min_front:.0f}cm)"
+                sensors.committed_action = open_dir
+                sensors.commit_until = now + MIN_TURN_TIME
+                return f"ESCAPE_{open_dir} (lidar blocked, open={open_dist:.0f}cm)"
+
+            # Last resort: spin to find any opening
+            if right > left:
+                self.turn_right(SPEED_SLOW)
+            else:
+                self.turn_left(SPEED_SLOW)
+            sensors.commit_until = now + 0.5
+            return f"SEARCHING (trapped, looking for exit)"
 
         # If we're committed to an action and it's still safe, continue
         if sensors.committed_action and now < sensors.commit_until:
             # But check if we're about to hit something (use both sensors)
+            min_front = min(lidar_front, us_front)
             if sensors.committed_action == "FORWARD" and min_front < STOP_DISTANCE_CM:
                 sensors.committed_action = None  # Abort forward - obstacle detected
                 print(f"[NAV] Abort forward - obstacle at {min_front:.0f}cm")
