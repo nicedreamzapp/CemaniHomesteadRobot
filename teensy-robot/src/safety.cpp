@@ -33,17 +33,7 @@ static float smoothDistance(float newVal, float prevSmooth) {
 }
 
 bool safetyCheck(int16_t targetSpeedL, int16_t targetSpeedR) {
-  // DISABLED: Ultrasonic obstacle detection
-  // The sensors are reading the ground, causing constant false stops
-  // Rely on LIDAR + torque-based collision detection instead
-  // TODO: Re-enable after tilting sensors up physically
-
-  // Silence unused parameter warnings
-  (void)targetSpeedL;
-  (void)targetSpeedR;
-
-  /*
-  // Update smoothed distances
+  // Update smoothed distances (0 = no reading, filtered by min range)
   smoothFL = smoothDistance(distFL, smoothFL);
   smoothFR = smoothDistance(distFR, smoothFR);
   smoothRL = smoothDistance(distRL, smoothRL);
@@ -86,7 +76,6 @@ bool safetyCheck(int16_t targetSpeedL, int16_t targetSpeedR) {
       return true;  // Stop!
     }
   }
-  */
 
   // Check tilt using motor torque (from telemetry)
   extern int16_t telemetry_torqueL;

@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.83"  // Disabled ultrasonic obstacle detection (reading ground)
+#define TEENSY_VERSION "3.84"  // Fixed ultrasonic cross-talk (raised min range, increased interval)
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
