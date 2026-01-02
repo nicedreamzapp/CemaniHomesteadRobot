@@ -28,6 +28,25 @@ SPEED_FAST = 30            # Fast when path is wide open
 MIN_FORWARD_TIME = 1.5     # Commit to forward for 1.5 seconds
 MIN_TURN_TIME = 0.5        # Quick turns to find openings faster
 
+# Camera-based collision avoidance
+CAM_PATH_WIDTH = 0.4       # Center 40% of frame is "in path"
+CAM_CLOSE_THRESHOLD = 0.5  # Object filling >50% of frame height = very close
+CAM_MEDIUM_THRESHOLD = 0.3 # Object filling >30% = medium distance
+
+# Priority objects to stop for (living things and vehicles)
+PRIORITY_OBJECTS = {
+    # People
+    "person", "boy", "girl", "man", "woman", "human body", "human face",
+    # Animals
+    "dog", "cat", "bird", "chicken", "duck", "goose", "turkey", "rabbit",
+    "deer", "horse", "cow", "sheep", "goat", "pig", "fox", "coyote",
+    "bear", "elephant", "lion", "tiger", "wolf", "squirrel", "raccoon",
+    # Vehicles (in case they're moving)
+    "car", "truck", "van", "bus", "motorcycle", "bicycle", "cart",
+    # Other hazards
+    "wheelchair", "stroller", "baby carriage"
+}
+
 # ========== SENSOR STATE ==========
 class SensorState:
     def __init__(self):
@@ -229,6 +248,65 @@ class AutonomousNavigator:
                 distances.append(sensors.lidar_sectors[sector])
         return min(distances) if distances else 999
 
+    def check_camera_obstacle(self, direction="FORWARD"):
+        """
+        Check camera detections for obstacles in path.
+        Returns: (should_stop, should_slow, object_name) or (False, False, None)
+        """
+        now = time.time()
+
+        # Only use recent detections (within 2 seconds)
+        if (now - sensors.detection_updated) > 2.0:
+            return False, False, None
+
+        # Choose camera based on direction
+        if direction == "FORWARD":
+            detections = sensors.cam1_detections  # Front camera
+        elif direction == "REVERSE":
+            detections = sensors.cam2_detections  # Rear camera
+        else:
+            return False, False, None
+
+        if not detections:
+            return False, False, None
+
+        # Check each detection
+        for det in detections:
+            obj_class = det.get("class", "").lower()
+
+            # Only care about priority objects
+            if obj_class not in PRIORITY_OBJECTS:
+                continue
+
+            # Get bounding box (normalized 0-1)
+            bbox = det.get("bbox", {})
+            x1 = bbox.get("x1", 0)
+            x2 = bbox.get("x2", 1)
+            y1 = bbox.get("y1", 0)
+            y2 = bbox.get("y2", 1)
+
+            # Check if object is in the path (center portion of frame)
+            obj_center_x = (x1 + x2) / 2
+            path_left = (1 - CAM_PATH_WIDTH) / 2    # 0.3
+            path_right = 1 - path_left               # 0.7
+
+            if not (path_left < obj_center_x < path_right):
+                continue  # Object is to the side, not in path
+
+            # Estimate proximity from bounding box height
+            obj_height = y2 - y1
+
+            if obj_height > CAM_CLOSE_THRESHOLD:
+                # Very close - stop!
+                print(f"[CAM] STOP - {obj_class} in path, size={obj_height:.2f}")
+                return True, False, obj_class
+            elif obj_height > CAM_MEDIUM_THRESHOLD:
+                # Medium distance - slow down
+                print(f"[CAM] SLOW - {obj_class} approaching, size={obj_height:.2f}")
+                return False, True, obj_class
+
+        return False, False, None
+
     def send_command(self, cmd, value=0):
         """Send command to robot via VPS"""
         if not self.connected or not self.ws_app:
@@ -326,6 +404,16 @@ class AutonomousNavigator:
             sensors.collision_detected = False
             return "COLLISION_RECOVERY"
 
+        # Camera-based obstacle detection (priority objects like people/animals)
+        cam_direction = "FORWARD" if sensors.last_direction != "REVERSE" else "REVERSE"
+        cam_stop, cam_slow, cam_object = self.check_camera_obstacle(cam_direction)
+
+        if cam_stop:
+            # Priority object very close - immediate stop
+            self.stop_robot()
+            sensors.committed_action = None
+            return f"CAM_STOP ({cam_object} in path)"
+
         # Get distances - use LIDAR primarily, ultrasonics as backup
         front = self.get_front_distance()
         rear = self.get_rear_distance()
@@ -401,28 +489,47 @@ class AutonomousNavigator:
 
         # If we're committed to an action and it's still safe, continue
         if sensors.committed_action and now < sensors.commit_until:
-            # But check if we're about to hit something (use both sensors)
+            # But check if we're about to hit something (use both sensors + camera)
             min_front = min(lidar_front, us_front)
-            if sensors.committed_action == "FORWARD" and min_front < STOP_DISTANCE_CM:
+            if sensors.committed_action == "FORWARD" and (min_front < STOP_DISTANCE_CM or cam_stop):
                 sensors.committed_action = None  # Abort forward - obstacle detected
-                print(f"[NAV] Abort forward - obstacle at {min_front:.0f}cm")
+                if cam_stop:
+                    print(f"[NAV] Abort forward - camera sees {cam_object}")
+                else:
+                    print(f"[NAV] Abort forward - obstacle at {min_front:.0f}cm")
+            elif sensors.committed_action == "REVERSE" and cam_stop:
+                sensors.committed_action = None  # Abort reverse - camera sees something behind
+                print(f"[NAV] Abort reverse - camera sees {cam_object}")
             else:
                 return f"COMMITTED {sensors.committed_action}"
 
         # Decide new action - prefer the most open direction
+        # If camera sees priority object approaching, limit speed
         if lidar_front > OPEN_PATH_CM:
-            # Wide open ahead - go fast!
-            self.move_forward(SPEED_FAST)
-            sensors.committed_action = "FORWARD"
-            sensors.commit_until = now + MIN_FORWARD_TIME * 2  # Commit longer when open
-            return f"FORWARD_FAST (clear: {lidar_front:.0f}cm)"
+            # Wide open ahead - go fast (unless camera sees something)
+            if cam_slow:
+                self.move_forward(SPEED_SLOW)
+                sensors.committed_action = "FORWARD"
+                sensors.commit_until = now + MIN_FORWARD_TIME * 0.5
+                return f"FORWARD_SLOW (cam: {cam_object} ahead)"
+            else:
+                self.move_forward(SPEED_FAST)
+                sensors.committed_action = "FORWARD"
+                sensors.commit_until = now + MIN_FORWARD_TIME * 2
+                return f"FORWARD_FAST (clear: {lidar_front:.0f}cm)"
 
         elif lidar_front > TURN_THRESHOLD_CM:
             # Good path ahead
-            self.move_forward(SPEED_NORMAL)
-            sensors.committed_action = "FORWARD"
-            sensors.commit_until = now + MIN_FORWARD_TIME
-            return f"FORWARD (clear: {lidar_front:.0f}cm)"
+            if cam_slow:
+                self.move_forward(SPEED_SLOW)
+                sensors.committed_action = "FORWARD"
+                sensors.commit_until = now + MIN_FORWARD_TIME * 0.5
+                return f"FORWARD_SLOW (cam: {cam_object} ahead)"
+            else:
+                self.move_forward(SPEED_NORMAL)
+                sensors.committed_action = "FORWARD"
+                sensors.commit_until = now + MIN_FORWARD_TIME
+                return f"FORWARD (clear: {lidar_front:.0f}cm)"
 
         elif lidar_front > SAFE_DISTANCE_CM:
             # Slowing down, path narrowing
