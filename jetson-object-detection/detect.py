@@ -3,18 +3,28 @@
 YOLOv8 OIV7 Object Detection - Jetson
 Uses ffmpeg subprocess for reliable RTSP capture
 With indoor/outdoor filtering and master controls
+Now includes semantic map learning in all modes!
 """
 
 import os
 import cv2
 import json
 import time
+import math
 import threading
 import subprocess
 import numpy as np
 import websocket
 
 from ultralytics import YOLO
+
+# Import semantic mapping for learning in all modes
+try:
+    from semantic_map import SemanticMap
+    SEMANTIC_MAP_AVAILABLE = True
+except ImportError as e:
+    print(f"[SEMANTIC] Semantic map not available: {e}")
+    SEMANTIC_MAP_AVAILABLE = False
 
 # Cameras (RTSP)
 CAMERAS = [
@@ -32,6 +42,98 @@ WIDTH, HEIGHT = 1280, 720
 filter_mode = "all"  # "all", "indoor", "outdoor"
 confidence_threshold = 0.05  # 0.01 to 1.0
 settings_lock = threading.Lock()
+
+# ========== ROBOT POSITION (from server dead_reckoning) ==========
+robot_position = {"x": 0, "y": 0, "heading": 0}
+position_lock = threading.Lock()
+
+# ========== SEMANTIC MAP (learns in all modes) ==========
+semantic_map = None
+
+def init_semantic_map():
+    """Initialize semantic map for learning in manual mode"""
+    global semantic_map
+    if not SEMANTIC_MAP_AVAILABLE:
+        return
+
+    def get_pose():
+        with position_lock:
+            return (robot_position["x"], robot_position["y"],
+                    math.radians(robot_position["heading"]))
+
+    # No ws_send for detect.py - semantic map will just learn locally
+    semantic_map = SemanticMap(ws_send_func=None, get_pose_func=get_pose)
+    print(f"[SEMANTIC] Initialized - {len(semantic_map.zones)} zones, {len(semantic_map.objects)} objects")
+
+def update_robot_position(x, y, heading):
+    """Update robot position from server dead_reckoning"""
+    global robot_position
+    with position_lock:
+        robot_position["x"] = x
+        robot_position["y"] = y
+        robot_position["heading"] = heading
+
+def feed_detection_to_semantic(cam_id, detection):
+    """Feed a detection to the semantic map for learning"""
+    if not semantic_map:
+        return
+
+    with position_lock:
+        robot_x = robot_position["x"]
+        robot_y = robot_position["y"]
+        robot_heading = robot_position["heading"]
+
+    obj_class = detection.get("class", "unknown")
+    confidence = detection.get("confidence", 0.5)
+    bbox = detection.get("bbox", {})
+
+    # Skip low confidence
+    if confidence < 0.4:
+        return
+
+    # Calculate object position in world coordinates
+    x1 = bbox.get("x1", 0)
+    x2 = bbox.get("x2", 1)
+    y1 = bbox.get("y1", 0)
+    y2 = bbox.get("y2", 1)
+
+    obj_center_x = (x1 + x2) / 2
+    obj_height = y2 - y1
+
+    # Estimate depth from bounding box
+    if obj_height > 0.5:
+        depth = 50
+    elif obj_height > 0.3:
+        depth = 100
+    elif obj_height > 0.15:
+        depth = 200
+    else:
+        depth = 150
+
+    # Calculate angle
+    CAMERA_HFOV = 70
+    angle_offset = (obj_center_x - 0.5) * CAMERA_HFOV
+
+    if cam_id == 1:
+        world_angle = robot_heading + angle_offset
+    else:
+        world_angle = robot_heading + 180 + angle_offset
+
+    world_angle_rad = math.radians(world_angle)
+    obj_x = robot_x + depth * math.cos(world_angle_rad)
+    obj_y = robot_y + depth * math.sin(world_angle_rad)
+
+    # Add observation
+    semantic_map.add_observation(
+        object_type=obj_class,
+        x=obj_x,
+        y=obj_y,
+        z=0,
+        width=(x2 - x1) * depth * 0.01 * CAMERA_HFOV,
+        height=obj_height * depth,
+        confidence=confidence,
+        camera_id=cam_id
+    )
 
 # Living creatures get circle overlay
 living_classes = {"person", "bird", "cat", "dog", "horse", "sheep", "cow",
@@ -248,6 +350,11 @@ def send_detections(cam_id, detections):
     global ws
     if not detections:
         return
+
+    # Feed detections to semantic map for learning (runs in all modes)
+    for det in detections:
+        feed_detection_to_semantic(cam_id, det)
+
     try:
         with ws_lock:
             if ws is None:
@@ -317,6 +424,13 @@ def ws_listener():
                                 confidence_threshold = max(0.01, min(1.0, float(msg["confidence"])))
                                 if abs(old_conf - confidence_threshold) > 0.01:
                                     print(f"[SETTINGS] Confidence: {confidence_threshold:.2f}")
+
+                    # Handle robot position updates (for semantic learning)
+                    if msg_type == "dead_reckoning":
+                        x = msg.get("x", 0)
+                        y = msg.get("y", 0)
+                        heading = msg.get("heading", 0)
+                        update_robot_position(x, y, heading)
 
                 except json.JSONDecodeError:
                     pass
@@ -433,9 +547,13 @@ def process_camera(cam):
 print("=" * 40)
 print("  YOLOv8 OIV7 - 601 Classes")
 print("  Indoor/Outdoor Filtering Enabled")
+print("  Semantic Learning: ALL MODES")
 print("=" * 40)
 
 connect_ws()
+
+# Initialize semantic map for learning in all modes
+init_semantic_map()
 
 # Start WebSocket listener thread
 ws_thread = threading.Thread(target=ws_listener, daemon=True)

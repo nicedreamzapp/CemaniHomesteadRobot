@@ -16,6 +16,11 @@ ws.onopen = () => {
       window.camerasPtzModule.initCam1();
     }
   }, 1000);
+  // Request semantic map data on connection (maps visible in all modes)
+  setTimeout(() => {
+    ws.send(JSON.stringify({ type: 'semantic_map_request' }));
+    ws.send(JSON.stringify({ type: 'lookable_targets_request' }));
+  }, 2000);
 };
 
 ws.onmessage = function(e) {

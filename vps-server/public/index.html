@@ -762,8 +762,8 @@
           <span id="mapStatusText">Mapping</span>
         </div>
 
-        <!-- SLAM Map Stats (shows during mapping mode) -->
-        <div id="slamMapStats" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:none;z-index:20;">
+        <!-- SLAM Map Stats (always visible) -->
+        <div id="slamMapStats" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;">
           <div style="color:#0f8;font-weight:bold;margin-bottom:4px;font-size:10px;">INDOOR SLAM</div>
           <div style="display:grid;grid-template-columns:auto auto;gap:2px 8px;">
             <span style="color:#888;">Static:</span><span id="mapStaticCells" style="color:#5af;">0</span>
@@ -801,8 +801,8 @@
           <img id="visualPanoramaImg" style="width:100%;height:40px;object-fit:cover;border-radius:3px;">
         </div>
 
-        <!-- Semantic Map Panel (zones/objects/look-at) -->
-        <div id="semanticMapPanel" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:none;z-index:20;max-width:180px;">
+        <!-- Semantic Map Panel (zones/objects/look-at) - always visible -->
+        <div id="semanticMapPanel" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;max-width:180px;">
           <div style="color:#fa0;font-weight:bold;margin-bottom:6px;font-size:10px;">🧠 SPATIAL AWARENESS</div>
 
           <!-- Look At Input -->
@@ -1104,32 +1104,21 @@ function toggleMapMode() {
   const status = document.getElementById('mapModeStatus');
   const statusText = document.getElementById('mapStatusText');
 
-  const semanticPanel = document.getElementById('semanticMapPanel');
-
   if (mapModeActive) {
-    // Activate AUTONOMOUS MAPPING
+    // Activate AUTONOMOUS MAPPING (navigation only - map always visible)
     btn.style.background = 'rgba(90,170,255,0.9)';
     btn.style.color = '#000';
     btn.style.borderColor = '#5af';
-    btn.innerHTML = '🗺️ ON';
+    btn.innerHTML = '🗺️ AUTO';
     status.style.display = 'block';
-    statusText.textContent = 'Autonomous • LIDAR active';
+    statusText.textContent = 'Autonomous Navigation';
     statusText.style.color = '#5af';
-
-    // Show semantic map panel
-    if (semanticPanel) semanticPanel.style.display = 'block';
 
     // Send autonomous START command
     var socket = window.ws;
     if (socket && socket.readyState === 1) {
       socket.send(JSON.stringify({ type: 'autonomous_control', cmd: 'START' }));
       console.log('[MAP] Sent START command');
-
-      // Request semantic map data
-      setTimeout(() => {
-        if (typeof requestSemanticMap === 'function') requestSemanticMap();
-        if (typeof requestLookableTargets === 'function') requestLookableTargets();
-      }, 1000);
     } else {
       console.error('[MAP] WebSocket not connected');
       alert('WebSocket not connected!');
@@ -1137,23 +1126,19 @@ function toggleMapMode() {
       btn.style.background = 'rgba(20,40,60,0.8)';
       btn.style.color = '#5af';
       btn.innerHTML = '🗺️ MAP';
-      if (semanticPanel) semanticPanel.style.display = 'none';
     }
   } else {
-    // Deactivate - stop autonomous, back to manual
+    // Deactivate autonomous - back to manual (map stays visible)
     btn.style.background = 'rgba(20,40,60,0.8)';
     btn.style.color = '#5af';
     btn.style.borderColor = 'rgba(90,170,255,0.5)';
     btn.innerHTML = '🗺️ MAP';
     status.style.display = 'none';
 
-    // Hide semantic map panel
-    if (semanticPanel) semanticPanel.style.display = 'none';
-
     // Send autonomous STOP command
     if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
-      console.log('[MAP] Autonomous mapping stopped');
+      console.log('[MAP] Autonomous navigation stopped - manual control active');
     }
   }
 }

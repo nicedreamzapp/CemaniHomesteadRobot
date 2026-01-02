@@ -19,9 +19,9 @@ from collections import defaultdict
 
 # Configuration
 DB_PATH = os.path.expanduser("~/robot_semantic_map.db")
-OBJECT_PERSISTENCE_THRESHOLD = 5  # Times seen in same spot to become "persistent"
+OBJECT_PERSISTENCE_THRESHOLD = 3  # Times seen in same spot to become "persistent" (was 5 - faster learning)
 OBJECT_LOCATION_TOLERANCE = 50  # cm - how close detections must be to count as same object
-ZONE_MIN_OBSERVATIONS = 10  # Observations needed to auto-create a zone
+ZONE_MIN_OBSERVATIONS = 5  # Observations needed to auto-create a zone (was 10 - faster learning)
 ZONE_CLUSTER_RADIUS = 100  # cm - cluster radius for auto-zone detection
 STALE_OBJECT_DAYS = 7  # Days before object is considered stale
 

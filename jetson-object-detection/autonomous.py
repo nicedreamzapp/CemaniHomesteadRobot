@@ -138,11 +138,11 @@ class AutonomousNavigator:
 
         # Map update tracking
         self.last_map_update = 0
-        self.map_update_interval = 0.2  # Update map every 200ms
+        self.map_update_interval = 0.1  # Update map every 100ms (faster learning)
         self.last_map_save = 0
         self.map_save_interval = 60.0   # Auto-save every 60 seconds
         self.last_map_broadcast = 0
-        self.map_broadcast_interval = 2.0  # Broadcast map to UI every 2 seconds
+        self.map_broadcast_interval = 1.0  # Broadcast map to UI every 1 second (faster updates)
 
         # Visual mapping system
         self.visual_mapper = None
