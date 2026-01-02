@@ -39,6 +39,17 @@ const perCameraStatus = {
 };
 const CAMERA_TIMEOUT_MS = 3000;
 
+// ============ MAP STATE ============
+let mapStatus = {
+  robot_x: 0,
+  robot_y: 0,
+  robot_heading: 0,
+  static_cells: 0,
+  total_cells: 0,
+  map_coverage: 0,
+  updated: 0
+};
+
 // WebSocket server reference (set by main server.js)
 let wss = null;
 
@@ -104,6 +115,9 @@ module.exports = {
   getRobotSocket,
   getCameraSocket,
   getWss,
+
+  // Map status
+  mapStatus,
 
   // Broadcast
   broadcast

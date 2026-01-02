@@ -761,6 +761,100 @@
         <div id="mapModeStatus" style="position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font-size:8px;color:#888;display:none;">
           <span id="mapStatusText">Mapping</span>
         </div>
+
+        <!-- SLAM Map Stats (shows during mapping mode) -->
+        <div id="slamMapStats" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:none;z-index:20;">
+          <div style="color:#0f8;font-weight:bold;margin-bottom:4px;font-size:10px;">INDOOR SLAM</div>
+          <div style="display:grid;grid-template-columns:auto auto;gap:2px 8px;">
+            <span style="color:#888;">Static:</span><span id="mapStaticCells" style="color:#5af;">0</span>
+            <span style="color:#888;">Total:</span><span id="mapTotalCells" style="color:#5af;">0</span>
+            <span style="color:#888;">Area:</span><span id="mapCoverage" style="color:#5af;">0 m²</span>
+            <span style="color:#888;">X:</span><span id="mapPosX" style="color:#fc0;">0m</span>
+            <span style="color:#888;">Y:</span><span id="mapPosY" style="color:#fc0;">0m</span>
+            <span style="color:#888;">Hdg:</span><span id="mapHeading" style="color:#fc0;">0°</span>
+          </div>
+          <!-- Visual Scan Button -->
+          <button onclick="startVisualScan()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#2a3a4a,#1a2a3a);border:1px solid rgba(90,170,255,0.5);border-radius:4px;color:#5af;font-size:8px;padding:4px;cursor:pointer;">
+            📷 360° SCAN
+          </button>
+          <!-- Scene Recognition -->
+          <div id="sceneRecognition" style="margin-top:4px;font-size:8px;color:#888;">
+            🧠 <span>--</span>
+          </div>
+        </div>
+
+        <!-- Visual Scan Progress -->
+        <div id="visualScanProgress" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);border:2px solid #5af;border-radius:10px;padding:15px 25px;display:none;z-index:30;text-align:center;">
+          <div style="color:#5af;font-weight:bold;margin-bottom:8px;">📷 SCANNING 360°</div>
+          <div style="width:150px;height:8px;background:rgba(0,0,0,0.5);border-radius:4px;overflow:hidden;">
+            <div id="visualScanBar" style="height:100%;background:linear-gradient(90deg,#5af,#0f8);width:0%;transition:width 0.3s;"></div>
+          </div>
+          <button onclick="stopVisualScan()" style="margin-top:10px;background:#422;border:1px solid #f44;color:#f88;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:9px;">STOP</button>
+        </div>
+
+        <!-- Panorama Display (shows after scan complete) -->
+        <div id="visualPanorama" style="position:absolute;bottom:35px;left:8px;right:8px;background:rgba(0,0,0,0.9);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:4px;display:none;z-index:25;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="color:#0f8;font-size:9px;font-weight:bold;">PANORAMA</span>
+            <button onclick="document.getElementById('visualPanorama').style.display='none'" style="background:none;border:none;color:#888;cursor:pointer;font-size:10px;">✕</button>
+          </div>
+          <img id="visualPanoramaImg" style="width:100%;height:40px;object-fit:cover;border-radius:3px;">
+        </div>
+
+        <!-- Semantic Map Panel (zones/objects/look-at) -->
+        <div id="semanticMapPanel" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:none;z-index:20;max-width:180px;">
+          <div style="color:#fa0;font-weight:bold;margin-bottom:6px;font-size:10px;">🧠 SPATIAL AWARENESS</div>
+
+          <!-- Look At Input -->
+          <div style="margin-bottom:6px;">
+            <div style="color:#888;font-size:8px;margin-bottom:2px;">LOOK AT:</div>
+            <div style="display:flex;gap:4px;">
+              <select id="lookAtSelect" style="flex:1;background:#1a1a1a;border:1px solid #444;color:#fff;font-size:8px;padding:3px;border-radius:3px;">
+                <option value="">-- Select --</option>
+              </select>
+              <button onclick="lookAtSelected()" style="background:#2a3a2a;border:1px solid #0f8;color:#0f8;font-size:8px;padding:3px 6px;border-radius:3px;cursor:pointer;">👁</button>
+            </div>
+            <div style="display:flex;gap:4px;margin-top:3px;">
+              <input type="text" id="lookAtInput" placeholder="or type name..." style="flex:1;background:#1a1a1a;border:1px solid #444;color:#fff;font-size:8px;padding:3px;border-radius:3px;">
+              <button onclick="lookAtTyped()" style="background:#2a3a2a;border:1px solid #0f8;color:#0f8;font-size:8px;padding:3px 6px;border-radius:3px;cursor:pointer;">GO</button>
+            </div>
+          </div>
+
+          <!-- Create Zone -->
+          <div style="margin-bottom:6px;">
+            <div style="color:#888;font-size:8px;margin-bottom:2px;">CREATE ZONE HERE:</div>
+            <div style="display:flex;gap:4px;">
+              <input type="text" id="newZoneName" placeholder="Zone name..." style="flex:1;background:#1a1a1a;border:1px solid #444;color:#fff;font-size:8px;padding:3px;border-radius:3px;">
+              <button onclick="createZoneHere()" style="background:#3a2a2a;border:1px solid #fa0;color:#fa0;font-size:8px;padding:3px 6px;border-radius:3px;cursor:pointer;">+</button>
+            </div>
+            <select id="zoneTypeSelect" style="width:100%;margin-top:3px;background:#1a1a1a;border:1px solid #444;color:#888;font-size:8px;padding:2px;border-radius:3px;">
+              <option value="area">Area</option>
+              <option value="room">Room</option>
+              <option value="furniture">Furniture</option>
+              <option value="appliance">Appliance</option>
+              <option value="storage">Storage</option>
+            </select>
+          </div>
+
+          <!-- Stats -->
+          <div style="display:grid;grid-template-columns:auto auto;gap:1px 6px;border-top:1px solid #333;padding-top:4px;margin-top:4px;">
+            <span style="color:#888;">Zones:</span><span id="semanticZoneCount" style="color:#fa0;">0</span>
+            <span style="color:#888;">Objects:</span><span id="semanticObjectCount" style="color:#fa0;">0</span>
+            <span style="color:#888;">Static:</span><span id="semanticStaticCount" style="color:#5af;">0</span>
+          </div>
+
+          <!-- Known Zones List -->
+          <div id="knownZonesList" style="margin-top:6px;max-height:80px;overflow-y:auto;border-top:1px solid #333;padding-top:4px;">
+            <div style="color:#888;font-size:7px;margin-bottom:2px;">KNOWN ZONES:</div>
+            <div id="zoneListItems" style="display:flex;flex-wrap:wrap;gap:3px;"></div>
+          </div>
+
+          <!-- Look At Result -->
+          <div id="lookAtResult" style="margin-top:6px;padding:4px;background:rgba(0,255,136,0.1);border-radius:3px;display:none;">
+            <div style="color:#0f8;font-size:8px;"><span id="lookAtTarget">--</span></div>
+            <div style="color:#888;font-size:7px;">Pan: <span id="lookAtAngle">--</span>° | Dist: <span id="lookAtDist">--</span>cm</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1010,6 +1104,8 @@ function toggleMapMode() {
   const status = document.getElementById('mapModeStatus');
   const statusText = document.getElementById('mapStatusText');
 
+  const semanticPanel = document.getElementById('semanticMapPanel');
+
   if (mapModeActive) {
     // Activate AUTONOMOUS MAPPING
     btn.style.background = 'rgba(90,170,255,0.9)';
@@ -1020,11 +1116,20 @@ function toggleMapMode() {
     statusText.textContent = 'Autonomous • LIDAR active';
     statusText.style.color = '#5af';
 
+    // Show semantic map panel
+    if (semanticPanel) semanticPanel.style.display = 'block';
+
     // Send autonomous START command
     var socket = window.ws;
     if (socket && socket.readyState === 1) {
       socket.send(JSON.stringify({ type: 'autonomous_control', cmd: 'START' }));
       console.log('[MAP] Sent START command');
+
+      // Request semantic map data
+      setTimeout(() => {
+        if (typeof requestSemanticMap === 'function') requestSemanticMap();
+        if (typeof requestLookableTargets === 'function') requestLookableTargets();
+      }, 1000);
     } else {
       console.error('[MAP] WebSocket not connected');
       alert('WebSocket not connected!');
@@ -1032,6 +1137,7 @@ function toggleMapMode() {
       btn.style.background = 'rgba(20,40,60,0.8)';
       btn.style.color = '#5af';
       btn.innerHTML = '🗺️ MAP';
+      if (semanticPanel) semanticPanel.style.display = 'none';
     }
   } else {
     // Deactivate - stop autonomous, back to manual
@@ -1041,11 +1147,213 @@ function toggleMapMode() {
     btn.innerHTML = '🗺️ MAP';
     status.style.display = 'none';
 
+    // Hide semantic map panel
+    if (semanticPanel) semanticPanel.style.display = 'none';
+
     // Send autonomous STOP command
     if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
       console.log('[MAP] Autonomous mapping stopped');
     }
+  }
+}
+
+// ========== VISUAL MAPPING ==========
+function startVisualScan(cameraId = 1) {
+  console.log('[VISUAL] Starting 360° scan on camera', cameraId);
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'visual_scan_start', camera: cameraId }));
+    document.getElementById('visualScanProgress').style.display = 'block';
+    document.getElementById('visualScanBar').style.width = '0%';
+  } else {
+    alert('WebSocket not connected!');
+  }
+}
+
+function stopVisualScan() {
+  console.log('[VISUAL] Stopping scan');
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'visual_scan_stop' }));
+  }
+  document.getElementById('visualScanProgress').style.display = 'none';
+}
+
+function requestVisualMap() {
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'visual_map_request' }));
+  }
+}
+
+function recognizeScene(cameraId = 1) {
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'recognize_scene', camera: cameraId }));
+  }
+}
+
+// ========== SEMANTIC MAP (Zones, Objects, Look-At) ==========
+let semanticZones = [];
+let semanticObjects = [];
+let lookableTargets = [];
+
+function requestSemanticMap() {
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'semantic_map_request' }));
+  }
+}
+
+function requestLookableTargets() {
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'lookable_targets_request' }));
+  }
+}
+
+function lookAtSelected() {
+  const select = document.getElementById('lookAtSelect');
+  const query = select.value;
+  if (query && typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'look_at', query: query, camera: 1 }));
+    console.log('[SEMANTIC] Looking at:', query);
+  }
+}
+
+function lookAtTyped() {
+  const input = document.getElementById('lookAtInput');
+  const query = input.value.trim();
+  if (query && typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'look_at', query: query, camera: 1 }));
+    console.log('[SEMANTIC] Looking at:', query);
+    input.value = '';
+  }
+}
+
+function createZoneHere() {
+  const nameInput = document.getElementById('newZoneName');
+  const typeSelect = document.getElementById('zoneTypeSelect');
+  const name = nameInput.value.trim();
+  const zoneType = typeSelect.value;
+
+  if (!name) {
+    alert('Please enter a zone name');
+    return;
+  }
+
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'create_zone_here',
+      name: name,
+      zone_type: zoneType,
+      radius: 100  // 1 meter radius default
+    }));
+    console.log('[SEMANTIC] Creating zone:', name, 'type:', zoneType);
+    nameInput.value = '';
+  }
+}
+
+function lookAtZone(zoneName) {
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'look_at', query: zoneName, camera: 1 }));
+    console.log('[SEMANTIC] Looking at zone:', zoneName);
+  }
+}
+
+function updateLookAtDropdown(targets) {
+  const select = document.getElementById('lookAtSelect');
+  if (!select) return;
+
+  // Clear existing options except first
+  while (select.options.length > 1) {
+    select.remove(1);
+  }
+
+  // Add zones first
+  const zones = targets.filter(t => t.type === 'zone');
+  if (zones.length > 0) {
+    const optGroup = document.createElement('optgroup');
+    optGroup.label = 'Zones';
+    zones.forEach(z => {
+      const opt = document.createElement('option');
+      opt.value = z.name;
+      opt.textContent = z.name;
+      optGroup.appendChild(opt);
+    });
+    select.appendChild(optGroup);
+  }
+
+  // Add objects
+  const objects = targets.filter(t => t.type !== 'zone');
+  if (objects.length > 0) {
+    const optGroup = document.createElement('optgroup');
+    optGroup.label = 'Objects';
+    objects.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.name;
+      opt.textContent = `${o.name} (${o.type})`;
+      optGroup.appendChild(opt);
+    });
+    select.appendChild(optGroup);
+  }
+}
+
+function updateZonesList(zones) {
+  const container = document.getElementById('zoneListItems');
+  if (!container) return;
+
+  container.innerHTML = '';
+  zones.forEach(zone => {
+    const chip = document.createElement('span');
+    chip.style.cssText = 'background:#2a3a2a;border:1px solid #0f8;color:#0f8;padding:2px 6px;border-radius:10px;font-size:7px;cursor:pointer;';
+    chip.textContent = zone.name;
+    chip.onclick = () => lookAtZone(zone.name);
+    chip.title = `${zone.zone_type} - Click to look at`;
+    container.appendChild(chip);
+  });
+}
+
+function updateSemanticStats(data) {
+  const zoneCount = document.getElementById('semanticZoneCount');
+  const objectCount = document.getElementById('semanticObjectCount');
+  const staticCount = document.getElementById('semanticStaticCount');
+
+  if (zoneCount && data.stats) {
+    zoneCount.textContent = data.stats.total_zones || 0;
+  }
+  if (objectCount && data.stats) {
+    objectCount.textContent = data.stats.total_objects || 0;
+  }
+  if (staticCount && data.stats) {
+    staticCount.textContent = data.stats.static_objects || 0;
+  }
+}
+
+function handleLookAtResult(data) {
+  const resultDiv = document.getElementById('lookAtResult');
+  const targetSpan = document.getElementById('lookAtTarget');
+  const angleSpan = document.getElementById('lookAtAngle');
+  const distSpan = document.getElementById('lookAtDist');
+
+  if (!resultDiv) return;
+
+  if (data.found) {
+    resultDiv.style.display = 'block';
+    targetSpan.textContent = data.query || data.description || 'Target';
+    angleSpan.textContent = data.pan_angle ? data.pan_angle.toFixed(1) : '--';
+    distSpan.textContent = data.distance ? data.distance.toFixed(0) : '--';
+
+    // Hide after 5 seconds
+    setTimeout(() => {
+      resultDiv.style.display = 'none';
+    }, 5000);
+  } else {
+    resultDiv.style.display = 'block';
+    resultDiv.style.background = 'rgba(255,100,100,0.1)';
+    targetSpan.textContent = `"${data.query}" not found`;
+    angleSpan.textContent = '--';
+    distSpan.textContent = '--';
+
+    setTimeout(() => {
+      resultDiv.style.display = 'none';
+      resultDiv.style.background = 'rgba(0,255,136,0.1)';
+    }, 3000);
   }
 }
 

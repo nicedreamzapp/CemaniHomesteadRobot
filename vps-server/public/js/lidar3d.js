@@ -593,6 +593,101 @@ function animateLidar3D() {
   lidar3dRenderer.render(lidar3dScene, lidar3dCamera);
 }
 
+// ============ JETSON SLAM MAP VISUALIZATION ============
+// Receives map cells from Jetson and renders them on the 3D view
+let slamMapMesh = null;
+let slamMapVisible = true;  // Show by default when data arrives
+
+function updateMapCells(data) {
+  if (!lidar3dScene || !lidar3dWorldContainer) return;
+
+  // Remove old mesh
+  if (slamMapMesh) {
+    if (slamMapMesh.geometry) slamMapMesh.geometry.dispose();
+    if (slamMapMesh.material) slamMapMesh.material.dispose();
+    lidar3dWorldContainer.remove(slamMapMesh);
+    slamMapMesh = null;
+  }
+
+  if (!slamMapVisible) return;
+
+  const staticCells = data.static || [];
+  const dynamicCells = data.dynamic || [];
+  const freeCells = data.free || [];
+  const resolution = data.resolution || 0.05;  // 5cm default
+
+  const totalCells = staticCells.length + dynamicCells.length + freeCells.length;
+  if (totalCells === 0) return;
+
+  const positions = [];
+  const colors = [];
+  const cellSize = resolution;
+
+  // Helper to add a cell quad
+  function addCell(x, z, r, g, b, yHeight) {
+    // Two triangles for a quad on the ground
+    const y = yHeight;
+    positions.push(
+      x - cellSize/2, y, z - cellSize/2,
+      x + cellSize/2, y, z - cellSize/2,
+      x + cellSize/2, y, z + cellSize/2,
+      x - cellSize/2, y, z - cellSize/2,
+      x + cellSize/2, y, z + cellSize/2,
+      x - cellSize/2, y, z + cellSize/2
+    );
+    for (let i = 0; i < 6; i++) {
+      colors.push(r, g, b);
+    }
+  }
+
+  // Static cells - dark gray/black walls (floor tiles)
+  for (const cell of staticCells) {
+    const x = cell[0];
+    const z = -cell[1];  // Flip for Three.js
+    addCell(x, z, 0.15, 0.15, 0.2, 0.01);
+  }
+
+  // Dynamic cells - orange/red (temporary obstacles)
+  for (const cell of dynamicCells) {
+    const x = cell[0];
+    const z = -cell[1];
+    addCell(x, z, 0.8, 0.3, 0.1, 0.02);
+  }
+
+  // Free cells - green (confirmed free space)
+  for (const cell of freeCells) {
+    const x = cell[0];
+    const z = -cell[1];
+    addCell(x, z, 0.1, 0.4, 0.15, 0.005);
+  }
+
+  if (positions.length === 0) return;
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+  const material = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.6,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+
+  slamMapMesh = new THREE.Mesh(geometry, material);
+  lidar3dWorldContainer.add(slamMapMesh);
+}
+
+function toggleSlamMapVisible() {
+  slamMapVisible = !slamMapVisible;
+  if (!slamMapVisible && slamMapMesh) {
+    lidar3dWorldContainer.remove(slamMapMesh);
+    slamMapMesh = null;
+  }
+  return slamMapVisible;
+}
+
 // ============ OCCUPANCY GRID VISUALIZATION ============
 function updateOccupancyGridVisualization() {
   // Only show visualization if explicitly enabled (mapping still runs in background)
@@ -802,6 +897,9 @@ window.lidar3dModule = {
   saveCurrentMap,
   loadMap,
   getStoredMaps,
+  // Jetson SLAM map visualization
+  updateMapCells,
+  toggleSlamMapVisible,
   // GPS/Compass functions
   updateCompass,
   updateGps

@@ -69,12 +69,152 @@ ws.onmessage = function(e) {
     console.log('[AUTONOMOUS] Status:', d);
     const status = document.getElementById('mapModeStatus');
     const statusText = document.getElementById('mapStatusText');
+    const slamStats = document.getElementById('slamMapStats');
     if (d.running !== undefined && status && statusText) {
       status.style.display = d.running ? 'block' : 'none';
+      // Show SLAM stats panel during mapping
+      if (slamStats) slamStats.style.display = d.running ? 'block' : 'none';
       if (d.running) {
         statusText.textContent = d.mode === 'direct' ? 'Direct control (no Jetson)' : 'Autonomous active';
         statusText.style.color = d.mode === 'direct' ? '#fc0' : '#5af';
       }
+    }
+  }
+
+  // Indoor SLAM map status updates
+  if (d.type === 'map_status') {
+    // Update map status display
+    const mapStatic = document.getElementById('mapStaticCells');
+    const mapTotal = document.getElementById('mapTotalCells');
+    const mapCoverage = document.getElementById('mapCoverage');
+    const mapPosX = document.getElementById('mapPosX');
+    const mapPosY = document.getElementById('mapPosY');
+    const mapHeading = document.getElementById('mapHeading');
+
+    if (mapStatic) mapStatic.textContent = d.static_cells || 0;
+    if (mapTotal) mapTotal.textContent = d.total_cells || 0;
+    if (mapCoverage) mapCoverage.textContent = (d.map_coverage || 0).toFixed(1) + ' m²';
+    if (mapPosX) mapPosX.textContent = ((d.robot_x || 0) / 100).toFixed(2) + 'm';
+    if (mapPosY) mapPosY.textContent = ((d.robot_y || 0) / 100).toFixed(2) + 'm';
+    if (mapHeading) mapHeading.textContent = (d.robot_heading || 0).toFixed(0) + '°';
+
+    // Store for 3D visualization
+    window.slamMapStatus = d;
+  }
+
+  // Map cells for 3D visualization
+  if (d.type === 'map_cells') {
+    // Pass to lidar3d module for rendering
+    if (window.lidar3dModule && window.lidar3dModule.updateMapCells) {
+      window.lidar3dModule.updateMapCells(d);
+    }
+  }
+
+  // Visual mapping scan progress
+  if (d.type === 'visual_scan_progress') {
+    const progress = document.getElementById('visualScanProgress');
+    const bar = document.getElementById('visualScanBar');
+    if (progress) progress.style.display = 'block';
+    if (bar) bar.style.width = `${(d.angle / d.total_angles) * 100}%`;
+    console.log(`[VISUAL] Scan progress: ${d.angle}° / ${d.total_angles}°`);
+  }
+
+  // Visual mapping scan complete
+  if (d.type === 'visual_scan_complete') {
+    const progress = document.getElementById('visualScanProgress');
+    const panorama = document.getElementById('visualPanorama');
+    const panoramaImg = document.getElementById('visualPanoramaImg');
+
+    if (progress) progress.style.display = 'none';
+    if (panorama && d.thumbnail) {
+      panorama.style.display = 'block';
+      if (panoramaImg) panoramaImg.src = 'data:image/jpeg;base64,' + d.thumbnail;
+    }
+    console.log(`[VISUAL] Scan complete: ${d.frames_count} frames`);
+  }
+
+  // Visual map data
+  if (d.type === 'visual_map_data') {
+    window.visualMapData = d;
+    console.log(`[VISUAL] Received map with ${d.panoramas?.length || 0} panoramas`);
+  }
+
+  // Scene recognition result
+  if (d.type === 'scene_recognition_result') {
+    const indicator = document.getElementById('sceneRecognition');
+    if (indicator) {
+      if (d.recognized) {
+        indicator.innerHTML = `🧠 <span style="color:#0f8">RECOGNIZED</span> ${(d.confidence * 100).toFixed(0)}%`;
+      } else {
+        indicator.innerHTML = `🧠 <span style="color:#888">New location</span>`;
+      }
+    }
+  }
+
+  // ==================== SEMANTIC MAP MESSAGES ====================
+
+  // Full semantic map data
+  if (d.type === 'semantic_map_data') {
+    window.semanticMapData = d;
+    console.log(`[SEMANTIC] Received map with ${d.zones?.length || 0} zones, ${d.objects?.length || 0} objects`);
+
+    // Update stats
+    if (typeof updateSemanticStats === 'function') {
+      updateSemanticStats(d);
+    }
+
+    // Update zones list
+    if (d.zones && typeof updateZonesList === 'function') {
+      updateZonesList(d.zones);
+    }
+  }
+
+  // Lookable targets list
+  if (d.type === 'lookable_targets') {
+    window.lookableTargets = d.targets || [];
+    console.log(`[SEMANTIC] Received ${d.targets?.length || 0} lookable targets`);
+
+    // Update dropdown
+    if (typeof updateLookAtDropdown === 'function') {
+      updateLookAtDropdown(d.targets || []);
+    }
+  }
+
+  // Zone created
+  if (d.type === 'zone_created' || d.type === 'semantic_zone_created') {
+    console.log(`[SEMANTIC] Zone created: ${d.zone?.name}`);
+    // Refresh the full map data
+    if (typeof requestSemanticMap === 'function') {
+      setTimeout(requestSemanticMap, 500);
+    }
+    if (typeof requestLookableTargets === 'function') {
+      setTimeout(requestLookableTargets, 600);
+    }
+  }
+
+  // Zone deleted
+  if (d.type === 'semantic_zone_deleted') {
+    console.log(`[SEMANTIC] Zone deleted: ${d.zone_id}`);
+    // Refresh the full map data
+    if (typeof requestSemanticMap === 'function') {
+      setTimeout(requestSemanticMap, 500);
+    }
+  }
+
+  // Look at result
+  if (d.type === 'look_at_result') {
+    console.log(`[SEMANTIC] Look at result: ${d.query} found=${d.found} angle=${d.pan_angle}`);
+    if (typeof handleLookAtResult === 'function') {
+      handleLookAtResult(d);
+    }
+  }
+
+  // Location found
+  if (d.type === 'location_found') {
+    if (d.found !== false) {
+      console.log(`[SEMANTIC] Location found: ${d.query} at (${d.x}, ${d.y})`);
+    } else {
+      console.log(`[SEMANTIC] Location not found: ${d.query}`);
     }
   }
 

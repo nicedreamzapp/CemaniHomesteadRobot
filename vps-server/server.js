@@ -449,6 +449,82 @@ function handleMessage(ws, data) {
     }
   }
 
+  // Map status from autonomous Jetson - broadcast to all browsers
+  if (data.type === "map_status") {
+    // Store map state
+    state.mapStatus = {
+      robot_x: data.robot_x || 0,
+      robot_y: data.robot_y || 0,
+      robot_heading: data.robot_heading || 0,
+      static_cells: data.static_cells || 0,
+      total_cells: data.total_cells || 0,
+      map_coverage: data.map_coverage || 0,
+      updated: Date.now()
+    };
+    // Broadcast to all browsers
+    state.broadcast({ type: "map_status", ...state.mapStatus });
+  }
+
+  // Map cells for 3D visualization - broadcast to all browsers
+  if (data.type === "map_cells") {
+    // Broadcast directly to all browsers for 3D rendering
+    state.broadcast({
+      type: "map_cells",
+      resolution: data.resolution || 0.05,
+      static: data.static || [],
+      dynamic: data.dynamic || [],
+      free: data.free || []
+    });
+  }
+
+  // Visual mapping commands - forward between browser and Jetson
+  if (data.type === "visual_scan_start" || data.type === "visual_scan_stop" ||
+      data.type === "visual_map_request" || data.type === "recognize_scene") {
+    // Forward to autonomous Jetson
+    wss.clients.forEach(client => {
+      if (client.isAutonomous && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(data));
+      }
+    });
+    console.log(`[VISUAL] Forwarding ${data.type} to Jetson`);
+  }
+
+  // Visual mapping results from Jetson - broadcast to browsers
+  if (data.type === "visual_scan_progress" || data.type === "visual_scan_complete" ||
+      data.type === "visual_map_data" || data.type === "scene_recognition_result") {
+    state.broadcast(data);
+    console.log(`[VISUAL] Broadcasting ${data.type} to browsers`);
+  }
+
+  // ==================== SEMANTIC MAP COMMANDS ====================
+  // Forward semantic map commands from browser to Jetson
+  const semanticCommands = [
+    "create_zone", "delete_zone", "update_zone",
+    "rename_object", "mark_object_static",
+    "look_at", "look_at_coords",
+    "semantic_map_request", "lookable_targets_request",
+    "find_location", "create_zone_here"
+  ];
+  if (semanticCommands.includes(data.type)) {
+    wss.clients.forEach(client => {
+      if (client.isAutonomous && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(data));
+      }
+    });
+    console.log(`[SEMANTIC] Forwarding ${data.type} to Jetson`);
+  }
+
+  // Semantic map results from Jetson - broadcast to browsers
+  const semanticResults = [
+    "semantic_map_data", "lookable_targets",
+    "zone_created", "semantic_zone_created", "semantic_zone_deleted",
+    "look_at_result", "location_found"
+  ];
+  if (semanticResults.includes(data.type)) {
+    state.broadcast(data);
+    console.log(`[SEMANTIC] Broadcasting ${data.type} to browsers`);
+  }
+
   // Status request
   if (data.type === "get_status") {
     ws.isBrowser = true;
