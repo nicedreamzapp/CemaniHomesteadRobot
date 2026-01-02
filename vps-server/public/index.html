@@ -762,8 +762,8 @@
           <span id="mapStatusText">Mapping</span>
         </div>
 
-        <!-- SLAM Map Stats (always visible) -->
-        <div id="slamMapStats" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;">
+        <!-- SLAM Map Stats (always visible) - positioned below ultrasonic badges -->
+        <div id="slamMapStats" style="position:absolute;top:45px;right:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;">
           <div style="color:#0f8;font-weight:bold;margin-bottom:4px;font-size:10px;">INDOOR SLAM</div>
           <div style="display:grid;grid-template-columns:auto auto;gap:2px 8px;">
             <span style="color:#888;">Static:</span><span id="mapStaticCells" style="color:#5af;">0</span>
@@ -801,8 +801,8 @@
           <img id="visualPanoramaImg" style="width:100%;height:40px;object-fit:cover;border-radius:3px;">
         </div>
 
-        <!-- Semantic Map Panel (zones/objects/look-at) - always visible -->
-        <div id="semanticMapPanel" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;max-width:180px;">
+        <!-- Semantic Map Panel (zones/objects/look-at) - always visible, below ultrasonic badges -->
+        <div id="semanticMapPanel" style="position:absolute;top:45px;left:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;max-width:180px;">
           <div style="color:#fa0;font-weight:bold;margin-bottom:6px;font-size:10px;">🧠 SPATIAL AWARENESS</div>
 
           <!-- Look At Input -->

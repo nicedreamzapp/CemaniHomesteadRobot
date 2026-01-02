@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hybrid LIDAR + Camera Visualizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+    #container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    #canvas3d {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Stats panel */
+    #stats {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid rgba(0,255,136,0.5);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      z-index: 100;
+    }
+    #stats h3 {
+      color: #0f8;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 4px 0;
+    }
+    .stat-label { color: #888; }
+    .stat-value { color: #5af; font-weight: bold; }
+
+    /* Camera views */
+    #cameraPanel {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 100;
+    }
+    .camera-view {
+      flex: 1;
+      max-width: 320px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid rgba(90,170,255,0.5);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .camera-view h4 {
+      background: rgba(90,170,255,0.2);
+      color: #5af;
+      padding: 4px 8px;
+      font-size: 10px;
+    }
+    .camera-view img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Controls */
+    #controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid rgba(255,170,0,0.5);
+      border-radius: 8px;
+      padding: 12px;
+      z-index: 100;
+    }
+    #controls h3 {
+      color: #fa0;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      margin: 4px 0;
+      padding: 8px 12px;
+      background: rgba(40,40,40,0.8);
+      border: 1px solid #555;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .btn:hover {
+      background: rgba(60,60,60,0.8);
+      border-color: #888;
+    }
+    .btn.active {
+      background: rgba(0,255,136,0.2);
+      border-color: #0f8;
+      color: #0f8;
+    }
+
+    /* Frame markers in 3D */
+    .frame-marker {
+      position: absolute;
+      width: 60px;
+      height: 40px;
+      border: 2px solid #5af;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .frame-marker:hover {
+      transform: scale(1.5);
+      z-index: 200;
+    }
+    .frame-marker img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Connection status */
+    #connection {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 11px;
+      z-index: 100;
+    }
+    #connection.connected { border: 1px solid #0f8; color: #0f8; }
+    #connection.disconnected { border: 1px solid #f44; color: #f44; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <canvas id="canvas3d"></canvas>
+
+    <!-- Connection status -->
+    <div id="connection" class="disconnected">Connecting...</div>
+
+    <!-- Stats -->
+    <div id="stats">
+      <h3>HYBRID MAP</h3>
+      <div class="stat-row">
+        <span class="stat-label">Points:</span>
+        <span class="stat-value" id="pointCount">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Frames:</span>
+        <span class="stat-value" id="frameCount">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Robot X:</span>
+        <span class="stat-value" id="robotX">0m</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Robot Y:</span>
+        <span class="stat-value" id="robotY">0m</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Heading:</span>
+        <span class="stat-value" id="robotHeading">0°</span>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div id="controls">
+      <h3>VIEW</h3>
+      <button class="btn active" id="btnTopDown">Top Down</button>
+      <button class="btn" id="btnPerspective">Perspective</button>
+      <button class="btn" id="btnFollowRobot">Follow Robot</button>
+      <hr style="border-color:#333;margin:8px 0;">
+      <button class="btn" id="btnShowFrames">Show Photos</button>
+      <button class="btn" id="btnClearMap">Clear Map</button>
+    </div>
+
+    <!-- Camera feeds -->
+    <div id="cameraPanel">
+      <div class="camera-view">
+        <h4>FRONT CAMERA</h4>
+        <img id="cam1" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+      </div>
+      <div class="camera-view">
+        <h4>REAR CAMERA</h4>
+        <img id="cam2" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/visualizer.js"></script>
+</body>
+</html>
