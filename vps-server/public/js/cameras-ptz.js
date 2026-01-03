@@ -159,6 +159,26 @@ function sendPtz(data) {
 function ptzMove(camId, pan, tilt) {
   ptzMoving[camId] = true;
   sendPtz({ type: 'cam_ptz', camera: camId, action: 'move', pan, tilt, zoom: 0 });
+
+  // Clear detection overlays immediately when camera moves - old positions are invalid
+  clearDetectionsForCamera(camId);
+}
+
+// Clear detection overlay and panel for a camera
+function clearDetectionsForCamera(camId) {
+  // Clear overlay canvas
+  const canvas = document.getElementById(camId === 1 ? 'overlayCanvas1' : 'overlayCanvas2');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  // Clear detection panel
+  const panel = document.getElementById('detectionPanel' + camId);
+  if (panel) panel.innerHTML = '';
+  // Clear stored detections
+  if (typeof cameraDetections !== 'undefined') {
+    cameraDetections[camId] = [];
+  }
 }
 
 function ptzStop(camId) {
@@ -225,6 +245,7 @@ window.camerasPtzModule = {
   ptzMove,
   ptzStop,
   sendPtz,
+  clearDetectionsForCamera,
   getCam1Active: () => cam1Active,
   getCam2Active: () => cam2Active,
   setCam1Active: (v) => { cam1Active = v; },

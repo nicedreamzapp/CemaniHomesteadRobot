@@ -39,8 +39,8 @@ VPS_WS = "ws://72.60.124.34:3001"
 WIDTH, HEIGHT = 1280, 720
 
 # ========== MASTER CONTROLS (updated via WebSocket) ==========
-filter_mode = "all"  # "all", "indoor", "outdoor"
-confidence_threshold = 0.05  # 0.01 to 1.0
+filter_mode = "indoor"  # "all", "indoor", "outdoor" - default to indoor
+confidence_threshold = 0.35  # 35% minimum - filters out false positives
 settings_lock = threading.Lock()
 
 # ========== ROBOT POSITION (from server dead_reckoning) ==========
@@ -332,18 +332,21 @@ def is_class_allowed(class_name):
 
 def connect_ws():
     global ws
+    print("[WS] Attempting to connect...")
     while True:
         try:
+            print(f"[WS] Trying {VPS_WS}...")
             with ws_lock:
-                ws = websocket.create_connection(VPS_WS)
+                ws = websocket.create_connection(VPS_WS, timeout=10)
             print(f"[WS] Connected to {VPS_WS}")
             # Send registration message
             reg_msg = {"type": "JETSON_REGISTER", "capabilities": ["detection"]}
             with ws_lock:
                 ws.send(json.dumps(reg_msg))
+            print("[WS] Registration sent")
             return
         except Exception as e:
-            print(f"[WS] Connection failed: {e}, retrying...")
+            print(f"[WS] Connection failed: {e}, retrying in 3s...")
             time.sleep(3)
 
 def send_detections(cam_id, detections):
@@ -358,6 +361,7 @@ def send_detections(cam_id, detections):
     try:
         with ws_lock:
             if ws is None:
+                # Silently skip if not connected - connect_ws will retry
                 return
             msg = {
                 "type": "DETECTIONS",
@@ -367,9 +371,11 @@ def send_detections(cam_id, detections):
             }
             ws.send(json.dumps(msg))
     except Exception as e:
-        print(f"[WS] Send error: {e}")
+        print(f"[WS] Send error: {e}, reconnecting...")
         with ws_lock:
             ws = None
+        # Reconnect in background
+        threading.Thread(target=connect_ws, daemon=True).start()
 
 def ws_listener():
     """Listen for settings updates from VPS"""
@@ -503,15 +509,16 @@ def process_camera(cam):
                         class_name = model.names[cls_id]
                         class_name_lower = class_name.lower()
 
-                        # Apply indoor/outdoor filter
-                        if not is_class_allowed(class_name):
+                        # Filter by confidence
+                        if conf < 0.05:
                             continue
 
-                        # Apply confidence threshold (dynamic for small objects)
-                        base_thresh = conf_thresh
-                        if class_name_lower in small_objects:
-                            base_thresh = max(0.03, conf_thresh * 0.6)
-                        if conf < base_thresh:
+                        # Indoor filtering - skip outdoor-only classes indoors
+                        with settings_lock:
+                            mode = filter_mode
+                        if mode == "indoor" and class_name in outdoor_classes and class_name not in indoor_classes:
+                            continue
+                        elif mode == "outdoor" and class_name in indoor_classes and class_name not in outdoor_classes:
                             continue
 
                         # Normalized bbox
@@ -528,7 +535,7 @@ def process_camera(cam):
                             "is_living": class_name_lower in living_classes
                         })
 
-                        if len(detections) >= 20:
+                        if len(detections) >= 40:  # Match Swift app limit
                             break
 
                 if detections:

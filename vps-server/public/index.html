@@ -493,12 +493,13 @@
     <div class="cam-wrapper">
       <div class="cam-label-centered" style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">
         <span>&#9650; FRONT CAM</span>
-        <!-- Detection filter - tiny liquid glass -->
+        <!-- Detection filter + Depth toggle -->
         <div id="detectionFilter" style="display:flex;gap:2px;background:rgba(255,255,255,0.1);backdrop-filter:blur(4px);border-radius:3px;padding:1px 3px;font-size:8px;">
-          <span id="filterAll" onclick="setDetectionFilter('all')" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:rgba(255,200,0,0.8);color:#000;">ALL</span>
-          <span id="filterIn" onclick="setDetectionFilter('indoor')" style="padding:1px 4px;border-radius:2px;cursor:pointer;color:#5af;">IN</span>
+          <span id="filterAll" onclick="setDetectionFilter('all')" style="padding:1px 4px;border-radius:2px;cursor:pointer;color:#fc0;">ALL</span>
+          <span id="filterIn" onclick="setDetectionFilter('indoor')" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:rgba(90,170,255,0.8);color:#000;">IN</span>
           <span id="filterOut" onclick="setDetectionFilter('outdoor')" style="padding:1px 4px;border-radius:2px;cursor:pointer;color:#0f8;">OUT</span>
           <span id="confDisplay" style="padding:1px 3px;color:#888;cursor:pointer;" onclick="cycleConfidence()" title="Click to cycle confidence">5%</span>
+          <span id="depthToggle1" onclick="toggleDepthView(1)" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:#0f8;color:#000;margin-left:4px;" title="Toggle Depth View">DEPTH ON</span>
         </div>
       </div>
       <div class="cam-container" id="cam1-container">
@@ -526,7 +527,10 @@
 
     <!-- REAR CAM -->
     <div class="cam-wrapper">
-      <div class="cam-label-centered">&#9660; REAR CAM</div>
+      <div class="cam-label-centered" style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">
+        <span>&#9660; REAR CAM</span>
+        <span id="depthToggle2" onclick="toggleDepthView(2)" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:#0f8;color:#000;font-size:8px;" title="Toggle Depth View">DEPTH ON</span>
+      </div>
       <div class="cam-container" id="cam2-container">
         <div class="cam-video">
           <div id="cam2-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
@@ -696,11 +700,17 @@
   <div class="light-cam-wide glass">
     <div class="lidar3d-container" id="lidar3dContainer">
       <!-- Three.js renders here -->
-      <div class="lidar3d-overlay">
+      <div class="lidar3d-overlay" style="pointer-events:none;">
         <!-- LIDAR status and buttons floating on grid -->
         <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
-        <div class="lidar-btns-row">
-          <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen">⛶</button>
+        <div class="lidar-btns-row" style="pointer-events:auto;">
+          <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen" style="pointer-events:auto;">⛶</button>
+        </div>
+        <!-- Bottom control bar -->
+        <div style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:20;">
+          <button onclick="window.lidar3dModule && window.lidar3dModule.clearAllPoints()" style="background:rgba(40,20,20,0.8);border:1px solid #f66;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">RESET</button>
+          <button id="mapModeBtn" onclick="toggleMapMode()" style="background:rgba(20,30,50,0.8);border:1px solid #5af;color:#5af;padding:3px 10px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP</button>
+          <button id="emergencyStopBtn" onclick="emergencyStopMapping()" style="background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
         </div>
         <!-- Compass and GPS combined - above ultrasonic badges -->
         <div id="compassGpsDisplay" style="position:absolute;bottom:90px;right:10px;background:rgba(0,0,0,0.75);border:1px solid rgba(0,255,136,0.4);border-radius:8px;padding:8px;display:flex;align-items:center;gap:12px;">
@@ -727,60 +737,22 @@
         <div class="us-badge us-rl" id="usBadgeRL">RL: --</div>
         <div class="us-badge us-rr" id="usBadgeRR">RR: --</div>
 
-        <!-- MAP MODE + EMERGENCY STOP - Bottom Center (small pills) -->
-        <div id="mapModeControls" style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;z-index:9999;pointer-events:auto;">
-          <!-- MAP MODE Button - small pill -->
-          <button id="mapModeBtn" onclick="toggleMapMode()" style="
-            padding:8px 16px;
-            font-size:14px;
-            font-weight:bold;
-            border-radius:12px;
-            border:2px solid #5af;
-            background:rgba(20,40,60,0.95);
-            backdrop-filter:blur(4px);
-            color:#5af;
-            cursor:pointer;
-            pointer-events:auto;
-          ">🗺️ MAP</button>
-
-          <!-- EMERGENCY STOP Button - small red pill -->
-          <button id="emergencyStopBtn" onclick="emergencyStopMapping()" style="
-            padding:4px 8px;
-            font-size:9px;
-            font-weight:bold;
-            border-radius:12px;
-            border:1px solid rgba(255,60,60,0.7);
-            background:linear-gradient(145deg, #c62828, #b71c1c);
-            color:#fff;
-            cursor:pointer;
-            box-shadow:0 0 8px rgba(255,0,0,0.3);
-          ">🛑</button>
-        </div>
+        <!-- MAP buttons moved outside overlay -->
 
         <!-- Map Mode Status Indicator -->
         <div id="mapModeStatus" style="position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font-size:8px;color:#888;display:none;">
           <span id="mapStatusText">Mapping</span>
         </div>
 
-        <!-- SLAM Map Stats (always visible) - positioned below ultrasonic badges -->
-        <div id="slamMapStats" style="position:absolute;top:45px;right:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;">
-          <div style="color:#0f8;font-weight:bold;margin-bottom:4px;font-size:10px;">INDOOR SLAM</div>
-          <div style="display:grid;grid-template-columns:auto auto;gap:2px 8px;">
-            <span style="color:#888;">Static:</span><span id="mapStaticCells" style="color:#5af;">0</span>
-            <span style="color:#888;">Total:</span><span id="mapTotalCells" style="color:#5af;">0</span>
-            <span style="color:#888;">Area:</span><span id="mapCoverage" style="color:#5af;">0 m²</span>
-            <span style="color:#888;">X:</span><span id="mapPosX" style="color:#fc0;">0m</span>
-            <span style="color:#888;">Y:</span><span id="mapPosY" style="color:#fc0;">0m</span>
-            <span style="color:#888;">Hdg:</span><span id="mapHeading" style="color:#fc0;">0°</span>
-          </div>
-          <!-- Visual Scan Button -->
-          <button onclick="startVisualScan()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#2a3a4a,#1a2a3a);border:1px solid rgba(90,170,255,0.5);border-radius:4px;color:#5af;font-size:8px;padding:4px;cursor:pointer;">
-            📷 360° SCAN
-          </button>
-          <!-- Scene Recognition -->
-          <div id="sceneRecognition" style="margin-top:4px;font-size:8px;color:#888;">
-            🧠 <span>--</span>
-          </div>
+        <!-- SLAM Map Stats (hidden - work still happens in background) -->
+        <div id="slamMapStats" style="display:none;">
+          <span id="mapStaticCells">0</span>
+          <span id="mapTotalCells">0</span>
+          <span id="mapCoverage">0 m²</span>
+          <span id="mapPosX">0m</span>
+          <span id="mapPosY">0m</span>
+          <span id="mapHeading">0°</span>
+          <div id="sceneRecognition"><span>--</span></div>
         </div>
 
         <!-- Visual Scan Progress -->
@@ -801,59 +773,17 @@
           <img id="visualPanoramaImg" style="width:100%;height:40px;object-fit:cover;border-radius:3px;">
         </div>
 
-        <!-- Semantic Map Panel (zones/objects/look-at) - always visible, below ultrasonic badges -->
-        <div id="semanticMapPanel" style="position:absolute;top:45px;left:8px;background:rgba(0,0,0,0.85);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:6px 10px;font-size:9px;display:block;z-index:20;max-width:180px;">
-          <div style="color:#fa0;font-weight:bold;margin-bottom:6px;font-size:10px;">🧠 SPATIAL AWARENESS</div>
-
-          <!-- Look At Input -->
-          <div style="margin-bottom:6px;">
-            <div style="color:#888;font-size:8px;margin-bottom:2px;">LOOK AT:</div>
-            <div style="display:flex;gap:4px;">
-              <select id="lookAtSelect" style="flex:1;background:#1a1a1a;border:1px solid #444;color:#fff;font-size:8px;padding:3px;border-radius:3px;">
-                <option value="">-- Select --</option>
-              </select>
-              <button onclick="lookAtSelected()" style="background:#2a3a2a;border:1px solid #0f8;color:#0f8;font-size:8px;padding:3px 6px;border-radius:3px;cursor:pointer;">👁</button>
-            </div>
-            <div style="display:flex;gap:4px;margin-top:3px;">
-              <input type="text" id="lookAtInput" placeholder="or type name..." style="flex:1;background:#1a1a1a;border:1px solid #444;color:#fff;font-size:8px;padding:3px;border-radius:3px;">
-              <button onclick="lookAtTyped()" style="background:#2a3a2a;border:1px solid #0f8;color:#0f8;font-size:8px;padding:3px 6px;border-radius:3px;cursor:pointer;">GO</button>
-            </div>
-          </div>
-
-          <!-- Create Zone -->
-          <div style="margin-bottom:6px;">
-            <div style="color:#888;font-size:8px;margin-bottom:2px;">CREATE ZONE HERE:</div>
-            <div style="display:flex;gap:4px;">
-              <input type="text" id="newZoneName" placeholder="Zone name..." style="flex:1;background:#1a1a1a;border:1px solid #444;color:#fff;font-size:8px;padding:3px;border-radius:3px;">
-              <button onclick="createZoneHere()" style="background:#3a2a2a;border:1px solid #fa0;color:#fa0;font-size:8px;padding:3px 6px;border-radius:3px;cursor:pointer;">+</button>
-            </div>
-            <select id="zoneTypeSelect" style="width:100%;margin-top:3px;background:#1a1a1a;border:1px solid #444;color:#888;font-size:8px;padding:2px;border-radius:3px;">
-              <option value="area">Area</option>
-              <option value="room">Room</option>
-              <option value="furniture">Furniture</option>
-              <option value="appliance">Appliance</option>
-              <option value="storage">Storage</option>
-            </select>
-          </div>
-
-          <!-- Stats -->
-          <div style="display:grid;grid-template-columns:auto auto;gap:1px 6px;border-top:1px solid #333;padding-top:4px;margin-top:4px;">
-            <span style="color:#888;">Zones:</span><span id="semanticZoneCount" style="color:#fa0;">0</span>
-            <span style="color:#888;">Objects:</span><span id="semanticObjectCount" style="color:#fa0;">0</span>
-            <span style="color:#888;">Static:</span><span id="semanticStaticCount" style="color:#5af;">0</span>
-          </div>
-
-          <!-- Known Zones List -->
-          <div id="knownZonesList" style="margin-top:6px;max-height:80px;overflow-y:auto;border-top:1px solid #333;padding-top:4px;">
-            <div style="color:#888;font-size:7px;margin-bottom:2px;">KNOWN ZONES:</div>
-            <div id="zoneListItems" style="display:flex;flex-wrap:wrap;gap:3px;"></div>
-          </div>
-
-          <!-- Look At Result -->
-          <div id="lookAtResult" style="margin-top:6px;padding:4px;background:rgba(0,255,136,0.1);border-radius:3px;display:none;">
-            <div style="color:#0f8;font-size:8px;"><span id="lookAtTarget">--</span></div>
-            <div style="color:#888;font-size:7px;">Pan: <span id="lookAtAngle">--</span>° | Dist: <span id="lookAtDist">--</span>cm</div>
-          </div>
+        <!-- Semantic Map Panel (hidden - work still happens in background) -->
+        <div id="semanticMapPanel" style="display:none;">
+          <select id="lookAtSelect"><option value="">-- Select --</option></select>
+          <input type="text" id="lookAtInput">
+          <input type="text" id="newZoneName">
+          <select id="zoneTypeSelect"><option value="area">Area</option></select>
+          <span id="semanticZoneCount">0</span>
+          <span id="semanticObjectCount">0</span>
+          <span id="semanticStaticCount">0</span>
+          <div id="zoneListItems"></div>
+          <div id="lookAtResult"><span id="lookAtTarget">--</span><span id="lookAtAngle">--</span><span id="lookAtDist">--</span></div>
         </div>
       </div>
     </div>
@@ -962,15 +892,15 @@
 <!-- Load JavaScript modules in correct order -->
 <script src="js/telemetry.js?v=7"></script>
 <script src="js/odometry.js?v=1"></script>
-<script src="js/controls.js?v=11"></script>
+<script src="js/controls.js?v=15"></script>
 <script src="js/gamepad-control.js?v=1"></script>
 <script src="js/audio-player.js?v=1"></script>
 <script src="js/cameras-ptz.js?v=1"></script>
 <script src="js/lidar2d.js?v=1"></script>
 <script src="js/occupancy-grid.js?v=1"></script>
-<script src="js/lidar3d.js?v=2"></script>
+<script src="js/lidar3d.js?v=5"></script>
 <script src="js/sonar-display.js?v=1"></script>
-<script src="js/websocket.js?v=58"></script>
+<script src="js/websocket.js?v=60"></script>
 <script>
 // Map save/load prompts
 function saveMapPrompt() {
@@ -1027,7 +957,7 @@ function setMode(mode) {
 }
 
 // Detection controls (master for both cameras)
-let currentDetectionFilter = 'all';
+let currentDetectionFilter = 'indoor';  // Default to indoor mode
 let currentConfidence = 5;
 const confidenceLevels = [5, 15, 30, 50, 75];
 let confIndex = 0;
@@ -1098,50 +1028,57 @@ function updateConfidence(value) {
 let mapModeActive = false;
 
 function toggleMapMode() {
-  console.log('[MAP] toggleMapMode called, current state:', mapModeActive);
+  // Immediate feedback - change button first
+  var btn = document.getElementById('mapModeBtn');
+  var status = document.getElementById('mapModeStatus');
+  var statusText = document.getElementById('mapStatusText');
+
   mapModeActive = !mapModeActive;
-  const btn = document.getElementById('mapModeBtn');
-  const status = document.getElementById('mapModeStatus');
-  const statusText = document.getElementById('mapStatusText');
+  console.log('[MAP] toggleMapMode called, mapModeActive:', mapModeActive);
 
   if (mapModeActive) {
-    // Activate AUTONOMOUS MAPPING (navigation only - map always visible)
+    // IMMEDIATELY change button appearance
     btn.style.background = 'rgba(90,170,255,0.9)';
     btn.style.color = '#000';
     btn.style.borderColor = '#5af';
-    btn.innerHTML = '🗺️ AUTO';
-    status.style.display = 'block';
-    statusText.textContent = 'Autonomous Navigation';
-    statusText.style.color = '#5af';
+    btn.textContent = 'AUTO';
+    if (status) status.style.display = 'block';
+    if (statusText) {
+      statusText.textContent = 'Autonomous Navigation';
+      statusText.style.color = '#5af';
+    }
 
     // Send autonomous START command
     var socket = window.ws;
+    console.log('[MAP] WebSocket:', socket, 'readyState:', socket ? socket.readyState : 'N/A');
+
     if (socket && socket.readyState === 1) {
       socket.send(JSON.stringify({ type: 'autonomous_control', cmd: 'START' }));
-      console.log('[MAP] Sent START command');
+      console.log('[MAP] ✓ Sent START command');
     } else {
-      console.error('[MAP] WebSocket not connected');
-      alert('WebSocket not connected!');
-      mapModeActive = false;
-      btn.style.background = 'rgba(20,40,60,0.8)';
-      btn.style.color = '#5af';
-      btn.innerHTML = '🗺️ MAP';
+      console.error('[MAP] WebSocket not ready!');
+      // Still keep button in AUTO state - might connect later
     }
   } else {
-    // Deactivate autonomous - back to manual (map stays visible)
-    btn.style.background = 'rgba(20,40,60,0.8)';
+    // Deactivate autonomous - back to manual
+    btn.style.background = 'rgba(20,30,50,0.8)';
     btn.style.color = '#5af';
-    btn.style.borderColor = 'rgba(90,170,255,0.5)';
-    btn.innerHTML = '🗺️ MAP';
-    status.style.display = 'none';
+    btn.style.borderColor = '#5af';
+    btn.textContent = 'MAP';
+    if (status) status.style.display = 'none';
 
     // Send autonomous STOP command
-    if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
-      console.log('[MAP] Autonomous navigation stopped - manual control active');
+    var socket = window.ws;
+    if (socket && socket.readyState === 1) {
+      socket.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
+      socket.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
+      console.log('[MAP] ✓ Sent STOP command');
     }
   }
 }
+
+// Ensure function is globally accessible
+window.toggleMapMode = toggleMapMode;
 
 // ========== VISUAL MAPPING ==========
 function startVisualScan(cameraId = 1) {
@@ -1176,9 +1113,9 @@ function recognizeScene(cameraId = 1) {
 }
 
 // ========== SEMANTIC MAP (Zones, Objects, Look-At) ==========
-let semanticZones = [];
-let semanticObjects = [];
-let lookableTargets = [];
+// Note: semanticObjects is declared in lidar3d.js
+if (typeof semanticZones === 'undefined') var semanticZones = [];
+if (typeof lookableTargets === 'undefined') var lookableTargets = [];
 
 function requestSemanticMap() {
   if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
@@ -1345,16 +1282,19 @@ function handleLookAtResult(data) {
 // ========== EMERGENCY STOP ==========
 function emergencyStopMapping() {
   // IMMEDIATELY stop all movement
-  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+  var socket = window.ws;
+  if (socket && socket.readyState === 1) {
     // Stop autonomous navigation first
-    ws.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
+    socket.send(JSON.stringify({ type: 'autonomous_control', cmd: 'STOP' }));
     // Send emergency stop command
-    ws.send(JSON.stringify({ type: 'emergency_stop' }));
+    socket.send(JSON.stringify({ type: 'emergency_stop' }));
     // Also send direct motor stop
-    ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
+    socket.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
     // Switch back to manual mode
-    ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'MODE_MANUAL' }));
+    socket.send(JSON.stringify({ type: 'serial_cmd', cmd: 'MODE_MANUAL' }));
     console.log('[EMERGENCY] STOP command sent!');
+  } else {
+    console.error('[EMERGENCY] WebSocket not connected!');
   }
 
   // Update UI

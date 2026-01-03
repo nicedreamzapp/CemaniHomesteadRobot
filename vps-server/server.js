@@ -47,17 +47,21 @@ if (authConfig) {
   });
 }
 
-// Disable caching for HTML and JS files
+// Disable caching for all web assets
 app.use((req, res, next) => {
-  if (req.path.endsWith('.html') || req.path === '/' || req.path.endsWith('.js')) {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-  }
+  // Apply to all static files
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   next();
 });
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  etag: false,
+  lastModified: false,
+  maxAge: 0
+}));
 
 // HLS output directory
 const HLS_DIR = "/opt/robot-server/public/hls";
@@ -119,6 +123,11 @@ wss.on("connection", (ws, req) => {
 
       // Log ALL messages for debugging
       console.log("[MSG]", data.type, JSON.stringify(data).substring(0, 100));
+
+      // Extra debug for autonomous control
+      if (data.type === "autonomous_control") {
+        console.log("[DEBUG-AUTO] Received autonomous_control:", JSON.stringify(data));
+      }
 
       // Extra debug for registration
       if (data.type && data.type.includes("REGISTER")) {
@@ -182,7 +191,14 @@ function handleMessage(ws, data) {
   }
 
   // Serial data from robot
-  if (data.type === "serial" && ws.isRobot) {
+  if (data.type === "serial") {
+    // Auto-identify robot socket from serial data
+    if (!ws.isRobot) {
+      state.setRobotSocket(ws);
+      ws.isRobot = true;
+      ws.isBrowser = false;
+      console.log("[ROBOT] ESP32 connected via serial data");
+    }
     handleSerialData(data, ws);
   }
 
@@ -195,8 +211,15 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Joystick control
+  // Joystick control - OVERRIDES autonomous mode
   if (data.type === "joystick") {
+    // Stop autonomous if running - manual control takes priority
+    if (global.autoInterval) {
+      clearInterval(global.autoInterval);
+      global.autoInterval = null;
+      console.log("[OVERRIDE] Joystick input - stopping autonomous mode");
+      state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+    }
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
       rs.send(JSON.stringify({ type: "joystick", lx: data.lx, ly: data.ly }));
@@ -217,12 +240,64 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Serial command to Teensy (via ESP32)
+  // Click-to-navigate target from UI
+  if (data.type === "nav_target") {
+    const rs = state.getRobotSocket();
+    if (rs && rs.readyState === WebSocket.OPEN) {
+      // Calculate angle and distance to target
+      const odom = state.getOdometry();
+      const dx = data.x - odom.x;
+      const dy = data.y - odom.y;
+      const distance = Math.sqrt(dx * dx + dy * dy) / 1000;  // mm to m
+      const targetAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+      const turn = targetAngle - odom.heading;
+
+      // Normalize turn angle to -180 to 180
+      let normalizedTurn = turn;
+      while (normalizedTurn > 180) normalizedTurn -= 360;
+      while (normalizedTurn < -180) normalizedTurn += 360;
+
+      console.log(`[NAV] Target: (${data.x.toFixed(0)}, ${data.y.toFixed(0)}) mm, dist=${distance.toFixed(2)}m, turn=${normalizedTurn.toFixed(1)}°`);
+
+      // Send as move command
+      rs.send(JSON.stringify({
+        type: "nav_goto",
+        targetX: data.x,
+        targetY: data.y,
+        distance: distance,
+        turn: normalizedTurn
+      }));
+    }
+  }
+
+  // Cancel navigation
+  if (data.type === "nav_cancel") {
+    const rs = state.getRobotSocket();
+    if (rs && rs.readyState === WebSocket.OPEN) {
+      rs.send(JSON.stringify({ type: "nav_cancel" }));
+      console.log("[NAV] Cancelled");
+    }
+  }
+
+  // Serial command to Teensy (via ESP32) - OVERRIDES autonomous mode for movement commands
   if (data.type === "serial_cmd") {
+    // Movement commands override autonomous mode (FWD, BACK, LEFT, RIGHT, STOP, etc.)
+    const movementCmds = ["FWD", "BACK", "LEFT", "RIGHT", "STOP", "TURN"];
+    const isMovementCmd = movementCmds.some(cmd => data.cmd && data.cmd.includes(cmd));
+
+    if (isMovementCmd && global.autoInterval) {
+      clearInterval(global.autoInterval);
+      global.autoInterval = null;
+      console.log("[OVERRIDE] Manual drive command - stopping autonomous mode:", data.cmd);
+      state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+    }
+
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
       rs.send(JSON.stringify({ type: "serial_cmd", cmd: data.cmd }));
       console.log("[SERIAL_CMD]", data.cmd);
+    } else {
+      console.log("[SERIAL_CMD] ❌ Robot socket not available for:", data.cmd);
     }
   }
 
@@ -375,10 +450,11 @@ function handleMessage(ws, data) {
     const rs = state.getRobotSocket();
 
     if (data.cmd === "START") {
+      console.log(`[AUTONOMOUS] START received - robotSocket: ${rs ? 'exists' : 'null'}, state: ${rs ? rs.readyState : 'N/A'}`);
       // Switch robot to mapping mode
       if (rs && rs.readyState === WebSocket.OPEN) {
         rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
-        console.log(`[AUTONOMOUS] Sent MODE_MAPPING to robot`);
+        console.log(`[AUTONOMOUS] ✓ Sent MODE_MAPPING to robot`);
 
         // If no autonomous.py, start direct control loop
         if (autoCount === 0) {
@@ -393,8 +469,8 @@ function handleMessage(ws, data) {
           global.autoInterval = setInterval(() => {
             const robotSock = state.getRobotSocket();
             if (robotSock && robotSock.readyState === WebSocket.OPEN) {
-              // Send current direction command at 8 RPM (50% faster than 5)
-              const cmd = `AUTO_${global.autoDirection},8`;
+              // Send current direction command at 25 RPM (about 6 inches/sec)
+              const cmd = `AUTO_${global.autoDirection},25`;
               robotSock.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
               global.autoCmdCount++;
               // Log every 10th command to avoid spam
@@ -408,8 +484,8 @@ function handleMessage(ws, data) {
             }
           }, 300);
 
-          // Send first command immediately at 8 RPM
-          rs.send(JSON.stringify({ type: "serial_cmd", cmd: "AUTO_FWD,8" }));
+          // Send first command immediately at 25 RPM
+          rs.send(JSON.stringify({ type: "serial_cmd", cmd: "AUTO_FWD,25" }));
           state.broadcast({ type: "autonomous_status", running: true, mode: "direct" });
         }
       } else {
@@ -523,6 +599,89 @@ function handleMessage(ws, data) {
   if (semanticResults.includes(data.type)) {
     state.broadcast(data);
     console.log(`[SEMANTIC] Broadcasting ${data.type} to browsers`);
+  }
+
+  // ==================== MAC MINI PROCESSOR ====================
+  // Register Mac Mini as a processor
+  if (data.type === "register_processor") {
+    ws.isProcessor = true;
+    ws.processorName = data.name || "mac-processor";
+    console.log(`[PROCESSOR] ${ws.processorName} connected`);
+    state.broadcast({ type: "processor_status", connected: true, name: ws.processorName });
+  }
+
+  // Accumulated map from Mac Mini - broadcast to browsers for visualization
+  // New format: points with {x, y, z, r, g, b, c(confidence)} for textured 3D point cloud
+  if (data.type === "accumulated_map" && ws.isProcessor) {
+    const pointCount = data.total || (data.points ? data.points.length : 0);
+    const stats = data.stats || {};
+    // Store latest accumulated map
+    state.accumulatedMap = {
+      points: data.points || [],
+      pointCount: pointCount,
+      stats: stats,
+      updated: Date.now()
+    };
+    // Broadcast to all browsers (include stats for display)
+    state.broadcast({
+      type: "accumulated_map",
+      points: data.points,
+      total: pointCount,
+      stats: stats
+    }, ws);
+    // Log occasionally
+    if (Math.random() < 0.1) {
+      console.log(`[3D MAP] ${pointCount} pts | lidar=${stats.lidar_points||0} mono=${stats.mono_points||0} stereo=${stats.stereo_points||0} | scale=${stats.depth_scale||'?'}`);
+    }
+  }
+
+  // Clear 3D map command from browser -> Mac processor
+  if (data.type === "clear_3d_map") {
+    wss.clients.forEach(client => {
+      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "clear_3d_map" }));
+      }
+    });
+    console.log("[3D MAP] Clear command sent to processor");
+  }
+
+  // Frame history from Mac Mini - broadcast to browsers
+  if (data.type === "frame_history" && ws.isProcessor) {
+    state.broadcast({
+      type: "frame_history",
+      frames: data.frames || []
+    }, ws);
+  }
+
+  // Semantic layout from semantic mapper - walls, doorways, objects
+  if (data.type === "semantic_layout" && ws.isProcessor) {
+    const layout = data.layout || {};
+    const stats = data.stats || {};
+    state.semanticLayout = { layout, stats, updated: Date.now() };
+    state.broadcast({
+      type: "semantic_layout",
+      layout: layout,
+      stats: stats
+    }, ws);
+    if (Math.random() < 0.2) {
+      console.log(`[SEMANTIC] ${stats.planes||0} planes, ${stats.doorways||0} doorways, ${stats.objects||0} objects`);
+    }
+  }
+
+  // Depth frame from Mac Mini - colorized depth estimation
+  if (data.type === "depth_frame" && ws.isProcessor) {
+    // Broadcast depth frame to all browsers
+    state.broadcast({
+      type: "depth_frame",
+      camera: data.camera,
+      frame: data.frame,  // base64 JPEG
+      pose: data.pose,
+      timestamp: data.timestamp
+    }, ws);
+    // Log occasionally
+    if (Math.random() < 0.05) {
+      console.log(`[DEPTH] Cam ${data.camera} depth frame from ${ws.processorName}`);
+    }
   }
 
   // Status request
@@ -778,6 +937,31 @@ function handlePtzCommand(data, ws) {
       console.log("[PTZ] Forwarded to PTZ relay");
     }
   }
+
+  // Handle PTZ commands from scanner (type: "ptz" with absolute positioning)
+  if (data.type === "ptz") {
+    console.log("[PTZ SCAN] Cam", data.camera, "action:", data.action, "pan:", data.pan, "tilt:", data.tilt);
+    const ptzData = {
+      type: "cam_ptz",
+      camera: data.camera,
+      action: data.action || "move",
+      pan: data.pan || 0,
+      tilt: data.tilt || 0,
+      zoom: data.zoom || 0
+    };
+    if (ptzRelaySocket && ptzRelaySocket.readyState === WebSocket.OPEN) {
+      ptzRelaySocket.send(JSON.stringify(ptzData));
+      console.log("[PTZ SCAN] Forwarded to PTZ relay");
+    }
+
+    // Broadcast PTZ status to processors for 3D mapping
+    state.broadcast({
+      type: "ptz_status",
+      camera: data.camera,
+      pan: data.pan || 0,
+      tilt: data.tilt || 0
+    });
+  }
 }
 
 // Handle binary camera frames
@@ -798,16 +982,23 @@ function handleCameraFrame(ws, msg) {
       state.perCameraStatus[cameraId].lastFrame = frameTime;
     }
 
-    let count = 0, dropped = 0;
+    let count = 0, dropped = 0, procCount = 0;
     wss.clients.forEach(c => {
-      if (c !== ws && c.readyState === WebSocket.OPEN && c.isBrowser) {
-        if (c.bufferedAmount > 0) { dropped++; return; }
-        try { c.send(msg); count++; } catch (e) { }
+      if (c !== ws && c.readyState === WebSocket.OPEN) {
+        // Send to browsers
+        if (c.isBrowser) {
+          if (c.bufferedAmount > 0) { dropped++; return; }
+          try { c.send(msg); count++; } catch (e) { }
+        }
+        // Also send to processors (Mac Mini) for hybrid map - higher rate for better mapping
+        if (c.isProcessor && Math.random() < 0.5) { // 50% of frames to processor
+          try { c.send(msg); procCount++; } catch (e) { }
+        }
       }
     });
 
     if (Math.random() < 0.02) {
-      console.log(`[CAM${cameraId}-VIDEO] Sent ${payload.length} bytes to ${count} browsers${dropped ? `, dropped ${dropped}` : ''}`);
+      console.log(`[CAM${cameraId}-VIDEO] Sent ${payload.length} bytes to ${count} browsers${dropped ? `, dropped ${dropped}` : ''}${procCount ? `, ${procCount} proc` : ''}`);
     }
   } else {
     let count = 0;

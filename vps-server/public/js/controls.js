@@ -75,6 +75,34 @@ function setStatus(text, type) {
 function selectDirection(dir) {
   currentDir = dir;
   updateDisplay();
+
+  // INSTANT DRIVE: Send immediate short move command when clicking direction
+  const INSTANT_DRIVE_DISTANCE = 0.3;  // 0.3 meters (~1 foot)
+  if (window.ws && window.ws.readyState === 1) {
+    // For L/R, send turn commands instead
+    if (dir === 'L' || dir === 'R') {
+      const turnAngle = dir === 'L' ? -30 : 30;
+      window.ws.send(JSON.stringify({
+        type: 'serial_cmd',
+        cmd: `TURN,${turnAngle}`
+      }));
+      console.log('[DRIVE] Turning', turnAngle, 'degrees');
+    } else {
+      // FWD/BACK - send serial_cmd for immediate response
+      const cmd = dir === 'F' ? 'FWD,30' : 'BACK,30';  // 30 RPM speed
+      window.ws.send(JSON.stringify({
+        type: 'serial_cmd',
+        cmd: cmd
+      }));
+      console.log('[DRIVE] Sent', cmd);
+      // Auto-stop after 0.5 seconds
+      setTimeout(() => {
+        if (window.ws && window.ws.readyState === 1) {
+          window.ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
+        }
+      }, 500);
+    }
+  }
 }
 
 function selectDistance(distance) {
@@ -101,11 +129,17 @@ function executeQueue() {
   if (boxEl) boxEl.classList.add('executing');
 
   const distanceMeters = cmd.dist * FEET_TO_METERS;
-  ws.send(JSON.stringify({
-    type: 'move_command',
-    distance: distanceMeters,
-    direction: cmd.dir
-  }));
+  if (window.ws && window.ws.readyState === 1) {
+    window.ws.send(JSON.stringify({
+      type: 'move_command',
+      distance: distanceMeters,
+      direction: cmd.dir
+    }));
+    console.log('[CONTROLS] Sent move_command:', cmd.dir, distanceMeters + 'm');
+  } else {
+    console.error('[CONTROLS] WebSocket not connected!');
+    setStatus('WebSocket not connected!', 'error');
+  }
 
   const movePixels = cmd.dist * PIXELS_PER_FOOT;
   const headingRad = robotHeading * Math.PI / 180;
@@ -134,7 +168,9 @@ function executeQueue() {
 }
 
 function emergencyStop() {
-  ws.send(JSON.stringify({ type: 'emergency_stop' }));
+  if (window.ws && window.ws.readyState === 1) {
+    window.ws.send(JSON.stringify({ type: 'emergency_stop' }));
+  }
   currentDir = null;
   currentDist = null;
   updateDisplay();
@@ -159,7 +195,7 @@ function toggleLight() {
   if (typeof v380Light === 'function') {
     v380Light(lightOn ? 1 : 0);
   } else if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'v380_light', state: lightOn ? 1 : 0 }));
+    if (window.ws) window.ws.send(JSON.stringify({ type: 'v380_light', state: lightOn ? 1 : 0 }));
   }
   console.log('[LIGHT] Toggled:', lightOn ? 'ON' : 'OFF');
 }
@@ -179,7 +215,7 @@ function startStrobe() {
     if (typeof v380Light === 'function') {
       v380Light(lightOn ? 1 : 0);
     } else if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'v380_light', state: lightOn ? 1 : 0 }));
+      if (window.ws) window.ws.send(JSON.stringify({ type: 'v380_light', state: lightOn ? 1 : 0 }));
     }
   }, 500);
 }
@@ -198,7 +234,7 @@ function stopStrobe() {
     if (typeof v380Light === 'function') {
       v380Light(0);
     } else if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'v380_light', state: 0 }));
+      if (window.ws) window.ws.send(JSON.stringify({ type: 'v380_light', state: 0 }));
     }
   };
   sendOff();
@@ -325,7 +361,7 @@ updateDisplay();
 updateRadarRobot();
 
 function reset() {
-  ws.send(JSON.stringify({type:'command', data:'reset'}));
+  if (window.ws) window.ws.send(JSON.stringify({type:'command', data:'reset'}));
   const serialDiv = document.getElementById('serial');
   if (serialDiv) serialDiv.innerHTML = '[RESET]<br>';
   clearQueue();
@@ -338,7 +374,7 @@ const cmdInput = document.getElementById('cmd');
 if (cmdInput) {
   cmdInput.onkeypress = function(e) {
     if(e.key === 'Enter') {
-      ws.send(JSON.stringify({type:'command', data:e.target.value}));
+      if (window.ws) window.ws.send(JSON.stringify({type:'command', data:e.target.value}));
       e.target.value = '';
     }
   };
@@ -365,7 +401,7 @@ if (compileBtn) {
       alert('Please enter some code first');
       return;
     }
-    ws.send(JSON.stringify({type:'compile', target:currentTab, code:code}));
+    if (window.ws) window.ws.send(JSON.stringify({type:'compile', target:currentTab, code:code}));
     const serialDiv = document.getElementById('serial');
     if (serialDiv) {
       serialDiv.innerHTML += '[COMPILING ' + currentTab.toUpperCase() + '...]<br>';
@@ -378,7 +414,7 @@ const flashBtn = document.getElementById('flashPrebuiltBtn');
 if (flashBtn) {
   flashBtn.onclick = () => {
     if (!confirm('Flash pre-built Teensy firmware? Robot will reboot.')) return;
-    ws.send(JSON.stringify({type:'flash_prebuilt'}));
+    if (window.ws) window.ws.send(JSON.stringify({type:'flash_prebuilt'}));
     const serialDiv = document.getElementById('serial');
     if (serialDiv) {
       serialDiv.innerHTML += '[FLASHING PREBUILT TEENSY...]<br>';

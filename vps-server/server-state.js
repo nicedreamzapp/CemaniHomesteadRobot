@@ -79,6 +79,14 @@ function getWss() {
   return wss;
 }
 
+function getOdometry() {
+  return {
+    x: mapStatus.robot_x || 0,
+    y: mapStatus.robot_y || 0,
+    heading: mapStatus.robot_heading || 0
+  };
+}
+
 // ============ BROADCAST ============
 // IMPORTANT: Always skip robot and camera sockets!
 // The ESP32 has a small WebSocket buffer and will disconnect if overwhelmed
@@ -91,7 +99,8 @@ function broadcast(data, skip = null) {
     // Skip the camera socket - it only sends frames, doesn't need status
     // Check both the socket reference AND the isRobot/isCamera flags
     if (c === robotSocket || c === cameraSocket || c.isRobot || c.isCamera) return;
-    if (c !== skip && c.readyState === WebSocket.OPEN && c.isBrowser) {
+    // Send to browsers and processors (Mac Mini needs LIDAR data for accumulation)
+    if (c !== skip && c.readyState === WebSocket.OPEN && (c.isBrowser || c.isProcessor)) {
       c.send(msg);
     }
   });
@@ -115,6 +124,7 @@ module.exports = {
   getRobotSocket,
   getCameraSocket,
   getWss,
+  getOdometry,
 
   // Map status
   mapStatus,
