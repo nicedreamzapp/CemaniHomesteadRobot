@@ -1340,9 +1340,14 @@ function updateAccumulatedMap(data) {
   const points = data.points || [];
   if (points.length === 0) return;
 
+  // Rate limit to reduce flashing - only update every 500ms
+  const now = Date.now();
+  if (window._lastMapUpdate && (now - window._lastMapUpdate) < 500) return;
+  window._lastMapUpdate = now;
+
   console.log(`[3D MAP] Rendering ${points.length} textured points (mode: ${mapRenderMode})`);
 
-  // Remove old cloud/mesh
+  // Remove old cloud/mesh (only when we're actually updating)
   if (accumulatedMapCloud) {
     if (accumulatedMapCloud.geometry) accumulatedMapCloud.geometry.dispose();
     if (accumulatedMapCloud.material) accumulatedMapCloud.material.dispose();
