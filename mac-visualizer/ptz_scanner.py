@@ -64,7 +64,7 @@ async def send_ptz_command(ws, camera, pan, tilt):
         "pan": pan,
         "tilt": tilt
     }))
-    print(f"[PTZ] Cam {camera} -> pan={pan}, tilt={tilt}")
+    print(f"[PTZ] Cam {camera} -> pan={pan}, tilt={tilt}", flush=True)
 
 async def send_capture_command(ws, camera, position):
     """Request frame capture at current position"""
@@ -78,8 +78,10 @@ async def send_capture_command(ws, camera, position):
 async def run_scanner():
     """Main scanner loop"""
     global scan_active, current_camera, current_position_index, last_move_time
+    import sys
 
-    print("[SCANNER] Connecting to VPS...")
+    print("[SCANNER] Connecting to VPS...", flush=True)
+    sys.stdout.flush()
 
     # Configure WebSocket with proper limits and ping settings
     async with websockets.connect(
@@ -88,7 +90,7 @@ async def run_scanner():
         ping_interval=30,     # Send ping every 30s
         ping_timeout=60       # Wait 60s for pong
     ) as ws:
-        print("[SCANNER] Connected!")
+        print("[SCANNER] Connected!", flush=True)
 
         # Register as scanner
         await ws.send(json.dumps({

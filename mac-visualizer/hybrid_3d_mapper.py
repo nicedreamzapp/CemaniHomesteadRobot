@@ -63,8 +63,8 @@ VPS_WS = "ws://72.60.124.34:3001"
 JETSON_DIRECT_ENABLED = False  # Set True when Jetson has local_streamer running
 JETSON_WS = "ws://192.168.1.228:8765"  # Jetson local WebSocket
 
-# DIRECT RTSP for maximum performance - bypass VPS bottleneck!
-DIRECT_RTSP_ENABLED = True  # ENABLED - direct capture for speed!
+# DIRECT RTSP - disabled for now, using VPS relay
+DIRECT_RTSP_ENABLED = False  # VPS relay is more reliable
 RTSP_CAMERAS = {
     1: "rtsp://admin:kookster1@192.168.1.191:554/onvif1",  # Front camera
     2: "rtsp://admin:kookster1@192.168.1.27:554/onvif1"   # Rear camera
@@ -175,6 +175,11 @@ class Hybrid3DMapper:
         if DEPTH_AVAILABLE:
             self._init_depth_model()
 
+        import sys
+        print("[INIT] Depth model setup done, continuing...", file=sys.stderr, flush=True)
+        sys.stderr.flush()
+        sys.stdout.flush()
+
         # Statistics
         self.stats = {
             "lidar_points": 0,
@@ -192,8 +197,10 @@ class Hybrid3DMapper:
         self.MAP_SEND_INTERVAL = 1.0  # Send map every 1s
 
         # Persistence - load saved walls on startup
+        print("[INIT] About to load confirmed walls...", flush=True)
         if PERSISTENCE_ENABLED:
             self._load_confirmed_walls()
+        print("[INIT] Mapper initialization complete!", flush=True)
 
     def _load_confirmed_walls(self):
         """Load previously confirmed walls from file"""
@@ -219,7 +226,7 @@ class Hybrid3DMapper:
                         point.is_static = True  # Already confirmed
                         self.accumulated_points[key] = point
                         count += 1
-                    print(f"[PERSIST] Loaded {count} confirmed walls from {PERSISTENCE_FILE}")
+                    print(f"[PERSIST] Loaded {count} confirmed walls from {PERSISTENCE_FILE}", flush=True)
         except Exception as e:
             print(f"[PERSIST] Could not load walls: {e}")
 
@@ -250,53 +257,29 @@ class Hybrid3DMapper:
             print(f"[PERSIST] Save failed: {e}")
 
     def _init_depth_model(self):
-        """Initialize depth estimation model on GPU/MPS - with timeout"""
+        """Initialize depth estimation model on GPU/MPS"""
         import sys
-        import threading
-
         print("[DEPTH] Loading Depth Anything V2 model...", flush=True)
-        sys.stdout.flush()
 
-        # Use threading to add timeout
-        self.depth_pipe = None
-        load_complete = threading.Event()
+        try:
+            import torch
+            device = "mps" if torch.backends.mps.is_available() else "cpu"
+            print(f"[DEPTH] Using device: {device}", flush=True)
 
-        def load_model():
-            try:
-                import torch
-                device = "mps" if torch.backends.mps.is_available() else "cpu"
-                print(f"[DEPTH] Using device: {device}", flush=True)
+            self.depth_pipe = pipeline(
+                "depth-estimation",
+                model="depth-anything/Depth-Anything-V2-Small-hf",
+                device=device
+            )
 
-                pipe = pipeline(
-                    "depth-estimation",
-                    model="depth-anything/Depth-Anything-V2-Small-hf",
-                    device=device
-                )
-
-                # Quick warmup with tiny image
-                print("[DEPTH] Running warmup...", flush=True)
-                dummy = Image.new("RGB", (128, 96), color="gray")
-                pipe(dummy)
-
-                self.depth_pipe = pipe
-                print("[DEPTH] Model ready!", flush=True)
-            except Exception as e:
-                print(f"[DEPTH] Failed to load model: {e}", flush=True)
-            finally:
-                load_complete.set()
-
-        # Start loading in thread
-        thread = threading.Thread(target=load_model, daemon=True)
-        thread.start()
-
-        # Wait max 120 seconds for model to load
-        if not load_complete.wait(timeout=120):
-            print("[DEPTH] Model loading timed out - continuing without depth!", flush=True)
-
-        if self.depth_pipe:
-            print("[DEPTH] Depth estimation enabled!", flush=True)
-        else:
-            print("[DEPTH] Depth disabled - will use LIDAR + camera fusion only", flush=True)
+            # Quick warmup
+            print("[DEPTH] Running warmup...", flush=True)
+            dummy = Image.new("RGB", (128, 96), color="gray")
+            self.depth_pipe(dummy)
+            print("[DEPTH] Model ready!", flush=True)
+        except Exception as e:
+            print(f"[DEPTH] Failed to load model: {e}", flush=True)
+            self.depth_pipe = None
 
     def _enhance_color(self, r: int, g: int, b: int) -> Tuple[int, int, int]:
         """Enhance colors for more vivid, beautiful visualization"""
@@ -507,7 +490,7 @@ class Hybrid3DMapper:
                 colored_count += 1
 
         if colored_count > 0:
-            print(f"[FUSION] Cam{cam_id}: Colored {colored_count} LIDAR points")
+            print(f"[FUSION] Cam{cam_id}: Colored {colored_count} LIDAR points", flush=True)
 
     def _process_frame_with_mono_depth(self, frame: CameraFrame):
         """
@@ -981,10 +964,12 @@ mapper = Hybrid3DMapper()
 
 async def handle_vps_connection():
     """Connect to VPS and process data streams"""
-    print(f"[WS] Connecting to {VPS_WS}...")
+    import sys
+    print(f"[WS] Connecting to {VPS_WS}...", flush=True)
+    sys.stdout.flush()
 
     async with websockets.connect(VPS_WS, max_size=10_000_000, ping_interval=None, ping_timeout=None) as ws:
-        print("[WS] Connected! Registering as hybrid-3d-mapper...")
+        print("[WS] Connected! Registering as hybrid-3d-mapper...", flush=True)
 
         await ws.send(json.dumps({
             "type": "register_processor",
@@ -1078,7 +1063,7 @@ async def handle_vps_connection():
                     map_data = mapper.get_map_data()
                     await ws.send(json.dumps(map_data))
                     stats = mapper.stats
-                    print(f"[MAP] Sent {map_data['total']} points | lidar={stats['lidar_points']} mono={stats['mono_points']} stereo={stats['stereo_points']} | scale={mapper.depth_scale:.2f}")
+                    print(f"[MAP] Sent {map_data['total']} points | lidar={stats['lidar_points']} mono={stats['mono_points']} stereo={stats['stereo_points']} | scale={mapper.depth_scale:.2f}", flush=True)
 
                 # Auto-save confirmed walls periodically
                 if PERSISTENCE_ENABLED:
@@ -1178,9 +1163,11 @@ def rtsp_capture_thread(camera_id: int, rtsp_url: str):
 def start_rtsp_threads():
     """Start RTSP capture threads for all cameras"""
     import threading
+    import sys
 
     if not DIRECT_RTSP_ENABLED:
-        print("[RTSP] Direct capture disabled")
+        print("[RTSP] Direct capture disabled", flush=True)
+        sys.stdout.flush()
         return
 
     if not CV2_AVAILABLE:
@@ -1255,11 +1242,13 @@ async def handle_jetson_connection(vps_ws):
 
 async def main():
     """Main entry point"""
-    print("=" * 60)
-    print("  CEMANI ROBOT - Hybrid 3D Mapper")
-    print("  LIDAR + Camera Fusion | Calibrated Depth | Stereo")
-    print("=" * 60)
-    print()
+    import sys
+    print("=" * 60, flush=True)
+    print("  CEMANI ROBOT - Hybrid 3D Mapper", flush=True)
+    print("  LIDAR + Camera Fusion | Calibrated Depth | Stereo", flush=True)
+    print("=" * 60, flush=True)
+    print(flush=True)
+    sys.stdout.flush()
 
     # Start direct RTSP capture threads (fallback if no Jetson WS)
     start_rtsp_threads()
