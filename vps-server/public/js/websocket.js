@@ -3,14 +3,19 @@
 // v51 - Modular architecture
 
 const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+console.log('[WS] Creating WebSocket to:', wsProtocol + '//' + location.host);
 const ws = new WebSocket(wsProtocol + '//' + location.host);
 ws.binaryType = 'arraybuffer';
 // Make ws globally accessible for inline scripts
 window.ws = ws;
+console.log('[WS] window.ws set:', window.ws);
 
 // ============ MESSAGE HANDLER ============
 ws.onopen = () => {
+  // IMPORTANT: Identify as browser so server knows to send us broadcasts
+  ws.send(JSON.stringify({ type: 'browser_hello' }));
   ws.send(JSON.stringify({ type: 'get_status' }));
+  console.log('[WS] Connected and identified as browser');
   setTimeout(() => {
     if (window.camerasPtzModule && !window.camerasPtzModule.getCam1Active()) {
       window.camerasPtzModule.initCam1();
@@ -21,6 +26,15 @@ ws.onopen = () => {
     ws.send(JSON.stringify({ type: 'semantic_map_request' }));
     ws.send(JSON.stringify({ type: 'lookable_targets_request' }));
   }, 2000);
+  // Send detection settings on startup (default: indoor filter, 5% confidence)
+  setTimeout(() => {
+    ws.send(JSON.stringify({
+      type: 'detection_settings',
+      filter_mode: 'indoor',
+      confidence: 0.05
+    }));
+    console.log('[DETECTION] Sent startup settings: indoor filter, 5% confidence');
+  }, 1500);
 };
 
 ws.onmessage = function(e) {
@@ -53,6 +67,11 @@ ws.onmessage = function(e) {
     handleDetections(d.camera, d.detections);
   }
 
+  // Depth frames from Mac Mini processor
+  if (d.type === 'depth_frame') {
+    displayDepthFrame(d.camera, d.frame);
+  }
+
   // Autonomous mapping errors (only show if robot not connected)
   if (d.type === 'autonomous_error') {
     console.error('[AUTONOMOUS] Error:', d.error);
@@ -72,16 +91,39 @@ ws.onmessage = function(e) {
   // Autonomous status updates
   if (d.type === 'autonomous_status') {
     console.log('[AUTONOMOUS] Status:', d);
+    const btn = document.getElementById('mapModeBtn');
     const status = document.getElementById('mapModeStatus');
     const statusText = document.getElementById('mapStatusText');
     const slamStats = document.getElementById('slamMapStats');
-    if (d.running !== undefined && status && statusText) {
-      status.style.display = d.running ? 'block' : 'none';
-      // Show SLAM stats panel during mapping
-      if (slamStats) slamStats.style.display = d.running ? 'block' : 'none';
-      if (d.running) {
-        statusText.textContent = d.mode === 'direct' ? 'Direct control (no Jetson)' : 'Autonomous active';
-        statusText.style.color = d.mode === 'direct' ? '#fc0' : '#5af';
+
+    if (d.running !== undefined) {
+      // Update the global mapModeActive variable
+      if (typeof mapModeActive !== 'undefined') {
+        mapModeActive = d.running;
+      }
+
+      // Update MAP button appearance
+      if (btn) {
+        if (d.running) {
+          btn.style.background = 'rgba(90,170,255,0.9)';
+          btn.style.color = '#000';
+          btn.style.borderColor = '#5af';
+          btn.innerHTML = '🗺️ AUTO';
+        } else {
+          btn.style.background = 'rgba(20,40,60,0.8)';
+          btn.style.color = '#5af';
+          btn.style.borderColor = 'rgba(90,170,255,0.5)';
+          btn.innerHTML = '🗺️ MAP';
+        }
+      }
+
+      // Update status text
+      if (status && statusText) {
+        status.style.display = d.running ? 'block' : 'none';
+        if (d.running) {
+          statusText.textContent = d.mode === 'direct' ? 'Mapping (direct)' : 'Mapping';
+          statusText.style.color = d.mode === 'direct' ? '#fc0' : '#5af';
+        }
       }
     }
   }
@@ -220,6 +262,43 @@ ws.onmessage = function(e) {
       console.log(`[SEMANTIC] Location found: ${d.query} at (${d.x}, ${d.y})`);
     } else {
       console.log(`[SEMANTIC] Location not found: ${d.query}`);
+    }
+  }
+
+  // ==================== MAC PROCESSOR ACCUMULATED MAP ====================
+
+  // Processor status
+  if (d.type === 'processor_status') {
+    console.log(`[PROCESSOR] ${d.name} connected:`, d.connected);
+  }
+
+  // Accumulated 3D map from Mac processor (textured point cloud)
+  if (d.type === 'accumulated_map') {
+    if (window.lidar3dModule && window.lidar3dModule.updateAccumulatedMap) {
+      window.lidar3dModule.updateAccumulatedMap(d);
+    }
+    // Log occasionally
+    if (Math.random() < 0.05) {
+      const pts = d.total || (d.points ? d.points.length : 0);
+      console.log(`[3D MAP] Received ${pts} textured points from Mac processor`);
+    }
+  }
+
+  // Frame history from Mac processor
+  if (d.type === 'frame_history') {
+    if (window.lidar3dModule && window.lidar3dModule.updateFrameHistory) {
+      window.lidar3dModule.updateFrameHistory(d);
+    }
+  }
+
+  // Semantic layout from semantic mapper (walls, doorways, objects)
+  if (d.type === 'semantic_layout') {
+    if (window.lidar3dModule && window.lidar3dModule.updateSemanticLayout) {
+      window.lidar3dModule.updateSemanticLayout(d);
+    }
+    const stats = d.stats || {};
+    if (Math.random() < 0.1) {
+      console.log(`[SEMANTIC] ${stats.planes||0} planes, ${stats.doorways||0} doorways, ${stats.objects||0} objects`);
     }
   }
 
@@ -563,14 +642,26 @@ const livingClasses = ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
   'elephant', 'bear', 'zebra', 'giraffe', 'rabbit', 'duck', 'chicken', 'deer'];
 
 function handleDetections(cameraId, detections) {
-  cameraDetections[cameraId] = detections;
+  // Filter out low-confidence detections (client-side filter as backup)
+  const MIN_CONFIDENCE = 0.05;  // 5% minimum
+  const filtered = detections.filter(d => d.confidence >= MIN_CONFIDENCE);
+
+  // Debug log
+  if (filtered.length > 0) {
+    console.log(`[DETECT] Cam${cameraId}: ${filtered.map(d => d.class + '(' + Math.round(d.confidence*100) + '%)').join(', ')}`);
+  }
+
+  cameraDetections[cameraId] = filtered;
 
   // Update detection overlay on camera canvas
-  drawDetectionOverlay(cameraId, detections);
+  drawDetectionOverlay(cameraId, filtered);
 
   // Update detection list panel
-  updateDetectionPanel(cameraId, detections);
+  updateDetectionPanel(cameraId, filtered);
 }
+
+// Track last detection time per camera to clear stale overlays
+let lastDetectionTime = { 1: 0, 2: 0 };
 
 function drawDetectionOverlay(cameraId, detections) {
   const canvasId = cameraId === 1 ? 'overlayCanvas1' : 'overlayCanvas2';
@@ -591,7 +682,21 @@ function drawDetectionOverlay(cameraId, detections) {
   // Clear previous overlays
   ctx.clearRect(0, 0, w, h);
 
-  detections.forEach(det => {
+  // Update detection time
+  lastDetectionTime[cameraId] = Date.now();
+
+  // If no detections, just clear and return
+  if (!detections || detections.length === 0) return;
+
+  // Track used label positions to avoid overlap
+  const usedPositions = [];
+  const labelHeight = 14;
+  const labelPadding = 4;
+
+  // Sort detections by Y position (top to bottom) for better label placement
+  const sortedDetections = [...detections].sort((a, b) => a.bbox.y - b.bbox.y);
+
+  sortedDetections.forEach(det => {
     const cx = det.bbox.x * w;
     const cy = det.bbox.y * h;
     const bw = det.bbox.w * w;
@@ -599,34 +704,122 @@ function drawDetectionOverlay(cameraId, detections) {
     const x1 = cx - bw/2;
     const y1 = cy - bh/2;
 
-    // Label: "ClassName 0.85" (like original - no % sign)
-    const label = det.class + ' ' + det.confidence.toFixed(2);
-    const textX = Math.max(0, Math.min(cx - 50, w - 100));
+    // Label: "ClassName 85%"
+    const confPct = Math.round(det.confidence * 100);
+    const label = det.class + ' ' + confPct + '%';
+    ctx.font = '500 11px sans-serif';
+    const labelWidth = ctx.measureText(label).width + 6;
+
+    // Calculate initial label position - closer to object
+    let textX = Math.max(2, Math.min(cx - labelWidth/2, w - labelWidth - 2));
+    let textY;
 
     if (livingClasses.includes(det.class)) {
-      // Living: gold circle around head, label above
-      const headRadius = bw * 0.2;
+      // Living: gold circle around head
+      const headRadius = bw * 0.18;
       const headY = y1 + headRadius;
 
       ctx.beginPath();
       ctx.arc(cx, headY, headRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgb(255, 196, 64)';  // Gold (BGR 255,196,64)
+      ctx.strokeStyle = 'rgb(255, 196, 64)';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      const textY = Math.max(headY - headRadius - 10, 20);
-      ctx.font = '500 12px sans-serif';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(label, textX, textY);
+      // Place label just above the circle (not too high)
+      textY = Math.max(headY - headRadius - 4, 12);
     } else {
-      // Non-living: just label at center
-      const textY = Math.max(cy, 20);
-      ctx.font = '500 12px sans-serif';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(label, textX, textY);
+      // Non-living: draw a subtle bounding box corner markers
+      ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
+      ctx.lineWidth = 1.5;
+      const cornerLen = Math.min(bw, bh) * 0.15;
+
+      // Top-left corner
+      ctx.beginPath();
+      ctx.moveTo(x1, y1 + cornerLen);
+      ctx.lineTo(x1, y1);
+      ctx.lineTo(x1 + cornerLen, y1);
+      ctx.stroke();
+
+      // Top-right corner
+      ctx.beginPath();
+      ctx.moveTo(x1 + bw - cornerLen, y1);
+      ctx.lineTo(x1 + bw, y1);
+      ctx.lineTo(x1 + bw, y1 + cornerLen);
+      ctx.stroke();
+
+      // Place label at top of bounding box (inside, not above)
+      textY = Math.max(y1 + 12, 12);
     }
+
+    // Collision avoidance - check if this label overlaps any existing labels
+    let attempts = 0;
+    const maxAttempts = 8;
+    while (attempts < maxAttempts) {
+      let collision = false;
+      for (const pos of usedPositions) {
+        // Check if rectangles overlap
+        const overlapX = textX < pos.x + pos.w && textX + labelWidth > pos.x;
+        const overlapY = textY - labelHeight < pos.y && textY > pos.y - labelHeight;
+        if (overlapX && overlapY) {
+          collision = true;
+          break;
+        }
+      }
+
+      if (!collision) break;
+
+      // Try different positions: below, right, left, diagonal
+      attempts++;
+      switch (attempts) {
+        case 1: textY += labelHeight + labelPadding; break;  // Below
+        case 2: textX += labelWidth/2 + labelPadding; break; // Right
+        case 3: textX -= labelWidth + labelPadding; break;   // Left
+        case 4: textY -= labelHeight * 2; break;             // Above
+        case 5: textX = cx + bw/2 + 4; textY = cy; break;    // Right of box
+        case 6: textX = cx - bw/2 - labelWidth - 4; break;   // Left of box
+        case 7: textY = cy + bh/2 + labelHeight; break;      // Below box
+        default: textY += labelHeight; break;
+      }
+
+      // Keep in bounds
+      textX = Math.max(4, Math.min(textX, w - labelWidth - 4));
+      textY = Math.max(16, Math.min(textY, h - 4));
+    }
+
+    // Record this label position
+    usedPositions.push({ x: textX, y: textY, w: labelWidth, h: labelHeight });
+
+    // Draw label with background for readability
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(textX - 2, textY - labelHeight + 2, labelWidth, labelHeight + 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, textX, textY);
   });
 }
+
+// Clear stale overlays periodically (if no detections for 800ms)
+setInterval(() => {
+  const now = Date.now();
+  [1, 2].forEach(camId => {
+    if (now - lastDetectionTime[camId] > 800) {
+      // Clear canvas overlay
+      const canvas = document.getElementById(camId === 1 ? 'overlayCanvas1' : 'overlayCanvas2');
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      // Also clear detection panel
+      const panel = document.getElementById('detectionPanel' + camId);
+      if (panel && panel.innerHTML !== '') {
+        panel.innerHTML = '';
+      }
+      // Clear stored detections
+      if (cameraDetections[camId] && cameraDetections[camId].length > 0) {
+        cameraDetections[camId] = [];
+      }
+    }
+  });
+}, 300);  // Check every 300ms for faster clearing
 
 function updateDetectionPanel(cameraId, detections) {
   const panel = document.getElementById('detectionPanel' + cameraId);
@@ -650,4 +843,37 @@ function updateDetectionPanel(cameraId, detections) {
   panel.innerHTML = items.join(', ');
 }
 
-console.log('[WS] Modular WebSocket v54 - Object detection + mapping mode');
+// ============ DEPTH FRAME DISPLAY ============
+// Toggle between normal camera and depth view
+let depthViewEnabled = { 1: true, 2: true };  // Depth ON by default
+let latestDepthFrame = { 1: null, 2: null };
+
+function displayDepthFrame(cameraId, base64Frame) {
+  // Store latest depth frame
+  latestDepthFrame[cameraId] = base64Frame;
+
+  // If depth view is enabled for this camera, show it
+  if (depthViewEnabled[cameraId]) {
+    const imgId = cameraId === 1 ? 'camFrame1' : 'camFrame2';
+    const img = document.getElementById(imgId);
+    if (img) {
+      img.src = 'data:image/jpeg;base64,' + base64Frame;
+    }
+  }
+}
+
+// Toggle depth view for a camera
+window.toggleDepthView = function(cameraId) {
+  depthViewEnabled[cameraId] = !depthViewEnabled[cameraId];
+
+  // Update toggle button appearance
+  const btn = document.getElementById('depthToggle' + cameraId);
+  if (btn) {
+    btn.style.background = depthViewEnabled[cameraId] ? '#0f8' : 'rgba(0,0,0,0.5)';
+    btn.textContent = depthViewEnabled[cameraId] ? 'DEPTH ON' : 'DEPTH';
+  }
+
+  console.log(`[DEPTH] Camera ${cameraId} depth view: ${depthViewEnabled[cameraId] ? 'ON' : 'OFF'}`);
+};
+
+console.log('[WS] Modular WebSocket v55 - Depth estimation + mapping');

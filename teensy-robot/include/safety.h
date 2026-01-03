@@ -7,10 +7,10 @@
 
 #include <Arduino.h>
 
-// Safety thresholds - 16 inches = 40cm stop distance
-#define OBSTACLE_STOP_CM 40       // Stop if obstacle closer than 40cm (~16 inches)
-#define OBSTACLE_SLOW_CM 60       // Slow down if obstacle closer than 60cm (~24 inches)
-#define OBSTACLE_WARN_CM 80       // Warn if obstacle closer than 80cm (~32 inches)
+// Safety thresholds - more cautious to prevent crashes
+#define OBSTACLE_STOP_CM 50       // Stop if obstacle closer than 50cm (~20 inches)
+#define OBSTACLE_SLOW_CM 80       // Slow down if obstacle closer than 80cm (~32 inches)
+#define OBSTACLE_WARN_CM 100      // Warn if obstacle closer than 100cm (~40 inches)
 
 // Tilt detection thresholds (torque in 0.1A units)
 #define TILT_TORQUE_MIN 5         // Minimum torque to consider wheel on ground

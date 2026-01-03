@@ -5,11 +5,20 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.85"  // Ultrasonic stop at 40cm (16 inches) in MAP mode only
+#define TEENSY_VERSION "3.88"  // True north compass with magnetic declination (95570)
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
 #define INVERT_DRIVER_2 false
+
+// ===== COMPASS CONFIGURATION =====
+// The arrow on the GPS/compass module should point toward robot's front
+// Result: 0°=True North, 90°=East, 180°=South, 270°=West
+
+// Magnetic declination for 95570 (Trinidad, CA)
+// Positive = magnetic north is EAST of true north
+// Look up your location at: https://www.magnetic-declination.com
+#define MAGNETIC_DECLINATION 13.5f  // degrees East for Northern California coast
 
 // ===== ODOMETRY CONFIGURATION =====
 // 8-inch hub motor wheels

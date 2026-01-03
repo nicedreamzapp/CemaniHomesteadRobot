@@ -1,34 +1,29 @@
-// ============ HYBRID LIDAR + CAMERA VISUALIZER ============
+// ============ MAC MINI LIDAR + CAMERA PROCESSOR ============
 // Runs on Mac Mini M4 Pro - heavy 3D processing
-// Connects to VPS for data, serves visualization locally
+// Connects to VPS, processes data, sends accumulated map back to VPS
+// Result displayed on robot.marijuanaunion.com
 
-const express = require('express');
 const WebSocket = require('ws');
-const http = require('http');
-const path = require('path');
-
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
 
 // VPS WebSocket URL
 const VPS_WS = 'ws://72.60.124.34:3001';
 
 // State
 let vpsConnection = null;
-let lidarPoints = [];
-let cameraFrames = { 1: null, 2: null };
 let robotPose = { x: 0, y: 0, heading: 0 };
-let mapCells = { static: [], dynamic: [], free: [] };
-let connectedClients = new Set();
 
 // Accumulated point cloud for building the map
-let accumulatedPoints = [];
+let accumulatedPoints = new Map(); // Use Map for deduplication
 const MAX_ACCUMULATED_POINTS = 50000;
+const GRID_RESOLUTION = 10; // 10cm grid for deduplication
 
 // Camera frame history with positions
 let frameHistory = [];
-const MAX_FRAME_HISTORY = 100;
+const MAX_FRAME_HISTORY = 50;
+
+// Periodic send timer
+let lastSendTime = 0;
+const SEND_INTERVAL = 2000; // Send every 2 seconds
 
 // ============ VPS CONNECTION ============
 function connectToVPS() {
@@ -39,9 +34,10 @@ function connectToVPS() {
 
     vpsConnection.on('open', () => {
       console.log('[VPS] Connected!');
-      // Register as a visualizer client
+      // Register as a processor client
       vpsConnection.send(JSON.stringify({
-        type: 'get_status'
+        type: 'register_processor',
+        name: 'mac-mini-m4'
       }));
     });
 
@@ -66,16 +62,22 @@ function connectToVPS() {
 }
 
 function handleVPSMessage(data) {
-  // Handle binary data (camera frames)
-  if (data instanceof Buffer) {
-    // Check frame header
-    if (data.length > 2) {
-      const camId = data[0];
-      if (camId === 1 || camId === 2) {
-        const frameData = data.slice(1);
-        cameraFrames[camId] = frameData;
+  // Convert Buffer to string for JSON parsing
+  const str = data.toString();
 
-        // Store frame with current position
+  // Check if this is binary camera frame data (starts with byte 0, 1, 2, or 3)
+  // Camera frames are binary JPEG data, not JSON
+  if (data instanceof Buffer && data.length > 100) {
+    const firstByte = data[0];
+    // Camera packet types: 0=cam1 video, 1=cam1 audio, 2=cam2 video, 3=cam2 audio
+    if (firstByte >= 0 && firstByte <= 3 && !str.startsWith('{')) {
+      const camId = Math.floor(firstByte / 2) + 1;
+      const isVideo = firstByte % 2 === 0;
+
+      if (isVideo && data.length > 100) {
+        const frameData = data.slice(1);
+
+        // Store frame with current position (only keep recent ones)
         if (frameHistory.length >= MAX_FRAME_HISTORY) {
           frameHistory.shift();
         }
@@ -85,83 +87,33 @@ function handleVPSMessage(data) {
           pose: { ...robotPose },
           timestamp: Date.now()
         });
-
-        // Broadcast to local clients
-        broadcastToClients({
-          type: 'camera_frame',
-          camera: camId,
-          frame: frameData.toString('base64')
-        });
       }
+      return;
     }
-    return;
   }
 
   try {
     const msg = JSON.parse(data.toString());
 
-    // LIDAR data
+    // LIDAR data - accumulate points
     if (msg.type === 'lidar') {
-      lidarPoints = msg.points || [];
+      const points = msg.points || [];
+      accumulatePoints(points);
 
-      // Accumulate points in world coordinates
-      accumulatePoints(lidarPoints);
-
-      // Broadcast to local clients
-      broadcastToClients({
-        type: 'lidar',
-        points: lidarPoints,
-        accumulated: accumulatedPoints.length
-      });
+      // Periodically send accumulated data to VPS
+      const now = Date.now();
+      if (now - lastSendTime > SEND_INTERVAL) {
+        sendAccumulatedData();
+        lastSendTime = now;
+      }
     }
 
-    // Dead reckoning (robot position)
+    // Dead reckoning (robot position) - VPS sends odomX/odomY/odomHeading
     if (msg.type === 'dead_reckoning') {
-      robotPose.x = msg.x || 0;
-      robotPose.y = msg.y || 0;
-      robotPose.heading = msg.heading || 0;
-
-      broadcastToClients({
-        type: 'robot_pose',
-        ...robotPose
-      });
-    }
-
-    // Map cells from autonomous
-    if (msg.type === 'map_cells') {
-      mapCells = {
-        static: msg.static || [],
-        dynamic: msg.dynamic || [],
-        free: msg.free || [],
-        resolution: msg.resolution || 0.05
-      };
-
-      broadcastToClients({
-        type: 'map_cells',
-        ...mapCells
-      });
-    }
-
-    // Map status
-    if (msg.type === 'map_status') {
-      broadcastToClients({
-        type: 'map_status',
-        robot_x: msg.robot_x,
-        robot_y: msg.robot_y,
-        robot_heading: msg.robot_heading,
-        static_cells: msg.static_cells,
-        total_cells: msg.total_cells
-      });
-    }
-
-    // Semantic map data
-    if (msg.type === 'semantic_map_data') {
-      broadcastToClients(msg);
-    }
-
-    // Lookable targets
-    if (msg.type === 'lookable_targets') {
-      broadcastToClients(msg);
+      robotPose.x = msg.odomX || msg.x || 0;
+      robotPose.y = msg.odomY || msg.y || 0;
+      robotPose.heading = msg.odomHeadingDeg || msg.heading || 0;
+      // console.log('[POSE] Updated:', robotPose);
     }
 
   } catch (err) {
@@ -170,7 +122,7 @@ function handleVPSMessage(data) {
 }
 
 function accumulatePoints(points) {
-  // Convert LIDAR points to world coordinates and accumulate
+  // Convert LIDAR points to world coordinates and accumulate with deduplication
   const headingRad = robotPose.heading * Math.PI / 180;
 
   for (const p of points) {
@@ -184,111 +136,77 @@ function accumulatePoints(points) {
     const worldX = robotPose.x / 100 + (dist / 1000) * Math.cos(angleRad);
     const worldY = robotPose.y / 100 + (dist / 1000) * Math.sin(angleRad);
 
-    // Add with some subsampling to avoid duplicates
-    const key = `${Math.round(worldX * 10)}_${Math.round(worldY * 10)}`;
+    // Grid-based deduplication key (10cm grid)
+    const gridX = Math.round(worldX * GRID_RESOLUTION);
+    const gridY = Math.round(worldY * GRID_RESOLUTION);
+    const key = `${gridX}_${gridY}`;
 
-    accumulatedPoints.push({
-      x: worldX,
-      y: worldY,
-      z: 0,
-      intensity: Math.min(dist / 5000, 1)
-    });
-  }
-
-  // Trim to max size
-  if (accumulatedPoints.length > MAX_ACCUMULATED_POINTS) {
-    accumulatedPoints = accumulatedPoints.slice(-MAX_ACCUMULATED_POINTS);
-  }
-}
-
-// ============ LOCAL CLIENTS ============
-function broadcastToClients(msg) {
-  const data = JSON.stringify(msg);
-  for (const client of connectedClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data);
+    // Only add if not already in map, or update with better intensity
+    if (!accumulatedPoints.has(key)) {
+      accumulatedPoints.set(key, {
+        x: worldX,
+        y: worldY,
+        z: 0,
+        intensity: Math.min(dist / 5000, 1),
+        count: 1
+      });
+    } else {
+      // Increment count (more observations = more confident)
+      const existing = accumulatedPoints.get(key);
+      existing.count++;
     }
   }
+
+  // Trim to max size (remove oldest by converting to array and back)
+  if (accumulatedPoints.size > MAX_ACCUMULATED_POINTS) {
+    const entries = Array.from(accumulatedPoints.entries());
+    // Sort by count (keep most observed points)
+    entries.sort((a, b) => b[1].count - a[1].count);
+    accumulatedPoints = new Map(entries.slice(0, MAX_ACCUMULATED_POINTS));
+  }
 }
 
-wss.on('connection', (ws) => {
-  console.log('[LOCAL] Client connected');
-  connectedClients.add(ws);
+function sendAccumulatedData() {
+  if (!vpsConnection || vpsConnection.readyState !== WebSocket.OPEN) return;
 
-  // Send current state
-  ws.send(JSON.stringify({
-    type: 'init',
-    robotPose,
-    accumulatedPointCount: accumulatedPoints.length,
-    frameHistoryCount: frameHistory.length,
-    mapCells
-  }));
+  // Convert accumulated points Map to array
+  const pointsArray = Array.from(accumulatedPoints.values());
+
+  console.log(`[PROC] Sending ${pointsArray.length} accumulated points, ${frameHistory.length} frames`);
 
   // Send accumulated point cloud
-  ws.send(JSON.stringify({
-    type: 'accumulated_points',
-    points: accumulatedPoints
+  vpsConnection.send(JSON.stringify({
+    type: 'accumulated_map',
+    points: pointsArray,
+    pointCount: pointsArray.length,
+    frameCount: frameHistory.length,
+    robotPose: robotPose
   }));
 
-  // Send frame history
-  ws.send(JSON.stringify({
-    type: 'frame_history',
-    frames: frameHistory.slice(-20) // Last 20 frames
-  }));
-
-  ws.on('message', (data) => {
-    try {
-      const msg = JSON.parse(data);
-
-      // Request full accumulated map
-      if (msg.type === 'get_accumulated') {
-        ws.send(JSON.stringify({
-          type: 'accumulated_points',
-          points: accumulatedPoints
-        }));
-      }
-
-      // Clear accumulated points
-      if (msg.type === 'clear_map') {
-        accumulatedPoints = [];
-        frameHistory = [];
-        broadcastToClients({ type: 'map_cleared' });
-      }
-
-      // Forward commands to VPS
-      if (msg.type === 'look_at' || msg.type === 'semantic_map_request' ||
-          msg.type === 'lookable_targets_request') {
-        if (vpsConnection && vpsConnection.readyState === WebSocket.OPEN) {
-          vpsConnection.send(JSON.stringify(msg));
-        }
-      }
-
-    } catch (err) {
-      // Ignore
-    }
-  });
-
-  ws.on('close', () => {
-    console.log('[LOCAL] Client disconnected');
-    connectedClients.delete(ws);
-  });
-});
-
-// ============ STATIC FILES ============
-app.use(express.static(path.join(__dirname, 'public')));
+  // Send frame history (only last 20 frames to save bandwidth)
+  if (frameHistory.length > 0) {
+    vpsConnection.send(JSON.stringify({
+      type: 'frame_history',
+      frames: frameHistory.slice(-20)
+    }));
+  }
+}
 
 // ============ START ============
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log('');
-  console.log('='.repeat(50));
-  console.log('  HYBRID LIDAR + CAMERA VISUALIZER');
-  console.log('  Mac Mini M4 Pro - 64GB');
-  console.log('='.repeat(50));
-  console.log('');
-  console.log(`  Open: http://localhost:${PORT}`);
-  console.log('');
+console.log('');
+console.log('='.repeat(50));
+console.log('  MAC MINI LIDAR + CAMERA PROCESSOR');
+console.log('  M4 Pro - 64GB');
+console.log('='.repeat(50));
+console.log('');
+console.log('  Processing data and sending to VPS');
+console.log('  View at: https://robot.marijuanaunion.com');
+console.log('');
 
-  // Connect to VPS
-  connectToVPS();
-});
+// Connect to VPS
+connectToVPS();
+
+// Keep process alive
+setInterval(() => {
+  console.log(`[STATUS] Points: ${accumulatedPoints.size}, Frames: ${frameHistory.length}, Connected: ${vpsConnection?.readyState === WebSocket.OPEN}`);
+}, 30000);

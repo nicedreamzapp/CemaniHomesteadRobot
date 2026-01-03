@@ -290,6 +290,8 @@ void readGps() {
 void readCompass() {
   int16_t rawX = 0, rawY = 0, rawZ = 0;
   bool gotReading = false;
+  static uint32_t lastDiagLog = 0;
+  static int readFailCount = 0;
 
   // Use the bus/address detected in setup()
   TwoWire* buses[] = {&Wire, &Wire1, &Wire2};
@@ -300,8 +302,17 @@ void readCompass() {
     if (millis() - lastFailLog > 5000) {
       lastFailLog = millis();
       Serial.println("[COMPASS] No compass detected during setup - check wiring");
+      Serial1.println("[COMPASS] No compass detected - check wiring");
     }
     return;
+  }
+
+  // Periodic diagnostic log
+  if (millis() - lastDiagLog > 10000) {
+    lastDiagLog = millis();
+    const char* busNames[] = {"Wire(18/19)", "Wire1(17/16)", "Wire2(25/24)"};
+    Serial.printf("[COMPASS] Using 0x%02X on %s, failCount=%d\n", gCompassAddr, busNames[gCompassBus], readFailCount);
+    Serial1.printf("[COMPASS] Using 0x%02X on %s, failCount=%d\n", gCompassAddr, busNames[gCompassBus], readFailCount);
   }
 
   TwoWire* bus = buses[gCompassBus];
@@ -358,10 +369,12 @@ void readCompass() {
   }
 
   if (!gotReading) {
+    readFailCount++;
     static uint32_t lastFailLog = 0;
     if (millis() - lastFailLog > 5000) {
       lastFailLog = millis();
-      Serial.printf("[COMPASS] Read failed from 0x%02X on bus %d\n", gCompassAddr, gCompassBus);
+      Serial.printf("[COMPASS] Read failed from 0x%02X on bus %d (fails=%d)\n", gCompassAddr, gCompassBus, readFailCount);
+      Serial1.printf("[COMPASS] Read failed 0x%02X bus%d fails=%d\n", gCompassAddr, gCompassBus, readFailCount);
     }
     return;
   }
@@ -420,10 +433,15 @@ void readCompass() {
   compassY = rawY - compassOffsetY;
   compassZ = rawZ - compassOffsetZ;
 
-  // Calculate heading (0-360 degrees)
+  // Calculate magnetic heading (0-360 degrees)
   // Negate both X and Y to correct orientation for IST8310 mounting
+  // Arrow on GPS/compass module should point toward robot's front
   compassHeading = atan2((float)-compassY, (float)-compassX) * 180.0 / PI;
   if (compassHeading < 0) compassHeading += 360;
+
+  // Apply magnetic declination to get TRUE north heading
+  // Result: 0°=True North, 90°=East, 180°=South, 270°=West
+  compassHeading = fmod(compassHeading + MAGNETIC_DECLINATION + 360.0f, 360.0f);
 }
 
 // ===== MAIN LOOP =====
