@@ -5,15 +5,20 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.88"  // True north compass with magnetic declination (95570)
+#define TEENSY_VERSION "3.89"  // Compass mounting offset (arrow points to back)
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
 #define INVERT_DRIVER_2 false
 
 // ===== COMPASS CONFIGURATION =====
-// The arrow on the GPS/compass module should point toward robot's front
+// The arrow on the GPS/compass module points toward robot's BACK
+// This offset corrects for that mounting orientation
 // Result: 0°=True North, 90°=East, 180°=South, 270°=West
+
+// Compass mounting offset - arrow points to BACK of robot
+// Set to 180.0 because arrow faces backward, not forward
+#define COMPASS_MOUNTING_OFFSET 180.0f  // degrees (arrow points to back)
 
 // Magnetic declination for 95570 (Trinidad, CA)
 // Positive = magnetic north is EAST of true north
