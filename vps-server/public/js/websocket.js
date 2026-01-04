@@ -64,7 +64,7 @@ ws.onmessage = function(e) {
 
   // Object detection from Jetson
   if (d.type === 'detections') {
-    handleDetections(d.camera, d.detections);
+    handleDetections(d.camera, d.detections, d.timestamp);
   }
 
   // Depth frames from Mac Mini processor
@@ -641,10 +641,17 @@ let cameraDetections = { 1: [], 2: [] };
 const livingClasses = ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
   'elephant', 'bear', 'zebra', 'giraffe', 'rabbit', 'duck', 'chicken', 'deer'];
 
-function handleDetections(cameraId, detections) {
+function handleDetections(cameraId, detections, serverTimestamp) {
   // Filter out low-confidence detections (client-side filter as backup)
   const MIN_CONFIDENCE = 0.05;  // 5% minimum
   const filtered = detections.filter(d => d.confidence >= MIN_CONFIDENCE);
+
+  // Validate timestamp - ignore old detections (more than 2 seconds old)
+  const now = Date.now();
+  if (serverTimestamp && (now - serverTimestamp) > 2000) {
+    console.log(`[DETECT] Ignoring stale detections from ${(now - serverTimestamp)/1000}s ago`);
+    return;  // Don't process stale detections
+  }
 
   // Debug log
   if (filtered.length > 0) {
@@ -652,9 +659,10 @@ function handleDetections(cameraId, detections) {
   }
 
   cameraDetections[cameraId] = filtered;
+  lastDetectionServerTime[cameraId] = serverTimestamp || now;
 
   // Update detection overlay on camera canvas
-  drawDetectionOverlay(cameraId, filtered);
+  drawDetectionOverlay(cameraId, filtered, serverTimestamp);
 
   // Update detection list panel
   updateDetectionPanel(cameraId, filtered);
@@ -662,8 +670,9 @@ function handleDetections(cameraId, detections) {
 
 // Track last detection time per camera to clear stale overlays
 let lastDetectionTime = { 1: 0, 2: 0 };
+let lastDetectionServerTime = { 1: 0, 2: 0 };  // Server timestamp of last detection
 
-function drawDetectionOverlay(cameraId, detections) {
+function drawDetectionOverlay(cameraId, detections, serverTimestamp) {
   const canvasId = cameraId === 1 ? 'overlayCanvas1' : 'overlayCanvas2';
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
@@ -797,11 +806,11 @@ function drawDetectionOverlay(cameraId, detections) {
   });
 }
 
-// Clear stale overlays periodically (if no detections for 800ms)
+// Clear stale overlays periodically (if no detections for 500ms - faster clearing)
 setInterval(() => {
   const now = Date.now();
   [1, 2].forEach(camId => {
-    if (now - lastDetectionTime[camId] > 800) {
+    if (now - lastDetectionTime[camId] > 500) {
       // Clear canvas overlay
       const canvas = document.getElementById(camId === 1 ? 'overlayCanvas1' : 'overlayCanvas2');
       if (canvas) {

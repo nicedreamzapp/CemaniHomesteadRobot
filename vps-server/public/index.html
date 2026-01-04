@@ -699,12 +699,15 @@
   <!-- 3D LIDAR MAP - Integrated View with Position Tracker -->
   <div class="light-cam-wide glass">
     <div class="lidar3d-container" id="lidar3dContainer">
-      <!-- Three.js renders here -->
+      <!-- Three.js renders here (browser GPU) -->
+      <!-- GPU Stream from Mac (hidden by default) -->
+      <img id="gpuStreamImg" src="/gpu-stream" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;z-index:5;">
       <div class="lidar3d-overlay" style="pointer-events:none;">
         <!-- LIDAR status and buttons floating on grid -->
         <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
         <div class="lidar-btns-row" style="pointer-events:auto;">
           <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen" style="pointer-events:auto;">⛶</button>
+          <button id="gpuToggleBtn" onclick="toggleGpuStream()" title="Toggle GPU Rendering" style="background:rgba(20,40,60,0.8);border:1px solid #0af;color:#0af;padding:2px 6px;border-radius:4px;font-size:10px;cursor:pointer;margin-left:5px;">GPU</button>
         </div>
         <!-- Bottom control bar -->
         <div style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:20;">
@@ -1023,6 +1026,48 @@ function updateConfidence(value) {
   const confDisplay = document.getElementById('confDisplay');
   if (confDisplay) confDisplay.textContent = value + '%';
 }
+
+// ========== GPU STREAM TOGGLE ==========
+let gpuStreamActive = false;
+
+function toggleGpuStream() {
+  gpuStreamActive = !gpuStreamActive;
+  const btn = document.getElementById('gpuToggleBtn');
+  const img = document.getElementById('gpuStreamImg');
+  const canvas = document.querySelector('#lidar3dContainer canvas');
+
+  if (gpuStreamActive) {
+    // Show GPU stream, hide Three.js canvas
+    img.style.display = 'block';
+    img.src = '/gpu-stream?' + Date.now(); // Force reload
+    if (canvas) canvas.style.display = 'none';
+    btn.style.background = 'rgba(0,170,255,0.9)';
+    btn.style.color = '#000';
+    btn.textContent = 'GPU ON';
+    console.log('[GPU] Switched to Mac GPU rendering');
+  } else {
+    // Show Three.js canvas, hide GPU stream
+    img.style.display = 'none';
+    img.src = ''; // Stop stream
+    if (canvas) canvas.style.display = 'block';
+    btn.style.background = 'rgba(20,40,60,0.8)';
+    btn.style.color = '#0af';
+    btn.textContent = 'GPU';
+    console.log('[GPU] Switched to browser rendering');
+  }
+}
+
+// Check GPU renderer status on load
+fetch('/gpu-status').then(r => r.json()).then(status => {
+  const btn = document.getElementById('gpuToggleBtn');
+  if (status.connected) {
+    btn.title = 'GPU Renderer Connected - Click to toggle';
+    btn.style.borderColor = '#0f0';
+  } else {
+    btn.title = 'GPU Renderer not connected';
+    btn.style.opacity = '0.5';
+  }
+}).catch(() => {});
 
 // ========== AUTONOMOUS MAP MODE ==========
 let mapModeActive = false;

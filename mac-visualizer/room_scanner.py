@@ -28,6 +28,25 @@ CURRENT_SCAN_DIR = None
 
 # PTZ scan grid - comprehensive coverage
 # (pan, tilt) - pan is horizontal (-170 to 170), tilt is vertical (-30 to 60)
+
+# Per-camera limits to avoid seeing the 2020 extrusion frame
+# Camera 1 (front) is mounted INSIDE the LIDAR tower - limited FOV
+# Pan: -45 to +45 only | Tilt: all the way down, only -75 up (negative=up, positive=down)
+CAM1_LIMITS = {
+    "pan_range": (-45, 45),    # Limited left/right (frame posts)
+    "tilt_range": (-75, 90),   # -75 max up, 90 max down (full down range)
+    "pan_step": 22,
+    "tilt_step": 20
+}
+
+# Camera 2 (rear) is on an external arm - full FOV
+CAM2_LIMITS = {
+    "pan_range": (-120, 120),  # Full horizontal sweep
+    "tilt_range": (-25, 45),   # Can look higher (no obstruction)
+    "pan_step": 30,
+    "tilt_step": 20
+}
+
 def generate_scan_grid(pan_range=(-120, 120), tilt_range=(-20, 40), pan_step=30, tilt_step=20):
     """Generate a grid of scan positions"""
     positions = []
@@ -36,8 +55,18 @@ def generate_scan_grid(pan_range=(-120, 120), tilt_range=(-20, 40), pan_step=30,
             positions.append((pan, tilt))
     return positions
 
-SCAN_POSITIONS = generate_scan_grid()
-print(f"Scan grid: {len(SCAN_POSITIONS)} positions")
+# Generate per-camera scan grids
+CAM1_POSITIONS = generate_scan_grid(**CAM1_LIMITS)
+CAM2_POSITIONS = generate_scan_grid(**CAM2_LIMITS)
+
+def get_scan_positions(camera):
+    """Get scan positions for specific camera"""
+    if camera == 1:
+        return CAM1_POSITIONS
+    else:
+        return CAM2_POSITIONS
+
+print(f"Scan grid: Cam1={len(CAM1_POSITIONS)} positions, Cam2={len(CAM2_POSITIONS)} positions")
 
 # State
 class ScanState:
@@ -64,7 +93,10 @@ def create_scan_directory():
     metadata = {
         "scan_id": timestamp,
         "start_time": datetime.now().isoformat(),
-        "positions": SCAN_POSITIONS,
+        "cam1_positions": CAM1_POSITIONS,
+        "cam2_positions": CAM2_POSITIONS,
+        "cam1_limits": CAM1_LIMITS,
+        "cam2_limits": CAM2_LIMITS,
         "cameras": [1, 2],
         "images": []
     }
@@ -174,9 +206,12 @@ async def run_scan(ws):
     """Execute the room scan"""
     global state
 
+    total_positions = len(CAM1_POSITIONS) + len(CAM2_POSITIONS)
     print("\n" + "=" * 50)
     print("  STARTING ROOM SCAN")
-    print(f"  {len(SCAN_POSITIONS)} positions per camera")
+    print(f"  Camera 1 (front): {len(CAM1_POSITIONS)} positions (limited FOV)")
+    print(f"  Camera 2 (rear):  {len(CAM2_POSITIONS)} positions (full FOV)")
+    print(f"  Total: {total_positions} positions")
     print("=" * 50 + "\n")
 
     state.scan_id = create_scan_directory()
@@ -184,12 +219,13 @@ async def run_scan(ws):
     state.position_idx = 0
     state.frames_captured = 0
 
-    # Scan both cameras
+    # Scan both cameras with their specific limits
     for camera in [1, 2]:
         state.camera = camera
-        print(f"\n[SCAN] === Scanning Camera {camera} ===")
+        camera_positions = get_scan_positions(camera)
+        print(f"\n[SCAN] === Scanning Camera {camera} ({len(camera_positions)} positions) ===")
 
-        for idx, (pan, tilt) in enumerate(SCAN_POSITIONS):
+        for idx, (pan, tilt) in enumerate(camera_positions):
             if not state.active:
                 print("[SCAN] Scan aborted")
                 return
@@ -222,7 +258,7 @@ async def run_scan(ws):
                 print(f"[SCAN] Warning: No frame captured at pan={pan}, tilt={tilt}")
 
             # Progress update
-            total = len(SCAN_POSITIONS) * 2
+            total = len(CAM1_POSITIONS) + len(CAM2_POSITIONS)
             done = state.frames_captured
             pct = (done / total) * 100
             print(f"[SCAN] Progress: {done}/{total} ({pct:.1f}%)")

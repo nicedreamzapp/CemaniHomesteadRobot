@@ -32,6 +32,13 @@ from collections import deque
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 
+# Import camera calibration (intrinsics, distortion, projection helpers)
+from camera_calibration import (
+    get_camera_intrinsics, get_camera_extrinsics,
+    project_to_3d, undistort_points,
+    PROC_WIDTH, PROC_HEIGHT
+)
+
 # Try imports, gracefully degrade if not available
 try:
     import torch
@@ -58,9 +65,11 @@ except ImportError:
 # ============ CONFIGURATION ============
 VPS_WS = "ws://72.60.124.34:3001"
 
-# DIRECT JETSON CONNECTION (bypasses VPS for data, sends only map to VPS)
-# NOTE: Enable this after running local_streamer.py on Jetson
-JETSON_DIRECT_ENABLED = False  # Set True when Jetson has local_streamer running
+# DIRECT JETSON CONNECTION (bypasses VPS for camera data)
+# Camera frames: Jetson direct (local WiFi, low latency)
+# LIDAR data: Still from VPS (ESP32 → VPS → Mac)
+# NOTE: Run local_streamer.py on Jetson first
+JETSON_DIRECT_ENABLED = True  # ENABLED - uses Jetson for cameras, VPS for LIDAR
 JETSON_WS = "ws://192.168.1.228:8765"  # Jetson local WebSocket
 
 # DIRECT RTSP - disabled for now, using VPS relay
@@ -77,23 +86,13 @@ PERSISTENCE_FILE = "confirmed_walls.json"
 AUTO_SAVE_INTERVAL = 30.0  # Save every 30 seconds
 CONFIRM_THRESHOLD = 3  # Points seen 3+ times = confirmed
 
-# Camera intrinsics (approximate for 640x480 PTZ cameras)
-# These should be calibrated for best results
-CAM_WIDTH = 640
-CAM_HEIGHT = 480
-CAM_FX = 500  # Focal length X (pixels)
-CAM_FY = 500  # Focal length Y (pixels)
-CAM_CX = 320  # Principal point X
-CAM_CY = 240  # Principal point Y
+# Camera intrinsics - now loaded from camera_calibration.py
+# Uses FOV-based focal length calculation with distortion correction
+CAM_WIDTH = PROC_WIDTH   # 640
+CAM_HEIGHT = PROC_HEIGHT  # 480
 
-# Camera positions relative to robot center (meters)
-# Cam1: Front PTZ camera
-CAM1_OFFSET = np.array([0.0, 0.40, -0.10])  # x=0, height=40cm, forward=10cm
-CAM1_YAW = 0  # Faces forward
-
-# Cam2: Rear/side PTZ camera on tower
-CAM2_OFFSET = np.array([-0.20, 0.55, 0.0])  # x=-20cm left, height=55cm, z=0
-CAM2_YAW = math.pi  # Faces backward
+# Camera positions loaded from calibration module
+# get_camera_extrinsics(cam_id) returns (position, base_yaw)
 
 # LIDAR position (on top of tower)
 LIDAR_HEIGHT = 0.70  # 70cm above ground
@@ -103,6 +102,69 @@ LIDAR_OFFSET = np.array([0.15, LIDAR_HEIGHT, 0.0])  # Right side of robot
 GRID_SIZE = 0.015  # 1.5cm grid cells - DENSER for photorealistic look
 MAX_POINTS = 1000000  # 1M points for maximum detail like reference image
 POINT_MERGE_DISTANCE = 0.008  # 8mm - VERY tight merging for crisp edges
+
+# PTZ SCAN PATTERNS - triggered when robot stops during mapping
+# Each position is (pan, tilt) in degrees, with dwell time in seconds
+# PER-CAMERA patterns to avoid seeing the 2020 frame
+
+# Camera 1 (front) is INSIDE the LIDAR tower - LIMITED field of view
+# Pan: -45 to +45 only (frame posts block further)
+# Tilt: can go all the way DOWN, only -75 UP max (negative=up, positive=down)
+CAM1_SCAN_PATTERNS = {
+    "mapping": [
+        # Pan limited to 45°, can tilt down freely
+        (0, 0, 0.8),      # Center
+        (-45, 0, 0.8),    # Max left
+        (45, 0, 0.8),     # Max right
+        (0, 30, 0.8),     # Look down at floor
+        (0, 0, 0.5),      # Return to center
+    ],
+    "detailed": [
+        (0, 0, 1.0),      # Center
+        (-45, 0, 1.0),    # Max left
+        (-22, 0, 1.0),
+        (22, 0, 1.0),
+        (45, 0, 1.0),     # Max right
+        (0, 45, 1.0),     # Look down
+        (-30, 30, 1.0),
+        (30, 30, 1.0),
+        (0, 0, 0.5),
+    ]
+}
+
+# Camera 2 (rear) is on external arm - FULL field of view
+CAM2_SCAN_PATTERNS = {
+    "mapping": [
+        # Full sweep - no obstructions
+        (0, 0, 0.8),      # Center
+        (-60, 0, 0.8),    # Left
+        (60, 0, 0.8),     # Right
+        (0, -25, 0.8),    # Up (can look higher)
+        (0, 20, 0.8),     # Down
+        (0, 0, 0.5),      # Return to center
+    ],
+    "detailed": [
+        (0, 0, 1.0),
+        (-80, 0, 1.0),
+        (-40, 0, 1.0),
+        (40, 0, 1.0),
+        (80, 0, 1.0),
+        (0, -35, 1.0),    # High up
+        (0, 25, 1.0),     # Down
+        (-50, -20, 1.0),
+        (50, -20, 1.0),
+        (0, 0, 0.5),
+    ]
+}
+
+def get_ptz_pattern(camera_id: int, pattern_name: str = "mapping"):
+    """Get PTZ scan pattern for specific camera"""
+    if camera_id == 1:
+        return CAM1_SCAN_PATTERNS.get(pattern_name, CAM1_SCAN_PATTERNS["mapping"])
+    else:
+        return CAM2_SCAN_PATTERNS.get(pattern_name, CAM2_SCAN_PATTERNS["mapping"])
+
+PTZ_SCAN_ENABLED = True  # Enable automatic PTZ sweeps during mapping
 
 # Static object filtering - KEEP EVERYTHING!
 MIN_OBSERVATIONS = 1  # Just 1 observation = keep it!
@@ -196,6 +258,12 @@ class Hybrid3DMapper:
         self.PROCESS_INTERVAL = 0.1  # Process every 100ms - MAX SPEED!
         self.MAP_SEND_INTERVAL = 1.0  # Send map every 1s
 
+        # PTZ scan coordination
+        self.ptz_scan_in_progress = False
+        self.ptz_scan_queue = []  # Queue of (camera_id, pan, tilt, dwell) tuples
+        self.last_ptz_scan_time = 0
+        self.ptz_scan_ws = None  # WebSocket to send PTZ commands through
+
         # Persistence - load saved walls on startup
         print("[INIT] About to load confirmed walls...", flush=True)
         if PERSISTENCE_ENABLED:
@@ -257,29 +325,66 @@ class Hybrid3DMapper:
             print(f"[PERSIST] Save failed: {e}")
 
     def _init_depth_model(self):
-        """Initialize depth estimation model on GPU/MPS"""
+        """Initialize depth estimation model on Apple Silicon GPU (MPS)"""
         import sys
         print("[DEPTH] Loading Depth Anything V2 model...", flush=True)
 
         try:
             import torch
-            device = "mps" if torch.backends.mps.is_available() else "cpu"
-            print(f"[DEPTH] Using device: {device}", flush=True)
 
-            self.depth_pipe = pipeline(
-                "depth-estimation",
-                model="depth-anything/Depth-Anything-V2-Small-hf",
-                device=device
-            )
+            # Device selection: Apple GPU > NVIDIA > CPU
+            if torch.backends.mps.is_available():
+                self.depth_device = torch.device("mps")
+                # MPS works best with float32 (float16 can cause issues)
+                self.depth_dtype = torch.float32
+            elif torch.cuda.is_available():
+                self.depth_device = torch.device("cuda")
+                self.depth_dtype = torch.float16  # CUDA supports float16 well
+            else:
+                self.depth_device = torch.device("cpu")
+                self.depth_dtype = torch.float32
 
-            # Quick warmup
-            print("[DEPTH] Running warmup...", flush=True)
-            dummy = Image.new("RGB", (128, 96), color="gray")
-            self.depth_pipe(dummy)
-            print("[DEPTH] Model ready!", flush=True)
+            print(f"[DEPTH] Using device: {self.depth_device} (dtype={self.depth_dtype})", flush=True)
+
+            # Load model with explicit device and dtype
+            from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
+            model_name = "depth-anything/Depth-Anything-V2-Small-hf"
+            print(f"[DEPTH] Loading {model_name}...", flush=True)
+
+            self.depth_processor = AutoImageProcessor.from_pretrained(model_name)
+            self.depth_model = AutoModelForDepthEstimation.from_pretrained(
+                model_name,
+                torch_dtype=self.depth_dtype
+            ).to(self.depth_device)
+
+            # Set to eval mode for inference (disables dropout, etc.)
+            self.depth_model.eval()
+
+            # Warmup run to compile any JIT operations
+            print("[DEPTH] Running warmup on GPU...", flush=True)
+            dummy = Image.new("RGB", (256, 192), color="gray")
+            with torch.no_grad():
+                inputs = self.depth_processor(images=dummy, return_tensors="pt")
+                inputs = {k: v.to(self.depth_device, dtype=self.depth_dtype if v.dtype == torch.float32 else v.dtype) for k, v in inputs.items()}
+                _ = self.depth_model(**inputs)
+
+            # Clear MPS cache after warmup
+            if self.depth_device.type == "mps":
+                torch.mps.empty_cache()
+
+            print(f"[DEPTH] Model ready on {self.depth_device}!", flush=True)
+
+            # Set flag instead of using pipeline
+            self.depth_pipe = True  # Flag to indicate model is ready
+
         except Exception as e:
             print(f"[DEPTH] Failed to load model: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             self.depth_pipe = None
+            self.depth_model = None
+            self.depth_processor = None
 
     def _enhance_color(self, r: int, g: int, b: int) -> Tuple[int, int, int]:
         """Enhance colors for more vivid, beautiful visualization"""
@@ -404,18 +509,14 @@ class Hybrid3DMapper:
         scan = self.recent_lidar_scans[-1]
         pose = self.robot_pose
 
-        # Camera parameters
+        # Camera parameters from calibration
         cam_id = frame.camera_id
-        cam_offset = CAM1_OFFSET if cam_id == 1 else CAM2_OFFSET
-        cam_yaw = CAM1_YAW if cam_id == 1 else CAM2_YAW
+        cam_offset, cam_yaw = get_camera_extrinsics(cam_id)
         pan_rad = math.radians(frame.pan)
         tilt_rad = math.radians(frame.tilt)
 
         h, w = frame.image.shape[:2]
-        fx = CAM_FX * (w / CAM_WIDTH)
-        fy = CAM_FY * (h / CAM_HEIGHT)
-        cx = CAM_CX * (w / CAM_WIDTH)
-        cy = CAM_CY * (h / CAM_HEIGHT)
+        fx, fy, cx, cy, _, _ = get_camera_intrinsics(cam_id, w, h)
 
         colored_count = 0
 
@@ -495,19 +596,39 @@ class Hybrid3DMapper:
     def _process_frame_with_mono_depth(self, frame: CameraFrame):
         """
         Monocular depth estimation with LIDAR-calibrated scale.
-        Uses Depth Anything to estimate relative depth, then scales using LIDAR.
+        Uses Depth Anything V2 on Apple Silicon GPU for fast inference.
         """
-        if not self.depth_pipe:
+        if not self.depth_pipe or not hasattr(self, 'depth_model') or self.depth_model is None:
             return
 
         try:
-            # MAX RESOLUTION - Mac Mini M2/M4 GPU is powerful!
-            img = Image.fromarray(frame.image)
-            img_small = img.resize((640, 480))  # Full 640x480 for maximum depth detail
+            import torch
 
-            # Run depth estimation
-            result = self.depth_pipe(img_small)
-            depth_map = np.array(result["depth"])
+            # Resize image for depth estimation (smaller = faster)
+            img = Image.fromarray(frame.image)
+            img_small = img.resize((518, 392))  # Optimal size for Depth Anything V2
+
+            # Preprocess on CPU, then move to GPU
+            with torch.no_grad():
+                inputs = self.depth_processor(images=img_small, return_tensors="pt")
+
+                # Move tensors to GPU with correct dtype
+                inputs = {
+                    k: v.to(self.depth_device, dtype=self.depth_dtype if v.dtype == torch.float32 else v.dtype)
+                    for k, v in inputs.items()
+                }
+
+                # Run inference on GPU
+                outputs = self.depth_model(**inputs)
+                predicted_depth = outputs.predicted_depth
+
+                # Interpolate to original size and convert to numpy
+                depth_map = torch.nn.functional.interpolate(
+                    predicted_depth.unsqueeze(1),
+                    size=(frame.image.shape[0], frame.image.shape[1]),
+                    mode="bicubic",
+                    align_corners=False
+                ).squeeze().cpu().numpy()
 
             # Calibrate depth scale using recent LIDAR data
             self._calibrate_depth_scale(frame, depth_map)
@@ -528,8 +649,7 @@ class Hybrid3DMapper:
 
         scan = self.recent_lidar_scans[-1]
         cam_id = frame.camera_id
-        cam_offset = CAM1_OFFSET if cam_id == 1 else CAM2_OFFSET
-        cam_yaw = CAM1_YAW if cam_id == 1 else CAM2_YAW
+        cam_offset, cam_yaw = get_camera_extrinsics(cam_id)
         pan_rad = math.radians(frame.pan)
 
         h, w = depth_map.shape
@@ -575,8 +695,7 @@ class Hybrid3DMapper:
         """Project monocular depth map to 3D point cloud"""
         pose = self.robot_pose
         cam_id = frame.camera_id
-        cam_offset = CAM1_OFFSET if cam_id == 1 else CAM2_OFFSET
-        cam_yaw = CAM1_YAW if cam_id == 1 else CAM2_YAW
+        cam_offset, cam_yaw = get_camera_extrinsics(cam_id)
         pan_rad = math.radians(frame.pan)
         tilt_rad = math.radians(frame.tilt)
 
@@ -587,13 +706,10 @@ class Hybrid3DMapper:
         depth_norm = depth_map / (depth_map.max() + 1e-8)
         depth_meters = (1.0 - depth_norm) * self.depth_scale + 0.3
 
-        # Camera intrinsics scaled to depth map size
-        fx = CAM_FX * (w / CAM_WIDTH)
-        fy = CAM_FY * (h / CAM_HEIGHT)
-        cx = w / 2
-        cy = h / 2
+        # Camera intrinsics from calibration, scaled to depth map size
+        fx, fy, cx, cy, _, _ = get_camera_intrinsics(cam_id, w, h)
 
-        step = 1  # Sample EVERY PIXEL - absolute maximum density!
+        step = SAMPLE_DENSITY  # Sample every Nth pixel (6=reasonable, 1=too slow)
         points_added = 0
 
         for v in range(0, h, step):
@@ -817,7 +933,10 @@ class Hybrid3DMapper:
             # Convert disparity to depth
             # baseline = distance between cameras (approximate)
             baseline = 0.25  # ~25cm between cam1 and cam2
-            focal = CAM_FX * scale
+            # Get calibrated focal length for cam1 at scaled resolution
+            sh, sw = gray1.shape
+            fx, _, _, _, _, _ = get_camera_intrinsics(1, sw, sh)
+            focal = fx
 
             # Avoid division by zero
             valid_mask = disparity > 1
@@ -837,13 +956,14 @@ class Hybrid3DMapper:
     def _project_stereo_depth(self, frame: CameraFrame, depth: np.ndarray, scale: float):
         """Project stereo depth map to 3D world coordinates"""
         pose = self.robot_pose
+        cam_id = frame.camera_id
+        cam_offset, _ = get_camera_extrinsics(cam_id)
+
         h, w = depth.shape
         img = cv2.resize(frame.image, (w, h))
 
-        fx = CAM_FX * scale
-        fy = CAM_FY * scale
-        cx = w / 2
-        cy = h / 2
+        # Get calibrated intrinsics scaled to depth map size
+        fx, fy, cx, cy, _, _ = get_camera_intrinsics(cam_id, w, h)
 
         pan_rad = math.radians(frame.pan)
         tilt_rad = math.radians(frame.tilt)
@@ -877,10 +997,10 @@ class Hybrid3DMapper:
                 y_rot = y_cam * cos_tilt - z_rot * sin_tilt
                 z_final = y_cam * sin_tilt + z_rot * cos_tilt
 
-                # Transform to robot then world frame
-                robot_x = x_rot + CAM1_OFFSET[0]
-                robot_y = z_final + CAM1_OFFSET[2]
-                robot_z = -y_rot + CAM1_OFFSET[1]
+                # Transform to robot then world frame (using calibrated offsets)
+                robot_x = x_rot + cam_offset[0]
+                robot_y = z_final + cam_offset[2]
+                robot_z = -y_rot + cam_offset[1]
 
                 world_x = pose.x + robot_x * cos_h - robot_y * sin_h
                 world_y = pose.y + robot_x * sin_h + robot_y * cos_h
@@ -896,17 +1016,25 @@ class Hybrid3DMapper:
                 ))
 
     def get_map_data(self) -> Dict:
-        """Get accumulated map data for transmission - only static points"""
+        """Get accumulated map data for transmission - FILTERED for quality"""
         # First clean up old/moving points
         self._cleanup_old_points(time.time())
 
         points = []
         static_count = 0
         pending_count = 0
+        filtered_count = 0
+
+        # ======== QUALITY FILTERS ========
+        # These reduce clutter and show only meaningful structure
+        MIN_OBSERVATIONS = 2       # Must be seen at least twice (removes noise)
+        MIN_CONFIDENCE = 0.5       # Minimum confidence threshold
+        MIN_HEIGHT = 0.05          # 5cm above floor (removes floor noise)
+        MAX_HEIGHT = 2.5           # 2.5m max (removes ceiling noise for walls-only)
+        VOXEL_SIZE = 0.03          # 3cm voxel grid for downsampling
 
         # Limit points to prevent WebSocket overflow
-        # Send max 100k points per update, prioritize high-confidence
-        MAX_SEND_POINTS = 100000
+        MAX_SEND_POINTS = 50000    # Reduced from 100k for cleaner view
 
         # Sort by confidence and observations for priority
         sorted_points = sorted(
@@ -915,18 +1043,51 @@ class Hybrid3DMapper:
             reverse=True
         )
 
+        # Voxel grid for downsampling (only send one point per 3cm cube)
+        voxel_grid = set()
+
         for p in sorted_points:
             # Only send points that have been seen enough times (static objects)
-            if p.is_static:
-                static_count += 1
-                if len(points) < MAX_SEND_POINTS:
-                    # Compact format: use arrays instead of dicts to save bandwidth
-                    points.append([
-                        round(p.x, 2), round(p.y, 2), round(p.z, 2),
-                        p.r, p.g, p.b
-                    ])
-            else:
+            if not p.is_static:
                 pending_count += 1
+                continue
+
+            static_count += 1
+
+            # ======== APPLY QUALITY FILTERS ========
+            # 1. Observation filter - remove single-hit noise
+            if p.observations < MIN_OBSERVATIONS:
+                filtered_count += 1
+                continue
+
+            # 2. Confidence filter
+            if p.confidence < MIN_CONFIDENCE:
+                filtered_count += 1
+                continue
+
+            # 3. Height filter - focus on walls (not floor/ceiling)
+            if p.z < MIN_HEIGHT or p.z > MAX_HEIGHT:
+                filtered_count += 1
+                continue
+
+            # 4. Voxel downsampling - one point per 3cm cube
+            vx = int(p.x / VOXEL_SIZE)
+            vy = int(p.y / VOXEL_SIZE)
+            vz = int(p.z / VOXEL_SIZE)
+            voxel_key = (vx, vy, vz)
+            if voxel_key in voxel_grid:
+                filtered_count += 1
+                continue
+            voxel_grid.add(voxel_key)
+
+            # Passed all filters - add to output
+            if len(points) < MAX_SEND_POINTS:
+                # Compact format: use arrays instead of dicts to save bandwidth
+                points.append([
+                    round(p.x, 2), round(p.y, 2), round(p.z, 2),
+                    p.r, p.g, p.b,
+                    p.observations  # Include obs count for UI filtering
+                ])
 
         return {
             "type": "accumulated_map",
@@ -934,8 +1095,9 @@ class Hybrid3DMapper:
             "total": len(points),
             "static_points": static_count,
             "pending_points": pending_count,
+            "filtered_points": filtered_count,
             "stats": self.stats,
-            "format": "compact"  # [x, y, z, r, g, b] arrays
+            "format": "compact"  # [x, y, z, r, g, b, obs] arrays
         }
 
     def clear_map(self):
@@ -957,6 +1119,77 @@ class Hybrid3DMapper:
             self.last_map_send = now
             return True
         return False
+
+    async def execute_ptz_scan(self, ws, pattern_name: str = "mapping"):
+        """
+        Execute a PTZ scan pattern on both cameras with PER-CAMERA limits.
+        Called when robot stops during mapping (ready_for_scan message).
+
+        Camera 1 (front) is inside the LIDAR tower frame - LIMITED view.
+        Camera 2 (rear) is on external arm - FULL view.
+
+        Args:
+            ws: WebSocket connection to send PTZ commands through
+            pattern_name: Name of pattern ("mapping" or "detailed")
+        """
+        if not PTZ_SCAN_ENABLED:
+            print("[PTZ] Scan disabled")
+            return
+
+        if self.ptz_scan_in_progress:
+            print("[PTZ] Scan already in progress, skipping")
+            return
+
+        cam1_pattern = get_ptz_pattern(1, pattern_name)
+        cam2_pattern = get_ptz_pattern(2, pattern_name)
+
+        print(f"[PTZ] Starting '{pattern_name}' scan (cam1: {len(cam1_pattern)} pos, cam2: {len(cam2_pattern)} pos)")
+        self.ptz_scan_in_progress = True
+        self.last_ptz_scan_time = time.time()
+
+        try:
+            # Scan each camera with its own pattern
+            for camera_id in [1, 2]:
+                pattern = get_ptz_pattern(camera_id, pattern_name)
+                for pan, tilt, dwell in pattern:
+                    # Send PTZ command
+                    ptz_cmd = {
+                        "type": "ptz",
+                        "camera": camera_id,
+                        "action": "absolute",
+                        "pan": pan,
+                        "tilt": tilt
+                    }
+                    await ws.send(json.dumps(ptz_cmd))
+
+                    # Update local tracking
+                    self.camera_ptz[camera_id] = (pan, tilt)
+
+                    # Wait for camera to move and capture frames
+                    await asyncio.sleep(dwell)
+
+                    # Log progress
+                    print(f"[PTZ] Cam{camera_id} at ({pan}, {tilt})")
+
+            # Return cameras to center
+            for camera_id in [1, 2]:
+                await ws.send(json.dumps({
+                    "type": "ptz",
+                    "camera": camera_id,
+                    "action": "absolute",
+                    "pan": 0,
+                    "tilt": 0
+                }))
+                self.camera_ptz[camera_id] = (0, 0)
+
+            scan_duration = time.time() - self.last_ptz_scan_time
+            print(f"[PTZ] Scan complete in {scan_duration:.1f}s")
+
+        except Exception as e:
+            print(f"[PTZ] Scan error: {e}")
+
+        finally:
+            self.ptz_scan_in_progress = False
 
 
 # ============ WEBSOCKET CLIENT ============
@@ -1185,59 +1418,155 @@ def start_rtsp_threads():
         print(f"[RTSP] Camera {cam_id} thread started")
 
 
-async def handle_jetson_connection(vps_ws):
-    """Connect directly to Jetson for camera/LIDAR data over local WiFi"""
-    print(f"[JETSON] Connecting to {JETSON_WS}...")
+async def handle_jetson_cameras(jetson_connected_event):
+    """Receive camera frames directly from Jetson over local WiFi"""
+    print(f"[JETSON] Connecting to {JETSON_WS} for cameras...")
+    jetson_logged_offline = False  # Only log offline once to reduce spam
 
-    try:
-        async with websockets.connect(JETSON_WS, max_size=10_000_000, ping_interval=20) as jetson_ws:
-            print("[JETSON] Connected! Receiving local WiFi data...")
+    while True:
+        try:
+            async with websockets.connect(JETSON_WS, max_size=10_000_000, ping_interval=20, open_timeout=5) as jetson_ws:
+                print("[JETSON] Connected! Receiving camera frames via local WiFi...", flush=True)
+                jetson_connected_event.set()
+                jetson_logged_offline = False  # Reset so we log next disconnect
 
-            async for message in jetson_ws:
-                try:
-                    data = json.loads(message)
+                async for message in jetson_ws:
+                    try:
+                        data = json.loads(message)
 
-                    # Camera frame from Jetson
-                    if data.get("type") == "camera_frame":
-                        cam_id = data.get("camera", 1)
-                        frame_b64 = data.get("frame", "")
-                        if frame_b64:
-                            frame_bytes = base64.b64decode(frame_b64)
-                            mapper.add_camera_frame(cam_id, frame_bytes)
+                        # Camera frame from Jetson
+                        if data.get("type") == "camera_frame":
+                            cam_id = data.get("camera", 1)
+                            frame_b64 = data.get("frame", "")
+                            if frame_b64:
+                                frame_bytes = base64.b64decode(frame_b64)
+                                mapper.add_camera_frame(cam_id, frame_bytes)
 
-                    # LIDAR from Jetson
-                    elif data.get("type") == "lidar":
-                        points = [(p[0], p[1]) for p in data.get("points", [])]
-                        if points:
-                            mapper.add_lidar_scan(points)
+                        # Detections from Jetson (if it's doing detection too)
+                        elif data.get("type") == "detections":
+                            pass  # Let VPS handle detection display
 
-                    # Detections from Jetson
-                    elif data.get("type") == "detection":
-                        # Forward to VPS for display
-                        if vps_ws:
-                            await vps_ws.send(json.dumps(data))
+                    except Exception as e:
+                        print(f"[JETSON] Frame error: {e}")
 
-                    # Send map to VPS periodically
-                    if mapper.should_send_map() and len(mapper.accumulated_points) > 50:
+        except Exception as e:
+            jetson_connected_event.clear()
+            if not jetson_logged_offline:
+                print(f"[JETSON] Offline (will retry every 60s): {e}")
+                jetson_logged_offline = True
+            await asyncio.sleep(60)  # Retry every 60s instead of 3s
+
+
+async def handle_hybrid_connection():
+    """
+    Hybrid mode: Cameras from Jetson (direct), LIDAR from VPS
+    This gives best of both worlds:
+    - Low latency camera frames via local WiFi
+    - LIDAR data still flows through VPS (from ESP32)
+    """
+    jetson_connected = asyncio.Event()
+
+    # Start Jetson camera receiver in background
+    jetson_task = asyncio.create_task(handle_jetson_cameras(jetson_connected))
+
+    print(f"[VPS] Connecting to {VPS_WS} for LIDAR + map output...")
+
+    # Disable ping/pong - GPU depth estimation can block the event loop, causing ping timeouts
+    async with websockets.connect(VPS_WS, max_size=10_000_000, ping_interval=None, ping_timeout=None) as ws:
+        print("[VPS] Connected!", flush=True)
+
+        # Register as processor
+        await ws.send(json.dumps({
+            "type": "register_processor",
+            "name": "hybrid-3d-mapper",
+            "capabilities": ["lidar_fusion", "depth_estimation", "3d_mapping", "jetson_direct"]
+        }))
+
+        print("[WS] Waiting for data streams...", flush=True)
+        print("[WS] Features enabled:", flush=True)
+        print(f"     - Camera Source: {'JETSON DIRECT' if JETSON_DIRECT_ENABLED else 'VPS relay'}", flush=True)
+        print(f"     - LIDAR Source: VPS (ESP32)", flush=True)
+        print(f"     - Monocular Depth: {'YES' if DEPTH_AVAILABLE else 'NO'}", flush=True)
+        print(f"     - Stereo Depth: {'YES' if CV2_AVAILABLE else 'NO'}", flush=True)
+        print(f"     - Surface Reconstruction: {'YES' if O3D_AVAILABLE else 'NO (missing open3d)'}", flush=True)
+
+        async for message in ws:
+            try:
+                # Skip binary messages (camera frames from VPS - we get cameras from Jetson now)
+                if isinstance(message, bytes):
+                    # Only process VPS camera frames if Jetson not connected
+                    if not jetson_connected.is_set() and len(message) > 100:
+                        first_byte = message[0]
+                        if first_byte in [0, 2]:  # video packets
+                            cam_id = (first_byte // 2) + 1
+                            frame_data = message[1:]
+                            mapper.add_camera_frame(cam_id, bytes(frame_data))
+                    continue
+
+                data = json.loads(message)
+
+                # LIDAR from VPS (ESP32 → VPS → Mac)
+                if data.get("type") == "lidar":
+                    points = [(p[0], p[1]) for p in data.get("points", [])]
+                    if points:
+                        mapper.add_lidar_scan(points)
+
+                # PTZ status - update camera angles
+                elif data.get("type") == "ptz_status":
+                    cam = data.get("camera", 1)
+                    mapper.update_camera_ptz(cam, data.get("pan", 0), data.get("tilt", 0))
+
+                # Dead reckoning - update robot pose
+                elif data.get("type") == "dead_reckoning":
+                    mapper.update_pose(
+                        data.get("odomX", 0),
+                        data.get("odomY", 0),
+                        data.get("odomHeading", 0)
+                    )
+
+                # Clear map command
+                elif data.get("type") == "clear_3d_map":
+                    print("[MAP] Clearing accumulated points...")
+                    mapper.accumulated_points.clear()
+                    mapper.stats = {"lidar_points": 0, "mono_points": 0, "stereo_points": 0, "total_points": 0, "depth_scale": mapper.depth_scale}
+
+                # ========== PTZ SCAN TRIGGER ==========
+                # Robot stopped during mapping - time to sweep the cameras!
+                elif data.get("type") == "ready_for_scan":
+                    robot_x = data.get("robot_x", 0)
+                    robot_y = data.get("robot_y", 0)
+                    robot_heading = data.get("robot_heading", 0)
+                    print(f"[PTZ] Ready for scan at ({robot_x:.0f}, {robot_y:.0f}) heading={robot_heading:.0f}°")
+
+                    # Update robot pose from the scan message
+                    mapper.update_pose(robot_x, robot_y, robot_heading)
+
+                    # Execute PTZ scan pattern (non-blocking via asyncio)
+                    asyncio.create_task(mapper.execute_ptz_scan(ws, "mapping"))
+
+                # Periodically send map to VPS
+                now = time.time()
+                if now - mapper.last_map_send >= mapper.MAP_SEND_INTERVAL:
+                    mapper.last_map_send = now
+                    if len(mapper.accumulated_points) > 50:
                         map_data = mapper.get_map_data()
-                        if vps_ws:
-                            await vps_ws.send(json.dumps(map_data))
+                        await ws.send(json.dumps(map_data))
                         stats = mapper.stats
-                        print(f"[MAP] Sent {map_data['total']} pts | lidar={stats['lidar_points']} mono={stats['mono_points']} | scale={mapper.depth_scale:.2f}")
+                        jetson_status = "DIRECT" if jetson_connected.is_set() else "vps"
+                        print(f"[MAP] Sent {map_data['total']} points | lidar={stats['lidar_points']} mono={stats['mono_points']} | cam={jetson_status} | scale={mapper.depth_scale:.2f}", flush=True)
 
                         # Auto-save
-                        if PERSISTENCE_ENABLED:
-                            now = time.time()
-                            if now - mapper.last_auto_save >= AUTO_SAVE_INTERVAL:
-                                mapper.last_auto_save = now
-                                mapper._save_confirmed_walls()
+                        if PERSISTENCE_ENABLED and now - mapper.last_auto_save >= AUTO_SAVE_INTERVAL:
+                            mapper.last_auto_save = now
+                            mapper._save_confirmed_walls()
 
-                except Exception as e:
-                    print(f"[JETSON] Error: {e}")
+            except json.JSONDecodeError:
+                pass
+            except Exception as e:
+                print(f"[WS] Error: {e}", flush=True)
 
-    except Exception as e:
-        print(f"[JETSON] Connection failed: {e}")
-        raise
+    # Cancel Jetson task on disconnect
+    jetson_task.cancel()
 
 
 async def main():
@@ -1250,31 +1579,19 @@ async def main():
     print(flush=True)
     sys.stdout.flush()
 
-    # Start direct RTSP capture threads (fallback if no Jetson WS)
-    start_rtsp_threads()
+    # Start direct RTSP capture threads (only used if not in Jetson direct mode)
+    if not JETSON_DIRECT_ENABLED:
+        start_rtsp_threads()
 
     while True:
         try:
             if JETSON_DIRECT_ENABLED:
-                # Connect to VPS first for sending map
-                print(f"[VPS] Connecting to {VPS_WS} for map output...")
-                async with websockets.connect(VPS_WS, max_size=10_000_000, ping_interval=None) as vps_ws:
-                    await vps_ws.send(json.dumps({
-                        "type": "register_processor",
-                        "name": "hybrid-3d-mapper",
-                        "capabilities": ["lidar_fusion", "depth_estimation", "3d_mapping"]
-                    }))
-                    print("[VPS] Registered. Now connecting to Jetson for data...")
-
-                    # Connect to Jetson for data
-                    try:
-                        await handle_jetson_connection(vps_ws)
-                    except Exception as e:
-                        print(f"[JETSON] Failed: {e}, falling back to VPS data...")
-                        # Fall through to VPS connection
-                        await handle_vps_connection()
+                # Hybrid mode: cameras from Jetson, LIDAR from VPS
+                print("[MODE] Hybrid: Cameras=Jetson direct, LIDAR=VPS", flush=True)
+                await handle_hybrid_connection()
             else:
                 # Original VPS-only mode
+                print("[MODE] VPS-only: All data from VPS", flush=True)
                 await handle_vps_connection()
 
         except Exception as e:
