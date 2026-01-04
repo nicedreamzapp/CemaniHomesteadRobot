@@ -156,6 +156,15 @@ class AutonomousNavigator:
         if SEMANTIC_MAPPING_AVAILABLE:
             print("[SEMANTIC] Initializing semantic mapper...")
 
+        # PTZ scan coordination - trigger scans when robot stops
+        self.ptz_scan_enabled = True          # Enable PTZ scans during mapping
+        self.ptz_scan_wait_time = 4.0         # Seconds to wait for PTZ sweep
+        self.last_ptz_scan_time = 0           # When we last triggered a scan
+        self.last_ptz_scan_pos = (0, 0)       # Position of last scan (x, y in cm)
+        self.ptz_scan_distance = 100          # Minimum distance (cm) before new scan
+        self.ptz_scan_pending = False         # Waiting for scan to complete
+        self.was_committed = False            # Track if we were committed last cycle
+
     def _init_visual_mapper(self):
         """Initialize visual mapper after WebSocket is connected"""
         if not VISUAL_MAPPING_AVAILABLE or self.visual_mapper is not None:
@@ -984,7 +993,57 @@ class AutonomousNavigator:
                 sensors.committed_action = None  # Abort reverse - camera sees something behind
                 print(f"[NAV] Abort reverse - camera sees {cam_object}")
             else:
+                self.was_committed = True  # Track that we're in a commitment
                 return f"COMMITTED {sensors.committed_action}"
+
+        # ========== PTZ SCAN TRIGGER ==========
+        # Commitment just expired - robot stopped between movements
+        # This is the perfect time to trigger a PTZ camera sweep
+        if self.ptz_scan_enabled and self.was_committed:
+            self.was_committed = False  # Reset the flag
+
+            # Get current position
+            robot_x, robot_y, robot_theta = self.localizer.get_pose()
+
+            # Check if we've moved enough from last scan position
+            last_x, last_y = self.last_ptz_scan_pos
+            dist_from_last = math.sqrt((robot_x - last_x)**2 + (robot_y - last_y)**2)
+
+            # Also check time since last scan (don't scan too frequently)
+            time_since_scan = now - self.last_ptz_scan_time
+
+            if dist_from_last >= self.ptz_scan_distance or time_since_scan > 30.0:
+                # Trigger PTZ scan
+                print(f"[PTZ] Triggering scan at ({robot_x:.0f}, {robot_y:.0f}), moved {dist_from_last:.0f}cm from last scan")
+
+                # Stop robot completely during scan
+                self.stop_robot()
+                sensors.committed_action = None
+
+                # Send ready_for_scan message to VPS/Mac
+                if self.connected and self.ws_app:
+                    try:
+                        scan_msg = {
+                            "type": "ready_for_scan",
+                            "robot_x": robot_x,
+                            "robot_y": robot_y,
+                            "robot_heading": math.degrees(robot_theta),
+                            "timestamp": int(now * 1000)
+                        }
+                        self.ws_app.send(json.dumps(scan_msg))
+                        print(f"[PTZ] Sent ready_for_scan, waiting {self.ptz_scan_wait_time}s for sweep...")
+                    except Exception as e:
+                        print(f"[PTZ] Failed to send ready_for_scan: {e}")
+
+                # Update tracking
+                self.last_ptz_scan_time = now
+                self.last_ptz_scan_pos = (robot_x, robot_y)
+
+                # Wait for PTZ sweep to complete
+                time.sleep(self.ptz_scan_wait_time)
+                print(f"[PTZ] Scan wait complete, resuming navigation")
+
+                return "PTZ_SCAN (waiting for camera sweep)"
 
         # Decide new action - prefer the most open direction
         # If camera sees priority object approaching, limit speed
@@ -1092,6 +1151,10 @@ class AutonomousNavigator:
         print("  LIDAR + Cameras + Encoders + Ultrasonics")
         print("  Stop distance: 40cm (16 inches)")
         print("  Map resolution: 5cm, Coverage: 40m x 40m")
+        if self.ptz_scan_enabled:
+            print(f"  PTZ Scans: ENABLED (every {self.ptz_scan_distance}cm, {self.ptz_scan_wait_time}s wait)")
+        else:
+            print("  PTZ Scans: DISABLED")
         print("=" * 60)
 
         # Start navigation thread

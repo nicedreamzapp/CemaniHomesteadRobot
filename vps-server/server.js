@@ -20,6 +20,20 @@ const wss = new WebSocket.Server({ server });
 // Share WSS with state module
 state.setWss(wss);
 
+// ============ MANUAL OVERRIDE SAFETY ============
+// Xbox/joystick/drive system is KING - always overrides autonomous
+// When manual input detected, block autonomous commands for 2 seconds
+global.manualOverrideUntil = 0;  // Timestamp when manual override expires
+const MANUAL_OVERRIDE_DURATION = 2000;  // Block autonomous for 2 seconds after manual input
+
+function setManualOverride() {
+  global.manualOverrideUntil = Date.now() + MANUAL_OVERRIDE_DURATION;
+}
+
+function isManualOverrideActive() {
+  return Date.now() < global.manualOverrideUntil;
+}
+
 // ============ BASIC AUTH ============
 let authConfig = null;
 try {
@@ -62,6 +76,59 @@ app.use(express.static(path.join(__dirname, "public"), {
   lastModified: false,
   maxAge: 0
 }));
+
+// GPU Renderer - receives frames via WebSocket from Mac processor
+let gpuRendererConnected = false;
+let latestGpuFrame = null;  // Buffer containing latest JPEG frame
+let gpuFrameTimestamp = 0;
+const GPU_FRAME_TIMEOUT_MS = 5000;
+
+// MJPEG streaming endpoint - serves frames received via WebSocket
+app.get('/gpu-stream', (req, res) => {
+  if (!gpuRendererConnected || !latestGpuFrame) {
+    res.status(503).send('GPU renderer not connected or no frames available');
+    return;
+  }
+
+  console.log(`[GPU-STREAM] Client connected from ${req.ip}`);
+
+  res.writeHead(200, {
+    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+
+  // Send frames at ~15 FPS
+  const sendFrame = () => {
+    if (latestGpuFrame && (Date.now() - gpuFrameTimestamp) < GPU_FRAME_TIMEOUT_MS) {
+      try {
+        res.write('--frame\r\n');
+        res.write('Content-Type: image/jpeg\r\n\r\n');
+        res.write(latestGpuFrame);
+        res.write('\r\n');
+      } catch (e) {
+        clearInterval(interval);
+      }
+    }
+  };
+
+  const interval = setInterval(sendFrame, 67);  // ~15 FPS
+  sendFrame();  // Send first frame immediately
+
+  req.on('close', () => {
+    clearInterval(interval);
+    console.log('[GPU-STREAM] Client disconnected');
+  });
+});
+
+app.get('/gpu-status', (req, res) => {
+  res.json({
+    connected: gpuRendererConnected,
+    hasFrames: !!latestGpuFrame,
+    frameAge: latestGpuFrame ? Date.now() - gpuFrameTimestamp : null,
+    streamUrl: gpuRendererConnected ? `/gpu-stream` : null
+  });
+});
 
 // HLS output directory
 const HLS_DIR = "/opt/robot-server/public/hls";
@@ -211,8 +278,11 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Joystick control - OVERRIDES autonomous mode
+  // Joystick control - OVERRIDES autonomous mode (XBOX IS KING)
   if (data.type === "joystick") {
+    // Set manual override - blocks ALL autonomous commands
+    setManualOverride();
+
     // Stop autonomous if running - manual control takes priority
     if (global.autoInterval) {
       clearInterval(global.autoInterval);
@@ -282,14 +352,22 @@ function handleMessage(ws, data) {
   // Serial command to Teensy (via ESP32) - OVERRIDES autonomous mode for movement commands
   if (data.type === "serial_cmd") {
     // Movement commands override autonomous mode (FWD, BACK, LEFT, RIGHT, STOP, etc.)
-    const movementCmds = ["FWD", "BACK", "LEFT", "RIGHT", "STOP", "TURN"];
-    const isMovementCmd = movementCmds.some(cmd => data.cmd && data.cmd.includes(cmd));
+    // NOTE: AUTO_ commands are from autonomous system, not manual - don't override for those
+    const manualMovementCmds = ["FWD", "BACK", "LEFT", "RIGHT", "STOP", "TURN"];
+    const isManualMovementCmd = manualMovementCmds.some(cmd =>
+      data.cmd && data.cmd.includes(cmd) && !data.cmd.startsWith("AUTO_")
+    );
 
-    if (isMovementCmd && global.autoInterval) {
-      clearInterval(global.autoInterval);
-      global.autoInterval = null;
-      console.log("[OVERRIDE] Manual drive command - stopping autonomous mode:", data.cmd);
-      state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+    if (isManualMovementCmd) {
+      // Set manual override - blocks ALL autonomous commands
+      setManualOverride();
+
+      if (global.autoInterval) {
+        clearInterval(global.autoInterval);
+        global.autoInterval = null;
+        console.log("[OVERRIDE] Manual drive command - stopping autonomous mode:", data.cmd);
+        state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+      }
     }
 
     const rs = state.getRobotSocket();
@@ -398,12 +476,13 @@ function handleMessage(ws, data) {
     if (priority.length > 0) {
       console.log(`[DETECT] CAM${data.camera} PRIORITY: ${priority.map(p => p.class).join(', ')}`);
     }
-    // Broadcast to all browsers
+    // Broadcast to all browsers (include timestamp for staleness check)
     state.broadcast({
       type: "detections",
       camera: data.camera,
       detections: data.detections,
-      count: data.count
+      count: data.count,
+      timestamp: data.timestamp || Date.now()
     }, ws);
   }
 
@@ -423,7 +502,14 @@ function handleMessage(ws, data) {
   }
 
   // Autonomous commands from Jetson -> Robot
+  // BLOCKED when manual override is active (Xbox/drive system is KING)
   if (data.type === "autonomous_cmd") {
+    // Check manual override - Xbox/joystick ALWAYS wins
+    if (isManualOverrideActive()) {
+      console.log(`[AUTONOMOUS] BLOCKED by manual override: ${data.cmd}`);
+      return;  // Don't process autonomous command
+    }
+
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
       // Map autonomous commands to serial commands
@@ -467,6 +553,12 @@ function handleMessage(ws, data) {
           global.autoDirection = "FWD";  // Track current direction
           global.autoCmdCount = 0;
           global.autoInterval = setInterval(() => {
+            // Check manual override - Xbox/joystick ALWAYS wins
+            if (isManualOverrideActive()) {
+              console.log(`[AUTO-DRIVE] Paused - manual override active`);
+              return;  // Skip this tick, don't send command
+            }
+
             const robotSock = state.getRobotSocket();
             if (robotSock && robotSock.readyState === WebSocket.OPEN) {
               // Send current direction command at 25 RPM (about 6 inches/sec)
@@ -601,6 +693,33 @@ function handleMessage(ws, data) {
     console.log(`[SEMANTIC] Broadcasting ${data.type} to browsers`);
   }
 
+  // ==================== PTZ SCAN COORDINATION ====================
+  // Relay "ready_for_scan" from Jetson autonomous.py to Mac processor
+  // This triggers PTZ camera sweeps when robot stops between movements
+  if (data.type === "ready_for_scan") {
+    console.log(`[PTZ SCAN] Robot ready at (${data.robot_x?.toFixed(0)}, ${data.robot_y?.toFixed(0)}) heading ${data.robot_heading?.toFixed(0)}°`);
+
+    // Relay to all connected Mac processors
+    let procCount = 0;
+    wss.clients.forEach(client => {
+      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(data));
+        procCount++;
+      }
+    });
+
+    // Also broadcast to browsers for status display
+    state.broadcast({
+      type: "ptz_scan_started",
+      robot_x: data.robot_x,
+      robot_y: data.robot_y,
+      robot_heading: data.robot_heading,
+      timestamp: data.timestamp
+    });
+
+    console.log(`[PTZ SCAN] Relayed to ${procCount} processor(s)`);
+  }
+
   // ==================== MAC MINI PROCESSOR ====================
   // Register Mac Mini as a processor
   if (data.type === "register_processor") {
@@ -608,6 +727,16 @@ function handleMessage(ws, data) {
     ws.processorName = data.name || "mac-processor";
     console.log(`[PROCESSOR] ${ws.processorName} connected`);
     state.broadcast({ type: "processor_status", connected: true, name: ws.processorName });
+
+    // If this is the GPU renderer, capture its IP for stream proxying
+    if (data.name === "gpu-renderer" && data.capabilities && data.capabilities.includes("video_stream")) {
+      // Get the client IP
+      const clientIP = ws._socket?.remoteAddress?.replace('::ffff:', '') || null;
+      if (clientIP && clientIP !== '127.0.0.1') {
+        gpuRendererIP = clientIP;
+        console.log(`[GPU-RENDERER] Stream available at http://${gpuRendererIP}:8089/stream.mjpg`);
+      }
+    }
   }
 
   // Accumulated map from Mac Mini - broadcast to browsers for visualization

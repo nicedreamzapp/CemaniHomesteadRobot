@@ -562,6 +562,74 @@ function handlePTZ(cam, msg, usePtzSocket = false) {
     case 'goto_preset':
       body = `<tptz:GotoPreset><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:PresetToken>${msg.preset}</tptz:PresetToken></tptz:GotoPreset>`;
       break;
+    case 'absolute':
+      // Sricam cameras DON'T support AbsoluteMove!
+      // Simulate by going home (preset 1), then using timed ContinuousMove
+      // This is a best-effort approximation
+      console.log(`[PTZ] Absolute requested: pan=${msg.pan}°, tilt=${msg.tilt}°`);
+      console.log(`[PTZ] Using timed ContinuousMove to simulate (camera doesn't support AbsoluteMove)`);
+
+      // First go to home position (center)
+      const homeBody = `<tptz:GotoHomePosition><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken></tptz:GotoHomePosition>`;
+      sendOnvifFireAndForget(cam, homeBody, false);
+
+      // Wait for home, then do timed pan/tilt
+      setTimeout(() => {
+        const pan = msg.pan || 0;
+        const tilt = msg.tilt || 0;
+
+        // Calculate move duration (roughly 2 seconds for full ±90° pan)
+        const panDuration = Math.abs(pan) * 15;   // ~15ms per degree
+        const tiltDuration = Math.abs(tilt) * 20; // ~20ms per degree (tilt is slower)
+
+        // Move pan
+        if (pan !== 0) {
+          const panVelocity = pan > 0 ? 0.5 : -0.5;
+          const panMoveBody = `<tptz:ContinuousMove><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:Velocity><tt:PanTilt x="${panVelocity}" y="0"/><tt:Zoom x="0"/></tptz:Velocity></tptz:ContinuousMove>`;
+          sendOnvifFireAndForget(cam, panMoveBody, false);
+          console.log(`[PTZ] Pan ${pan > 0 ? 'right' : 'left'} for ${panDuration}ms`);
+
+          setTimeout(() => {
+            const stopBody = `<tptz:Stop><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:PanTilt>true</tptz:PanTilt><tptz:Zoom>true</tptz:Zoom></tptz:Stop>`;
+            sendOnvifFireAndForget(cam, stopBody, true);
+
+            // Then move tilt
+            if (tilt !== 0) {
+              setTimeout(() => {
+                const tiltVelocity = tilt > 0 ? 0.5 : -0.5; // positive tilt = up
+                const tiltMoveBody = `<tptz:ContinuousMove><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:Velocity><tt:PanTilt x="0" y="${tiltVelocity}"/><tt:Zoom x="0"/></tptz:Velocity></tptz:ContinuousMove>`;
+                sendOnvifFireAndForget(cam, tiltMoveBody, false);
+                console.log(`[PTZ] Tilt ${tilt > 0 ? 'up' : 'down'} for ${tiltDuration}ms`);
+
+                setTimeout(() => {
+                  sendOnvifFireAndForget(cam, `<tptz:Stop><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:PanTilt>true</tptz:PanTilt><tptz:Zoom>true</tptz:Zoom></tptz:Stop>`, true);
+                  console.log(`[PTZ] Absolute complete: cam${cam.id} -> (${pan}, ${tilt})`);
+                }, tiltDuration);
+              }, 100);
+            } else {
+              console.log(`[PTZ] Absolute complete: cam${cam.id} -> (${pan}, ${tilt})`);
+            }
+          }, panDuration);
+        } else if (tilt !== 0) {
+          // Only tilt, no pan
+          const tiltVelocity = tilt > 0 ? 0.5 : -0.5;
+          const tiltMoveBody = `<tptz:ContinuousMove><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:Velocity><tt:PanTilt x="0" y="${tiltVelocity}"/><tt:Zoom x="0"/></tptz:Velocity></tptz:ContinuousMove>`;
+          sendOnvifFireAndForget(cam, tiltMoveBody, false);
+          console.log(`[PTZ] Tilt ${tilt > 0 ? 'up' : 'down'} for ${tiltDuration}ms`);
+
+          setTimeout(() => {
+            sendOnvifFireAndForget(cam, `<tptz:Stop><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:PanTilt>true</tptz:PanTilt><tptz:Zoom>true</tptz:Zoom></tptz:Stop>`, true);
+            console.log(`[PTZ] Absolute complete: cam${cam.id} -> (${pan}, ${tilt})`);
+          }, tiltDuration);
+        }
+      }, 1500); // Wait for home position
+
+      // Return early - we'll handle async
+      const socket = usePtzSocket && ptzSocket?.readyState === WebSocket.OPEN ? ptzSocket : vpsSocket;
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'cam_ptz_result', camera: cam.id, success: true, note: 'simulated_absolute' }));
+      }
+      return; // Don't fall through to the normal body handling
   }
 
   if (body) {

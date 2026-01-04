@@ -299,7 +299,8 @@ function checkNavCompletion() {
 }
 
 // ============ ROBOT MODEL ============
-// Accurate model based on actual robot: aluminum extrusion frame, 8" wheels, LIDAR tower, PTZ camera
+// Accurate model based on actual robot sketch: 2020 aluminum extrusion frame, LIDAR tower at rear-right,
+// rear PTZ camera on left arm, front camera on 2nd story facing forward
 function createRobot3D() {
   const group = new THREE.Group();
 
@@ -311,199 +312,230 @@ function createRobot3D() {
   const whiteMat = new THREE.MeshPhongMaterial({ color: 0xf0f0f0 });
   const blackMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
 
-  // Dimensions (in meters) - rectangular frame, taller than wide, wheels extend outward
-  const frameWidth = 0.30;   // 30cm wide (narrow)
-  const frameDepth = 0.45;   // 45cm deep (longer front-to-back)
-  const frameHeight = 0.40;  // 40cm tall main frame (taller)
+  // Dimensions (in meters) - rectangular frame based on sketch
+  const frameWidth = 0.32;   // 32cm wide
+  const frameDepth = 0.40;   // 40cm deep (front-to-back)
+  const frameHeight = 0.25;  // 25cm tall main frame (lower section)
   const wheelRadius = 0.10;  // 8-inch wheels = ~20cm diameter
   const wheelWidth = 0.06;   // 6cm wide wheels
-  const tubeSize = 0.025;    // 2.5cm aluminum extrusion
-  const wheelOffset = 0.10;  // Wheels extend 10cm beyond frame on each side
-  const midShelfHeight = 0.18; // Mid-level shelf at 18cm
+  const tubeSize = 0.020;    // 20mm 2020 aluminum extrusion
+  const wheelOffset = 0.08;  // Wheels extend beyond frame
+  const midShelfHeight = 0.12; // Mid-level shelf
 
-  // Ground clearance
+  // Ground clearance - wheels touch ground
   const groundClearance = wheelRadius * 0.5;
 
-  // ===== ALUMINUM EXTRUSION FRAME =====
-  // Vertical corner posts
-  const postGeom = new THREE.BoxGeometry(tubeSize, frameHeight, tubeSize);
-  const postPositions = [
-    [-frameWidth/2 + tubeSize/2, groundClearance + frameHeight/2, -frameDepth/2 + tubeSize/2],
-    [frameWidth/2 - tubeSize/2, groundClearance + frameHeight/2, -frameDepth/2 + tubeSize/2],
-    [-frameWidth/2 + tubeSize/2, groundClearance + frameHeight/2, frameDepth/2 - tubeSize/2],
-    [frameWidth/2 - tubeSize/2, groundClearance + frameHeight/2, frameDepth/2 - tubeSize/2]
+  // ===== MAIN CHASSIS FRAME (lower section) =====
+  // Vertical corner posts for main chassis
+  const chassisPostGeom = new THREE.BoxGeometry(tubeSize, frameHeight, tubeSize);
+  const chassisCorners = [
+    [-frameWidth/2 + tubeSize/2, -frameDepth/2 + tubeSize/2],  // Front-left
+    [frameWidth/2 - tubeSize/2, -frameDepth/2 + tubeSize/2],   // Front-right
+    [-frameWidth/2 + tubeSize/2, frameDepth/2 - tubeSize/2],   // Rear-left
+    [frameWidth/2 - tubeSize/2, frameDepth/2 - tubeSize/2]     // Rear-right
   ];
-  postPositions.forEach(pos => {
-    const post = new THREE.Mesh(postGeom, aluminumMat);
-    post.position.set(...pos);
+  chassisCorners.forEach(([x, z]) => {
+    const post = new THREE.Mesh(chassisPostGeom, aluminumMat);
+    post.position.set(x, groundClearance + frameHeight/2, z);
     group.add(post);
   });
 
-  // Horizontal rails - bottom
+  // Horizontal rails for chassis
   const railXGeom = new THREE.BoxGeometry(frameWidth - tubeSize*2, tubeSize, tubeSize);
   const railZGeom = new THREE.BoxGeometry(tubeSize, tubeSize, frameDepth - tubeSize*2);
 
-  // Bottom frame
-  [[-frameDepth/2 + tubeSize/2, groundClearance + tubeSize/2], [frameDepth/2 - tubeSize/2, groundClearance + tubeSize/2]].forEach(([z, y]) => {
+  // Bottom frame rails
+  [[-frameDepth/2 + tubeSize/2], [frameDepth/2 - tubeSize/2]].forEach(([z]) => {
     const rail = new THREE.Mesh(railXGeom, aluminumMat);
-    rail.position.set(0, y, z);
+    rail.position.set(0, groundClearance + tubeSize/2, z);
     group.add(rail);
   });
-  [[-frameWidth/2 + tubeSize/2, groundClearance + tubeSize/2], [frameWidth/2 - tubeSize/2, groundClearance + tubeSize/2]].forEach(([x, y]) => {
+  [[-frameWidth/2 + tubeSize/2], [frameWidth/2 - tubeSize/2]].forEach(([x]) => {
     const rail = new THREE.Mesh(railZGeom, aluminumMat);
-    rail.position.set(x, y, 0);
+    rail.position.set(x, groundClearance + tubeSize/2, 0);
     group.add(rail);
   });
 
-  // Mid-level frame (shelf at midShelfHeight)
-  [[-frameDepth/2 + tubeSize/2, groundClearance + midShelfHeight], [frameDepth/2 - tubeSize/2, groundClearance + midShelfHeight]].forEach(([z, y]) => {
+  // Mid-level shelf rails
+  [[-frameDepth/2 + tubeSize/2], [frameDepth/2 - tubeSize/2]].forEach(([z]) => {
     const rail = new THREE.Mesh(railXGeom, aluminumMat);
-    rail.position.set(0, y, z);
+    rail.position.set(0, groundClearance + midShelfHeight, z);
     group.add(rail);
   });
-  [[-frameWidth/2 + tubeSize/2, groundClearance + midShelfHeight], [frameWidth/2 - tubeSize/2, groundClearance + midShelfHeight]].forEach(([x, y]) => {
+  [[-frameWidth/2 + tubeSize/2], [frameWidth/2 - tubeSize/2]].forEach(([x]) => {
     const rail = new THREE.Mesh(railZGeom, aluminumMat);
-    rail.position.set(x, y, 0);
+    rail.position.set(x, groundClearance + midShelfHeight, 0);
     group.add(rail);
   });
 
-  // Top frame
-  [[-frameDepth/2 + tubeSize/2, groundClearance + frameHeight - tubeSize/2], [frameDepth/2 - tubeSize/2, groundClearance + frameHeight - tubeSize/2]].forEach(([z, y]) => {
+  // Top frame rails (chassis top)
+  [[-frameDepth/2 + tubeSize/2], [frameDepth/2 - tubeSize/2]].forEach(([z]) => {
     const rail = new THREE.Mesh(railXGeom, aluminumMat);
-    rail.position.set(0, y, z);
+    rail.position.set(0, groundClearance + frameHeight - tubeSize/2, z);
     group.add(rail);
   });
-  [[-frameWidth/2 + tubeSize/2, groundClearance + frameHeight - tubeSize/2], [frameWidth/2 - tubeSize/2, groundClearance + frameHeight - tubeSize/2]].forEach(([x, y]) => {
+  [[-frameWidth/2 + tubeSize/2], [frameWidth/2 - tubeSize/2]].forEach(([x]) => {
     const rail = new THREE.Mesh(railZGeom, aluminumMat);
-    rail.position.set(x, y, 0);
+    rail.position.set(x, groundClearance + frameHeight - tubeSize/2, 0);
     group.add(rail);
   });
 
-  // ===== LIDAR TOWER (matches photo - rectangular frame on RIGHT side) =====
-  // Rectangular 4-post tower attached to right side of main frame
-  const towerHeight = 0.30;  // Tower height above main frame
-  const towerWidth = frameWidth * 0.5;  // Tower spans half the frame width
-  const towerDepth = frameDepth * 0.6;  // Tower spans 60% of frame depth
-  const towerX = frameWidth/2 + towerWidth/2 - tubeSize;  // Attached to right side
-  const towerZ = 0;  // Centered front-to-back
-  const towerBaseY = groundClearance;  // Tower starts from ground level
+  // ===== LIDAR TOWER (rectangular frame at FRONT-MIDDLE) =====
+  // 4-post tower rising from front-middle of main chassis (per sketch)
+  const towerHeight = 0.12;  // 12cm tall tower above chassis (lowered)
+  const towerWidth = 0.20;   // 20cm wide
+  const towerDepth = 0.18;   // 18cm deep
+  const towerBaseY = groundClearance;
+  const towerX = 0;  // Center (front-middle)
+  const towerZ = -frameDepth/2 + towerDepth/2 + 0.02;  // FRONT side (negative Z is front)
 
-  // Four corner posts of tower (full height from ground)
+  // Four corner posts of LIDAR tower (full height from ground)
   const fullTowerHeight = frameHeight + towerHeight;
   const towerPostGeom = new THREE.BoxGeometry(tubeSize, fullTowerHeight, tubeSize);
   const towerCorners = [
-    [towerWidth/2, -towerDepth/2],   // Front-right
-    [towerWidth/2, towerDepth/2],    // Back-right
+    [-towerWidth/2 + tubeSize/2, -towerDepth/2 + tubeSize/2],  // Front-left of tower
+    [towerWidth/2 - tubeSize/2, -towerDepth/2 + tubeSize/2],   // Front-right of tower
+    [-towerWidth/2 + tubeSize/2, towerDepth/2 - tubeSize/2],   // Rear-left of tower
+    [towerWidth/2 - tubeSize/2, towerDepth/2 - tubeSize/2]     // Rear-right of tower
   ];
-  // Only right-side posts (left side shares with main frame)
   towerCorners.forEach(([dx, dz]) => {
     const post = new THREE.Mesh(towerPostGeom, aluminumMat);
-    post.position.set(towerX + dx - towerWidth/2, towerBaseY + fullTowerHeight/2, towerZ + dz);
+    post.position.set(towerX + dx, towerBaseY + fullTowerHeight/2, towerZ + dz);
     group.add(post);
   });
 
-  // Horizontal braces on tower
-  const towerBraceZGeom = new THREE.BoxGeometry(tubeSize, tubeSize, towerDepth);
-  // Top, middle, bottom horizontal braces on right side
-  [fullTowerHeight - tubeSize/2, fullTowerHeight * 0.7, fullTowerHeight * 0.4].forEach(h => {
-    const brace = new THREE.Mesh(towerBraceZGeom, aluminumMat);
-    brace.position.set(towerX + towerWidth/2 - towerWidth/2, towerBaseY + h, towerZ);
-    group.add(brace);
+  // Tower horizontal braces - multiple levels
+  const towerRailXGeom = new THREE.BoxGeometry(towerWidth - tubeSize*2, tubeSize, tubeSize);
+  const towerRailZGeom = new THREE.BoxGeometry(tubeSize, tubeSize, towerDepth - tubeSize*2);
+
+  // Tower braces at bottom, middle, and top
+  const towerBraceLevels = [
+    towerBaseY + tubeSize/2,                    // Bottom
+    towerBaseY + frameHeight,                   // At chassis top level
+    towerBaseY + fullTowerHeight * 0.65,        // Middle-upper
+    towerBaseY + fullTowerHeight - tubeSize/2   // Top
+  ];
+  towerBraceLevels.forEach(y => {
+    // Front and rear X braces
+    [[-towerDepth/2 + tubeSize/2], [towerDepth/2 - tubeSize/2]].forEach(([dz]) => {
+      const brace = new THREE.Mesh(towerRailXGeom, aluminumMat);
+      brace.position.set(towerX, y, towerZ + dz);
+      group.add(brace);
+    });
+    // Left and right Z braces
+    [[-towerWidth/2 + tubeSize/2], [towerWidth/2 - tubeSize/2]].forEach(([dx]) => {
+      const brace = new THREE.Mesh(towerRailZGeom, aluminumMat);
+      brace.position.set(towerX + dx, y, towerZ);
+      group.add(brace);
+    });
   });
 
-  // Top cross braces
-  const towerTopXGeom = new THREE.BoxGeometry(towerWidth, tubeSize, tubeSize);
-  [[-towerDepth/2], [towerDepth/2]].forEach(([z]) => {
-    const brace = new THREE.Mesh(towerTopXGeom, aluminumMat);
-    brace.position.set(towerX, towerBaseY + fullTowerHeight - tubeSize/2, towerZ + z);
-    group.add(brace);
-  });
+  // Green LED strip on front-right post of tower (facing forward)
+  const ledStripGeom = new THREE.BoxGeometry(0.012, fullTowerHeight * 0.5, 0.012);
+  const ledStrip = new THREE.Mesh(ledStripGeom, greenLedMat);
+  ledStrip.position.set(towerX + towerWidth/2 - tubeSize/2 - 0.01, towerBaseY + fullTowerHeight * 0.55, towerZ - towerDepth/2 + tubeSize/2 + 0.01);
+  group.add(ledStrip);
 
-  // Green LED strips on tower
-  const ledStripGeom = new THREE.BoxGeometry(0.012, fullTowerHeight * 0.6, 0.012);
-  [[towerWidth/2 - tubeSize, -towerDepth/2 + tubeSize], [towerWidth/2 - tubeSize, towerDepth/2 - tubeSize]].forEach(([dx, dz]) => {
-    const led = new THREE.Mesh(ledStripGeom, greenLedMat);
-    led.position.set(towerX + dx - towerWidth/2, towerBaseY + fullTowerHeight * 0.5, towerZ + dz);
-    group.add(led);
-  });
+  // Second LED strip on rear-right post
+  const ledStrip2 = new THREE.Mesh(ledStripGeom, greenLedMat);
+  ledStrip2.position.set(towerX + towerWidth/2 - tubeSize/2 - 0.01, towerBaseY + fullTowerHeight * 0.55, towerZ + towerDepth/2 - tubeSize/2 - 0.01);
+  group.add(ledStrip2);
 
-  // ===== LIDAR SENSOR (black cylinder on top of tower) =====
-  const lidarGeom = new THREE.CylinderGeometry(0.045, 0.045, 0.06, 16);
-  const lidarMat = new THREE.MeshPhongMaterial({ color: 0x111111, specular: 0x222222 });
+  // ===== LIDAR SENSOR (black/grey cylinder on top of tower) =====
+  const lidarGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.07, 20);
+  const lidarMat = new THREE.MeshPhongMaterial({ color: 0x333333, specular: 0x222222 });
   const lidar = new THREE.Mesh(lidarGeom, lidarMat);
-  lidar.position.set(towerX, towerBaseY + fullTowerHeight + 0.04, towerZ);
+  lidar.position.set(towerX, towerBaseY + fullTowerHeight + 0.045, towerZ);
   group.add(lidar);
 
   // LIDAR spinning indicator ring
   const lidarRing = new THREE.Mesh(
-    new THREE.TorusGeometry(0.045, 0.005, 8, 24),
+    new THREE.TorusGeometry(0.05, 0.006, 8, 24),
     new THREE.MeshBasicMaterial({ color: 0x00ff88 })
   );
   lidarRing.rotation.x = Math.PI / 2;
-  lidarRing.position.copy(lidar.position);
-  lidarRing.position.y += 0.035;
+  lidarRing.position.set(towerX, towerBaseY + fullTowerHeight + 0.085, towerZ);
   group.add(lidarRing);
 
-  // ===== REAR CAMERA (white PTZ on LEFT side, on pole) =====
-  const rearCamPoleHeight = 0.15;
-  const rearCamX = -frameWidth/2 - 0.03;  // Left side outside frame
-  const rearCamZ = 0;  // Center of robot
+  // ===== REAR CAMERA (white PTZ on LEFT side, on horizontal arm at REAR) =====
+  const rearCamArmLength = 0.15;  // Arm extends 15cm from frame
+  const rearCamX = -frameWidth/2 - rearCamArmLength/2;  // Left side
+  const rearCamZ = frameDepth/2 - 0.08;  // At REAR of robot (positive Z is rear)
+  const rearCamY = groundClearance + frameHeight + 0.10;  // Above chassis
 
-  // Vertical pole
-  const rearPoleGeom = new THREE.CylinderGeometry(0.015, 0.015, rearCamPoleHeight, 8);
+  // Vertical pole from chassis top (attached to rear-left corner)
+  const rearPoleGeom = new THREE.CylinderGeometry(0.012, 0.012, 0.12, 8);
   const rearPole = new THREE.Mesh(rearPoleGeom, aluminumMat);
-  rearPole.position.set(rearCamX, groundClearance + frameHeight + rearCamPoleHeight/2, rearCamZ);
+  rearPole.position.set(-frameWidth/2 + tubeSize, groundClearance + frameHeight + 0.06, rearCamZ);
   group.add(rearPole);
 
-  // Horizontal arm
-  const rearArmGeom = new THREE.BoxGeometry(0.06, tubeSize * 0.6, tubeSize * 0.6);
+  // Horizontal arm extending outward to the LEFT
+  const rearArmGeom = new THREE.BoxGeometry(rearCamArmLength, tubeSize * 0.8, tubeSize * 0.8);
   const rearArm = new THREE.Mesh(rearArmGeom, aluminumMat);
-  rearArm.position.set(rearCamX - 0.03, groundClearance + frameHeight + rearCamPoleHeight, rearCamZ);
+  rearArm.position.set(-frameWidth/2 - rearCamArmLength/2 + tubeSize, rearCamY, rearCamZ);
   group.add(rearArm);
 
-  // PTZ camera (white dome)
+  // PTZ camera base (white cylinder)
   const rearCamBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.05, 0.03, 16),
+    new THREE.CylinderGeometry(0.035, 0.045, 0.025, 16),
     whiteMat
   );
-  rearCamBase.position.set(rearCamX - 0.06, groundClearance + frameHeight + rearCamPoleHeight - 0.01, rearCamZ);
+  rearCamBase.position.set(rearCamX - 0.02, rearCamY - 0.01, rearCamZ);
   group.add(rearCamBase);
 
+  // PTZ camera dome (hemisphere pointing down)
   const rearCamDome = new THREE.Mesh(
-    new THREE.SphereGeometry(0.05, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.SphereGeometry(0.045, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
     whiteMat
   );
-  rearCamDome.position.set(rearCamX - 0.06, groundClearance + frameHeight + rearCamPoleHeight - 0.03, rearCamZ);
-  rearCamDome.rotation.x = Math.PI;
+  rearCamDome.position.set(rearCamX - 0.02, rearCamY - 0.025, rearCamZ);
+  rearCamDome.rotation.x = Math.PI;  // Flip dome to point down
   group.add(rearCamDome);
 
-  // Lens
-  const frontLensGeom = new THREE.SphereGeometry(0.022, 12, 8);
+  // Camera lens
   const lensMat = new THREE.MeshPhongMaterial({ color: 0x111122, specular: 0x4444ff, shininess: 100 });
-  const rearLens = new THREE.Mesh(frontLensGeom, lensMat);
-  rearLens.position.set(rearCamX - 0.06, groundClearance + frameHeight + rearCamPoleHeight - 0.065, rearCamZ);
+  const rearLens = new THREE.Mesh(
+    new THREE.SphereGeometry(0.018, 12, 8),
+    lensMat
+  );
+  rearLens.position.set(rearCamX - 0.02, rearCamY - 0.055, rearCamZ);
   group.add(rearLens);
 
-  // ===== FRONT CAMERA (inside frame, center compartment) =====
-  const frontCamY = groundClearance + midShelfHeight + 0.02;
+  // ===== FRONT CAMERA (mounted UNDER the LIDAR tower, on 2nd story, facing FORWARD) =====
+  // Camera is mounted inside the LIDAR tower frame, facing forward (negative Z)
+  const frontCamY = groundClearance + frameHeight * 0.6;  // On 2nd story level inside tower
+  const frontCamZ = towerZ - towerDepth/2 - 0.01;  // At front face of tower
 
+  // Camera mounting bracket attached to tower front rail
+  const frontBracketGeom = new THREE.BoxGeometry(0.05, 0.03, tubeSize * 0.8);
+  const frontBracket = new THREE.Mesh(frontBracketGeom, darkAluminumMat);
+  frontBracket.position.set(towerX, frontCamY, frontCamZ + 0.01);
+  group.add(frontBracket);
+
+  // PTZ camera base (facing forward)
   const frontCamBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.05, 0.03, 16),
+    new THREE.CylinderGeometry(0.032, 0.040, 0.022, 16),
     whiteMat
   );
-  frontCamBase.position.set(0, frontCamY, -frameDepth/4);
+  frontCamBase.rotation.x = Math.PI / 2;  // Rotate to face forward
+  frontCamBase.position.set(towerX, frontCamY, frontCamZ - 0.02);
   group.add(frontCamBase);
 
+  // Front camera dome (facing forward)
   const frontCamDome = new THREE.Mesh(
-    new THREE.SphereGeometry(0.048, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.SphereGeometry(0.038, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
     whiteMat
   );
-  frontCamDome.position.set(0, frontCamY - 0.025, -frameDepth/4);
-  frontCamDome.rotation.x = Math.PI;
+  frontCamDome.rotation.x = -Math.PI / 2;  // Point forward (negative Z)
+  frontCamDome.position.set(towerX, frontCamY, frontCamZ - 0.04);
   group.add(frontCamDome);
 
-  const frontLens = new THREE.Mesh(frontLensGeom, lensMat);
-  frontLens.position.set(0, frontCamY - 0.06, -frameDepth/4);
+  // Front camera lens
+  const frontLens = new THREE.Mesh(
+    new THREE.SphereGeometry(0.014, 12, 8),
+    lensMat
+  );
+  frontLens.position.set(towerX, frontCamY, frontCamZ - 0.065);
   group.add(frontLens);
 
   // ===== WHEELS (4 large wheels extending outward from frame) =====
@@ -1296,6 +1328,12 @@ let accumulatedMapVisible = true;  // ON - show textured 3D room map
 let showPhotoMarkers = false;  // DISABLED - ugly floating photos on map
 let mapRenderMode = 'splats';  // 'points', 'splats', 'surface'
 
+// Point quality filters - DISABLED (compact format has no obs/conf fields)
+let mapMinObservations = 1;    // Allow all (compact format defaults to 1)
+let mapMinConfidence = 0.0;    // Allow all
+let mapMinZ = -1.0;            // Well below floor
+let mapMaxZ = 5.0;             // High ceiling
+
 // Custom shader for photorealistic splats (circular points with soft edges)
 const splatVertexShader = `
   attribute float size;
@@ -1368,17 +1406,42 @@ function updateAccumulatedMap(data) {
   // Support both compact format [x, y, z, r, g, b] and object format {x, y, z, r, g, b}
   const isCompact = data.format === 'compact' || (points.length > 0 && Array.isArray(points[0]));
 
+  let filteredCount = 0;
+  let skippedObs = 0;
+  let skippedConf = 0;
+  let skippedZ = 0;
+
   for (const p of points) {
-    let px, py, pz, pr, pg, pb;
+    let px, py, pz, pr, pg, pb, pobs, pconf;
 
     if (isCompact) {
-      // Compact format: [x, y, z, r, g, b]
-      [px, py, pz, pr, pg, pb] = p;
+      // Compact format: [x, y, z, r, g, b, obs?, conf?]
+      [px, py, pz, pr, pg, pb, pobs, pconf] = p;
+      pobs = pobs || 1;
+      pconf = pconf || 1.0;
     } else {
-      // Object format: {x, y, z, r, g, b}
+      // Object format: {x, y, z, r, g, b, obs, c}
       px = p.x; py = p.y; pz = p.z;
       pr = p.r; pg = p.g; pb = p.b;
+      pobs = p.obs || 1;
+      pconf = p.c || 1.0;
     }
+
+    // Filter by quality thresholds
+    if (pobs < mapMinObservations) {
+      skippedObs++;
+      continue;
+    }
+    if (pconf < mapMinConfidence) {
+      skippedConf++;
+      continue;
+    }
+    if (pz < mapMinZ || pz > mapMaxZ) {
+      skippedZ++;
+      continue;
+    }
+
+    filteredCount++;
 
     // Convert to Three.js coordinates
     // px, py are world coords in meters, pz is height
@@ -1398,9 +1461,17 @@ function updateAccumulatedMap(data) {
     }
     colors.push(r, g, b);
 
-    // Size - consistent for photorealistic look
-    const baseSize = mapRenderMode === 'splats' ? 0.12 : 0.08;  // Larger splats for better coverage
-    sizes.push(baseSize);
+    // Size based on observation count - more observed = larger/more confident
+    const baseSize = mapRenderMode === 'splats' ? 0.10 : 0.06;
+    const obsBonus = Math.min(pobs / 20, 1) * 0.04;  // Up to +0.04 for high obs
+    sizes.push(baseSize + obsBonus);
+  }
+
+  console.log(`[3D MAP] Filtered: ${filteredCount}/${points.length} (skipped: obs=${skippedObs}, conf=${skippedConf}, z=${skippedZ})`);
+
+  if (positions.length === 0) {
+    console.log('[3D MAP] No points passed filters');
+    return;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -1885,6 +1956,31 @@ function toggleSemanticVisible() {
   return semanticVisible;
 }
 
+// ============ MAP FILTER CONTROLS ============
+function setMapFilters(options) {
+  if (options.minObservations !== undefined) {
+    mapMinObservations = options.minObservations;
+    console.log(`[MAP] Min observations set to: ${mapMinObservations}`);
+  }
+  if (options.minConfidence !== undefined) {
+    mapMinConfidence = options.minConfidence;
+    console.log(`[MAP] Min confidence set to: ${mapMinConfidence}`);
+  }
+  if (options.minZ !== undefined) {
+    mapMinZ = options.minZ;
+    console.log(`[MAP] Min Z set to: ${mapMinZ}`);
+  }
+  if (options.maxZ !== undefined) {
+    mapMaxZ = options.maxZ;
+    console.log(`[MAP] Max Z set to: ${mapMaxZ}`);
+  }
+  return { mapMinObservations, mapMinConfidence, mapMinZ, mapMaxZ };
+}
+
+function getMapFilters() {
+  return { mapMinObservations, mapMinConfidence, mapMinZ, mapMaxZ };
+}
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', initLidar3D);
 setTimeout(initLidar3D, 500);
@@ -1918,5 +2014,8 @@ window.lidar3dModule = {
   toggleRoomModelVisible,
   // Semantic layout (walls, doorways, objects)
   updateSemanticLayout,
-  toggleSemanticVisible
+  toggleSemanticVisible,
+  // Map quality filters
+  setMapFilters,
+  getMapFilters
 };

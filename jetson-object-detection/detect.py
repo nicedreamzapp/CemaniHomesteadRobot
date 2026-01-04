@@ -367,7 +367,8 @@ def send_detections(cam_id, detections):
                 "type": "DETECTIONS",
                 "camera": cam_id,
                 "detections": detections,
-                "count": len(detections)
+                "count": len(detections),
+                "timestamp": int(time.time() * 1000)  # Milliseconds for staleness check
             }
             ws.send(json.dumps(msg))
     except Exception as e:
