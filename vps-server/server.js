@@ -476,13 +476,13 @@ function handleMessage(ws, data) {
     if (priority.length > 0) {
       console.log(`[DETECT] CAM${data.camera} PRIORITY: ${priority.map(p => p.class).join(', ')}`);
     }
-    // Broadcast to all browsers (include timestamp for staleness check)
+    // Broadcast to all browsers (use VPS timestamp, not Jetson - clock sync issues)
     state.broadcast({
       type: "detections",
       camera: data.camera,
       detections: data.detections,
       count: data.count,
-      timestamp: data.timestamp || Date.now()
+      timestamp: Date.now()  // Always use VPS server time to avoid clock sync issues
     }, ws);
   }
 
