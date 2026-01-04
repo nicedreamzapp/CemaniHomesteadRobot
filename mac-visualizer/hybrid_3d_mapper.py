@@ -766,7 +766,7 @@ class Hybrid3DMapper:
                 self._add_point(Point3D(
                     x=world_x, y=world_y, z=world_z,
                     r=r_e, g=g_e, b=b_e,
-                    confidence=0.7,  # LIDAR-calibrated depth
+                    confidence=0.3,  # Low confidence - monocular depth is noisy
                     source="mono"
                 ))
                 points_added += 1
@@ -1025,16 +1025,17 @@ class Hybrid3DMapper:
         pending_count = 0
         filtered_count = 0
 
-        # ======== QUALITY FILTERS ========
-        # These reduce clutter and show only meaningful structure
-        MIN_OBSERVATIONS = 2       # Must be seen at least twice (removes noise)
-        MIN_CONFIDENCE = 0.5       # Minimum confidence threshold
-        MIN_HEIGHT = 0.05          # 5cm above floor (removes floor noise)
-        MAX_HEIGHT = 2.5           # 2.5m max (removes ceiling noise for walls-only)
-        VOXEL_SIZE = 0.03          # 3cm voxel grid for downsampling
+        # ======== AGGRESSIVE QUALITY FILTERS ========
+        # LIDAR is accurate, monocular depth is noisy - filter heavily!
+        MIN_OBSERVATIONS = 5       # Must be seen 5+ times (removes single-frame noise)
+        MIN_CONFIDENCE = 0.6       # Filters out monocular (0.3) but keeps LIDAR (0.9)
+        MIN_HEIGHT = 0.10          # 10cm above floor (removes floor noise)
+        MAX_HEIGHT = 2.2           # 2.2m max (removes ceiling, keep walls only)
+        VOXEL_SIZE = 0.05          # 5cm voxel grid - coarser = cleaner
+        LIDAR_PRIORITY = True      # Always include LIDAR points even with fewer observations
 
         # Limit points to prevent WebSocket overflow
-        MAX_SEND_POINTS = 50000    # Reduced from 100k for cleaner view
+        MAX_SEND_POINTS = 30000    # Reduced for cleaner UI
 
         # Sort by confidence and observations for priority
         sorted_points = sorted(
@@ -1055,12 +1056,16 @@ class Hybrid3DMapper:
             static_count += 1
 
             # ======== APPLY QUALITY FILTERS ========
-            # 1. Observation filter - remove single-hit noise
-            if p.observations < MIN_OBSERVATIONS:
+            # LIDAR points get priority - they are accurate!
+            is_lidar = p.source == "lidar"
+
+            # 1. Observation filter - relax for LIDAR (accurate), strict for mono (noisy)
+            min_obs = 2 if is_lidar else MIN_OBSERVATIONS  # LIDAR needs only 2 obs
+            if p.observations < min_obs:
                 filtered_count += 1
                 continue
 
-            # 2. Confidence filter
+            # 2. Confidence filter - LIDAR always passes (0.9 > 0.6)
             if p.confidence < MIN_CONFIDENCE:
                 filtered_count += 1
                 continue
