@@ -72,6 +72,37 @@ ws.onmessage = function(e) {
     displayDepthFrame(d.camera, d.frame);
   }
 
+  // ============ FINGERPRINT & 3D MAP PERSISTENCE ============
+  // Receive saved fingerprints from server on connect
+  if (d.type === 'saved_fingerprints') {
+    if (window.lidar3dModule && window.lidar3dModule.handleSavedFingerprints) {
+      window.lidar3dModule.handleSavedFingerprints(d.fingerprints);
+    }
+  }
+
+  // Fingerprint saved confirmation
+  if (d.type === 'fingerprint_saved') {
+    console.log(`[FINGERPRINT] Saved to server: ${d.name}`);
+  }
+
+  // 3D map saved confirmation
+  if (d.type === 'map_saved') {
+    console.log(`[3D MAP] Saved to server: ${d.name}`);
+  }
+
+  // Loaded 3D map from server (when area recognized)
+  if (d.type === 'loaded_3d_map') {
+    console.log(`[3D MAP] Received from server: ${d.name}`);
+    if (window.lidar3dModule && window.lidar3dModule.handleLoaded3DMap) {
+      window.lidar3dModule.handleLoaded3DMap(d.name, d.mapData);
+    }
+  }
+
+  // Failed to load 3D map
+  if (d.type === 'load_3d_map_failed') {
+    console.log(`[3D MAP] Not found on server: ${d.name}`);
+  }
+
   // Autonomous mapping errors (only show if robot not connected)
   if (d.type === 'autonomous_error') {
     console.error('[AUTONOMOUS] Error:', d.error);
@@ -634,45 +665,119 @@ function updateCompassCalStatus(status) {
 }
 
 // ============ OBJECT DETECTION HANDLER ============
+// Matches iOS app style from project 601
+
 // Stores current detections for each camera
 let cameraDetections = { 1: [], 2: [] };
 
-// Living creatures (drawn with circle around head)
-const livingClasses = ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
-  'elephant', 'bear', 'zebra', 'giraffe', 'rabbit', 'duck', 'chicken', 'deer'];
+// FPS tracking
+let detectionFrameCount = { 1: 0, 2: 0 };
+let lastFpsUpdate = { 1: Date.now(), 2: Date.now() };
+let currentFps = { 1: 0, 2: 0 };
+
+// Text-to-speech state
+let speechEnabled = false;
+let lastSpokenByClass = {};  // Track last time each class was spoken
+const SPEECH_COOLDOWN = 45000;  // 45 seconds per object class (matches iOS)
+let speechSynthesis = window.speechSynthesis;
+
+// Vibrant 10-color palette (matches iOS app)
+const vibrantColors = [
+  { r: 255, g: 51, b: 102 },   // Hot Pink
+  { r: 0, g: 230, b: 255 },    // Cyan
+  { r: 128, g: 255, b: 0 },    // Lime Green
+  { r: 255, g: 128, b: 0 },    // Orange
+  { r: 204, g: 0, b: 255 },    // Purple
+  { r: 255, g: 255, b: 0 },    // Yellow
+  { r: 0, g: 128, b: 255 },    // Sky Blue
+  { r: 255, g: 0, b: 128 },    // Magenta
+  { r: 0, g: 255, b: 128 },    // Spring Green
+  { r: 255, g: 179, b: 0 }     // Gold
+];
+
+// Living creatures (get circle overlay like iOS app)
+const livingClasses = new Set(['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+  'elephant', 'bear', 'zebra', 'giraffe', 'rabbit', 'duck', 'chicken', 'deer', 'turkey',
+  'goose', 'owl', 'parrot', 'eagle', 'falcon', 'penguin', 'tiger', 'lion', 'fox', 'wolf',
+  'monkey', 'panda', 'kangaroo', 'koala', 'squirrel', 'mouse', 'pig', 'goat', 'boy', 'girl',
+  'man', 'woman', 'Human face', 'Human body']);
 
 function handleDetections(cameraId, detections, serverTimestamp) {
-  // Filter out low-confidence detections (client-side filter as backup)
-  const MIN_CONFIDENCE = 0.05;  // 5% minimum
-  const filtered = detections.filter(d => d.confidence >= MIN_CONFIDENCE);
-
-  // Validate timestamp - ignore old detections (more than 2 seconds old)
   const now = Date.now();
+
+  // Only process detections for the active camera (ignore stale detections from camera switches)
+  const activeCamera = (typeof activeDetectionCamera !== 'undefined') ? activeDetectionCamera : 1;
+  if (cameraId !== activeCamera) {
+    // Clear this camera's overlay since it's not active
+    const canvas = document.getElementById('overlayCanvas' + cameraId);
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    return;
+  }
+
+  // Validate timestamp - ignore stale detections (more than 2 seconds old)
   if (serverTimestamp && (now - serverTimestamp) > 2000) {
     console.log(`[DETECT] Ignoring stale detections from ${(now - serverTimestamp)/1000}s ago`);
-    return;  // Don't process stale detections
+    return;
+  }
+
+  // Update FPS counter
+  detectionFrameCount[cameraId]++;
+  if (now - lastFpsUpdate[cameraId] >= 1000) {
+    currentFps[cameraId] = detectionFrameCount[cameraId];
+    detectionFrameCount[cameraId] = 0;
+    lastFpsUpdate[cameraId] = now;
+    updateFpsDisplay(cameraId);
   }
 
   // Debug log
-  if (filtered.length > 0) {
-    console.log(`[DETECT] Cam${cameraId}: ${filtered.map(d => d.class + '(' + Math.round(d.confidence*100) + '%)').join(', ')}`);
+  if (detections.length > 0) {
+    console.log(`[DETECT] Cam${cameraId}: ${detections.map(d => d.class + '(' + Math.round(d.confidence*100) + '%)').join(', ')}`);
   }
 
-  cameraDetections[cameraId] = filtered;
+  cameraDetections[cameraId] = detections;
   lastDetectionServerTime[cameraId] = serverTimestamp || now;
 
   // Update detection overlay on camera canvas
-  drawDetectionOverlay(cameraId, filtered, serverTimestamp);
+  drawDetectionOverlay(cameraId, detections);
 
-  // Update detection list panel
-  updateDetectionPanel(cameraId, filtered);
+  // Update detection panel and object count
+  updateDetectionPanel(cameraId, detections);
+  updateObjectCount(cameraId, detections.length);
+
+  // Text-to-speech announcements
+  if (speechEnabled && detections.length > 0) {
+    announceDetections(detections);
+  }
+}
+
+// Get color for object based on index
+function getObjectColor(index) {
+  return vibrantColors[index % vibrantColors.length];
+}
+
+// Draw rounded rectangle (like iOS RoundedRectangle)
+function roundRect(ctx, x, y, w, h, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
 }
 
 // Track last detection time per camera to clear stale overlays
 let lastDetectionTime = { 1: 0, 2: 0 };
-let lastDetectionServerTime = { 1: 0, 2: 0 };  // Server timestamp of last detection
+let lastDetectionServerTime = { 1: 0, 2: 0 };
 
-function drawDetectionOverlay(cameraId, detections, serverTimestamp) {
+function drawDetectionOverlay(cameraId, detections) {
   const canvasId = cameraId === 1 ? 'overlayCanvas1' : 'overlayCanvas2';
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
@@ -697,127 +802,216 @@ function drawDetectionOverlay(cameraId, detections, serverTimestamp) {
   // If no detections, just clear and return
   if (!detections || detections.length === 0) return;
 
+  // Sort detections by area (largest first, so smaller objects draw on top)
+  const sortedDetections = [...detections].sort((a, b) => {
+    const areaA = a.bbox.w * a.bbox.h;
+    const areaB = b.bbox.w * b.bbox.h;
+    return areaB - areaA;
+  });
+
   // Track used label positions to avoid overlap
   const usedPositions = [];
-  const labelHeight = 14;
-  const labelPadding = 4;
 
-  // Sort detections by Y position (top to bottom) for better label placement
-  const sortedDetections = [...detections].sort((a, b) => a.bbox.y - b.bbox.y);
+  sortedDetections.forEach((det, index) => {
+    const color = getObjectColor(index);
 
-  sortedDetections.forEach(det => {
-    const cx = det.bbox.x * w;
-    const cy = det.bbox.y * h;
-    const bw = det.bbox.w * w;
-    const bh = det.bbox.h * h;
-    const x1 = cx - bw/2;
-    const y1 = cy - bh/2;
+    // Calculate bounding box coordinates
+    const x1 = det.bbox.x1 !== undefined ? det.bbox.x1 * w : (det.bbox.x - det.bbox.w/2) * w;
+    const y1 = det.bbox.y1 !== undefined ? det.bbox.y1 * h : (det.bbox.y - det.bbox.h/2) * h;
+    const x2 = det.bbox.x2 !== undefined ? det.bbox.x2 * w : (det.bbox.x + det.bbox.w/2) * w;
+    const y2 = det.bbox.y2 !== undefined ? det.bbox.y2 * h : (det.bbox.y + det.bbox.h/2) * h;
+    const bw = x2 - x1;
+    const bh = y2 - y1;
+    const cx = (x1 + x2) / 2;
+    const cy = (y1 + y2) / 2;
 
-    // Label: "ClassName 85%"
-    const confPct = Math.round(det.confidence * 100);
-    const label = det.class + ' ' + confPct + '%';
-    ctx.font = '500 11px sans-serif';
-    const labelWidth = ctx.measureText(label).width + 6;
+    const isLiving = livingClasses.has(det.class) || livingClasses.has(det.class.toLowerCase());
+    const cornerRadius = 8;
 
-    // Calculate initial label position - closer to object
-    let textX = Math.max(2, Math.min(cx - labelWidth/2, w - labelWidth - 2));
-    let textY;
+    if (isLiving) {
+      // Living creatures: Draw circle around head area (like iOS app)
+      const headRadius = Math.min(bw, bh) * 0.25;
+      const headY = y1 + headRadius * 1.2;
 
-    if (livingClasses.includes(det.class)) {
-      // Living: gold circle around head
-      const headRadius = bw * 0.18;
-      const headY = y1 + headRadius;
-
+      // Circle fill (15% opacity)
       ctx.beginPath();
       ctx.arc(cx, headY, headRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgb(255, 196, 64)';
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.15)`;
+      ctx.fill();
+
+      // Circle stroke (50% opacity, 2px)
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.5)`;
       ctx.lineWidth = 2;
       ctx.stroke();
-
-      // Place label just above the circle (not too high)
-      textY = Math.max(headY - headRadius - 4, 12);
     } else {
-      // Non-living: draw a subtle bounding box corner markers
-      ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
-      ctx.lineWidth = 1.5;
-      const cornerLen = Math.min(bw, bh) * 0.15;
+      // Non-living: Rounded rectangle (like iOS RoundedRectangle)
+      // Fill with 15% opacity
+      roundRect(ctx, x1, y1, bw, bh, cornerRadius);
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.15)`;
+      ctx.fill();
 
-      // Top-left corner
-      ctx.beginPath();
-      ctx.moveTo(x1, y1 + cornerLen);
-      ctx.lineTo(x1, y1);
-      ctx.lineTo(x1 + cornerLen, y1);
+      // Stroke with 50% opacity, 2px
+      roundRect(ctx, x1, y1, bw, bh, cornerRadius);
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.5)`;
+      ctx.lineWidth = 2;
       ctx.stroke();
-
-      // Top-right corner
-      ctx.beginPath();
-      ctx.moveTo(x1 + bw - cornerLen, y1);
-      ctx.lineTo(x1 + bw, y1);
-      ctx.lineTo(x1 + bw, y1 + cornerLen);
-      ctx.stroke();
-
-      // Place label at top of bounding box (inside, not above)
-      textY = Math.max(y1 + 12, 12);
     }
 
-    // Collision avoidance - check if this label overlaps any existing labels
-    let attempts = 0;
-    const maxAttempts = 8;
-    while (attempts < maxAttempts) {
+    // Label: "ClassName 85%" - Capsule style like iOS
+    const confPct = Math.round(det.confidence * 100);
+    const label = `${det.class} ${confPct}%`;
+    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+    const labelWidth = ctx.measureText(label).width + 12;
+    const labelHeight = 18;
+
+    // Find best label position (try multiple positions like iOS)
+    let textX = cx - labelWidth / 2;
+    let textY = y1 - labelHeight - 4;  // Above the box
+
+    // Keep in bounds
+    textX = Math.max(4, Math.min(textX, w - labelWidth - 4));
+    if (textY < labelHeight) {
+      textY = y2 + 4;  // Below if not enough room above
+    }
+
+    // Collision avoidance
+    for (let attempt = 0; attempt < 5; attempt++) {
       let collision = false;
       for (const pos of usedPositions) {
-        // Check if rectangles overlap
-        const overlapX = textX < pos.x + pos.w && textX + labelWidth > pos.x;
-        const overlapY = textY - labelHeight < pos.y && textY > pos.y - labelHeight;
-        if (overlapX && overlapY) {
+        if (textX < pos.x + pos.w && textX + labelWidth > pos.x &&
+            textY < pos.y + pos.h && textY + labelHeight > pos.y) {
           collision = true;
           break;
         }
       }
-
       if (!collision) break;
-
-      // Try different positions: below, right, left, diagonal
-      attempts++;
-      switch (attempts) {
-        case 1: textY += labelHeight + labelPadding; break;  // Below
-        case 2: textX += labelWidth/2 + labelPadding; break; // Right
-        case 3: textX -= labelWidth + labelPadding; break;   // Left
-        case 4: textY -= labelHeight * 2; break;             // Above
-        case 5: textX = cx + bw/2 + 4; textY = cy; break;    // Right of box
-        case 6: textX = cx - bw/2 - labelWidth - 4; break;   // Left of box
-        case 7: textY = cy + bh/2 + labelHeight; break;      // Below box
-        default: textY += labelHeight; break;
+      textY += labelHeight + 4;  // Move down
+      if (textY > h - labelHeight) {
+        textX += labelWidth / 2;
+        textY = y1 - labelHeight - 4;
       }
-
-      // Keep in bounds
-      textX = Math.max(4, Math.min(textX, w - labelWidth - 4));
-      textY = Math.max(16, Math.min(textY, h - 4));
     }
 
-    // Record this label position
+    // Record label position
     usedPositions.push({ x: textX, y: textY, w: labelWidth, h: labelHeight });
 
-    // Draw label with background for readability
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(textX - 2, textY - labelHeight + 2, labelWidth, labelHeight + 2);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(label, textX, textY);
+    // Draw capsule background (matching object color, 25% opacity)
+    const capsuleRadius = labelHeight / 2;
+    ctx.beginPath();
+    ctx.moveTo(textX + capsuleRadius, textY);
+    ctx.lineTo(textX + labelWidth - capsuleRadius, textY);
+    ctx.arc(textX + labelWidth - capsuleRadius, textY + capsuleRadius, capsuleRadius, -Math.PI/2, Math.PI/2);
+    ctx.lineTo(textX + capsuleRadius, textY + labelHeight);
+    ctx.arc(textX + capsuleRadius, textY + capsuleRadius, capsuleRadius, Math.PI/2, -Math.PI/2);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.35)`;
+    ctx.fill();
+
+    // Draw text (white, bold)
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    ctx.fillText(label, textX + 6, textY + labelHeight - 5);
+    ctx.shadowBlur = 0;
   });
 }
 
-// Clear stale overlays periodically (if no detections for 500ms - faster clearing)
+// Update FPS display (color-coded like iOS app)
+function updateFpsDisplay(cameraId) {
+  const fps = currentFps[cameraId];
+  const el = document.getElementById('fpsDisplay' + cameraId);
+  if (!el) return;
+
+  // Color based on FPS (matches iOS app thresholds)
+  let color;
+  if (fps < 15) color = '#ff4444';       // Red - Critical
+  else if (fps < 25) color = '#ffaa00';  // Orange - Poor
+  else if (fps < 30) color = '#ffff00';  // Yellow - Fair
+  else color = '#44ff44';                 // Green - Good
+
+  el.innerHTML = `<span style="color:${color}">⚡</span> ${fps.toFixed(1)} <span style="opacity:0.7">FPS</span>`;
+  el.style.borderColor = color;
+}
+
+// Update object count display (color-coded like iOS app)
+function updateObjectCount(cameraId, count) {
+  const el = document.getElementById('objectCount' + cameraId);
+  if (!el) return;
+
+  // Color based on count (matches iOS app)
+  let color;
+  if (count === 0) color = '#888888';      // Gray
+  else if (count <= 3) color = '#5599ff';  // Blue
+  else if (count <= 6) color = '#ffaa00';  // Orange
+  else if (count <= 10) color = '#ff4444'; // Red
+  else color = '#cc44ff';                   // Purple
+
+  el.innerHTML = `<span style="color:${color}">👁</span> ${count}`;
+  el.style.borderColor = color;
+}
+
+// Text-to-speech announcement (matches iOS app behavior)
+function announceDetections(detections) {
+  if (!speechSynthesis) return;
+
+  const now = Date.now();
+  const toAnnounce = [];
+
+  for (const det of detections) {
+    const className = det.class.toLowerCase();
+    const lastSpoken = lastSpokenByClass[className] || 0;
+
+    // 45-second cooldown per class (matches iOS app)
+    if (now - lastSpoken >= SPEECH_COOLDOWN) {
+      toAnnounce.push(className);
+      lastSpokenByClass[className] = now;
+    }
+  }
+
+  if (toAnnounce.length > 0 && !speechSynthesis.speaking) {
+    const text = toAnnounce.slice(0, 3).join(', ');  // Max 3 at once
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+    utterance.volume = 0.9;
+    speechSynthesis.speak(utterance);
+    console.log('[SPEECH]', text);
+  }
+}
+
+// Toggle speech on/off
+function toggleSpeech() {
+  speechEnabled = !speechEnabled;
+  const btn = document.getElementById('speechToggle');
+  if (btn) {
+    btn.style.borderColor = speechEnabled ? '#44ff44' : 'rgba(255,255,255,0.3)';
+    btn.style.background = speechEnabled ? 'rgba(68,255,68,0.2)' : 'rgba(0,0,0,0.4)';
+  }
+  console.log('[SPEECH]', speechEnabled ? 'Enabled' : 'Disabled');
+
+  // Announce state change
+  if (speechEnabled) {
+    const utterance = new SpeechSynthesisUtterance('Speech enabled');
+    utterance.rate = 0.9;
+    speechSynthesis.speak(utterance);
+  }
+}
+
+// Clear stale overlays only after 3 seconds of no updates (labels persist until replaced)
 setInterval(() => {
   const now = Date.now();
   [1, 2].forEach(camId => {
-    if (now - lastDetectionTime[camId] > 500) {
+    // Only clear if no detections for 3+ seconds (connection loss scenario)
+    if (now - lastDetectionTime[camId] > 3000) {
       // Clear canvas overlay
       const canvas = document.getElementById(camId === 1 ? 'overlayCanvas1' : 'overlayCanvas2');
       if (canvas) {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
-      // Also clear detection panel
+      // Clear detection panel
       const panel = document.getElementById('detectionPanel' + camId);
       if (panel && panel.innerHTML !== '') {
         panel.innerHTML = '';
@@ -828,7 +1022,7 @@ setInterval(() => {
       }
     }
   });
-}, 300);  // Check every 300ms for faster clearing
+}, 500);  // Check every 500ms (less CPU)
 
 function updateDetectionPanel(cameraId, detections) {
   const panel = document.getElementById('detectionPanel' + cameraId);

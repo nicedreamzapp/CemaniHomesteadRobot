@@ -3703,8 +3703,8 @@ input[type="text"] {
     cursor: default;
   }
   .dpad-center {
-    width: 70px;
-    height: 70px;
+    width: 80px;
+    height: 80px;
     background: rgba(0,0,0,0.3);
     border-radius: 12px;
     color: #666;
@@ -3713,6 +3713,77 @@ input[type="text"] {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 4px;
+  }
+
+  /* ===== MINI TANK ROBOT (Mobile D-Pad Center) ===== */
+  .mini-tank {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    height: 100%;
+  }
+  .mini-track {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 60px;
+    gap: 4px;
+  }
+  .mini-wheel {
+    width: 10px;
+    height: 24px;
+    background: linear-gradient(90deg, #222 0%, #444 30%, #333 50%, #444 70%, #222 100%);
+    border: 1px solid #555;
+    border-radius: 3px;
+    box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+  }
+  .mini-wheel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 3px,
+      rgba(0, 0, 0, 0.4) 3px,
+      rgba(0, 0, 0, 0.4) 4px
+    );
+  }
+  .mini-wheel.spinning-forward {
+    box-shadow: 0 0 6px rgba(0, 255, 136, 0.7);
+    border-color: #0f8;
+  }
+  .mini-wheel.spinning-forward::before {
+    animation: treadScrollUp 0.2s linear infinite;
+  }
+  .mini-wheel.spinning-backward {
+    box-shadow: 0 0 6px rgba(255, 107, 107, 0.7);
+    border-color: #f66;
+  }
+  .mini-wheel.spinning-backward::before {
+    animation: treadScrollDown 0.2s linear infinite;
+  }
+  .mini-body {
+    width: 32px;
+    height: 58px;
+    background: linear-gradient(180deg, #1a5a3a 0%, #0d3d25 50%, #1a5a3a 100%);
+    border: 2px solid #2a8a5a;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6px;
+    font-weight: bold;
+    color: #5af;
+    text-shadow: 0 0 4px rgba(90, 170, 255, 0.8);
+    letter-spacing: 0.5px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
   }
 
   .container {

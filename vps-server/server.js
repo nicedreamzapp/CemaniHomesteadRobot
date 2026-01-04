@@ -22,16 +22,31 @@ state.setWss(wss);
 
 // ============ MANUAL OVERRIDE SAFETY ============
 // Xbox/joystick/drive system is KING - always overrides autonomous
-// When manual input detected, block autonomous commands for 2 seconds
+// When manual input detected, block autonomous commands for 10 seconds
 global.manualOverrideUntil = 0;  // Timestamp when manual override expires
-const MANUAL_OVERRIDE_DURATION = 2000;  // Block autonomous for 2 seconds after manual input
+global.emergencyStopActive = false;  // Sticky E-stop flag - requires explicit clear
+const MANUAL_OVERRIDE_DURATION = 10000;  // Block autonomous for 10 seconds after manual input
 
 function setManualOverride() {
   global.manualOverrideUntil = Date.now() + MANUAL_OVERRIDE_DURATION;
+  console.log(`[OVERRIDE] Manual control active for ${MANUAL_OVERRIDE_DURATION/1000}s`);
 }
 
 function isManualOverrideActive() {
+  // E-stop is sticky - blocks until explicitly cleared
+  if (global.emergencyStopActive) return true;
   return Date.now() < global.manualOverrideUntil;
+}
+
+function setEmergencyStop() {
+  global.emergencyStopActive = true;
+  global.manualOverrideUntil = Date.now() + MANUAL_OVERRIDE_DURATION;
+  console.log(`[E-STOP] Emergency stop ACTIVE - autonomous BLOCKED until cleared`);
+}
+
+function clearEmergencyStop() {
+  global.emergencyStopActive = false;
+  console.log(`[E-STOP] Emergency stop CLEARED - autonomous allowed`);
 }
 
 // ============ BASIC AUTH ============
@@ -134,6 +149,84 @@ app.get('/gpu-status', (req, res) => {
 const HLS_DIR = "/opt/robot-server/public/hls";
 if (!fs.existsSync(HLS_DIR)) fs.mkdirSync(HLS_DIR, { recursive: true });
 
+// ============ FINGERPRINT STORAGE ============
+// Persistent storage for area fingerprints and 3D maps
+const FINGERPRINT_DIR = "/opt/robot-server/fingerprints";
+const MAPS_DIR = "/opt/robot-server/maps";
+if (!fs.existsSync(FINGERPRINT_DIR)) fs.mkdirSync(FINGERPRINT_DIR, { recursive: true });
+if (!fs.existsSync(MAPS_DIR)) fs.mkdirSync(MAPS_DIR, { recursive: true });
+
+// Load all saved fingerprints on startup
+let savedFingerprints = [];
+function loadAllFingerprints() {
+  savedFingerprints = [];
+  try {
+    const files = fs.readdirSync(FINGERPRINT_DIR);
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        try {
+          const data = JSON.parse(fs.readFileSync(path.join(FINGERPRINT_DIR, file), 'utf8'));
+          savedFingerprints.push(data);
+        } catch (e) {
+          console.log(`[FINGERPRINT] Failed to load ${file}:`, e.message);
+        }
+      }
+    }
+    console.log(`[FINGERPRINT] Loaded ${savedFingerprints.length} saved fingerprints`);
+  } catch (e) {
+    console.log(`[FINGERPRINT] No fingerprints directory yet`);
+  }
+}
+loadAllFingerprints();
+
+// Save a fingerprint to disk
+function saveFingerprint(data) {
+  try {
+    const filename = `${data.name}.json`;
+    fs.writeFileSync(path.join(FINGERPRINT_DIR, filename), JSON.stringify(data, null, 2));
+
+    // Update in-memory array
+    const existingIdx = savedFingerprints.findIndex(fp => fp.name === data.name);
+    if (existingIdx >= 0) {
+      savedFingerprints[existingIdx] = data;
+    } else {
+      savedFingerprints.push(data);
+    }
+    console.log(`[FINGERPRINT] Saved: ${data.name} (${data.pointCount || 0} pts)`);
+    return true;
+  } catch (e) {
+    console.error(`[FINGERPRINT] Save failed:`, e.message);
+    return false;
+  }
+}
+
+// Save 3D map data to disk
+function save3DMap(name, mapData) {
+  try {
+    const filename = `${name}.json`;
+    fs.writeFileSync(path.join(MAPS_DIR, filename), JSON.stringify(mapData));
+    console.log(`[3D MAP] Saved: ${name} (${mapData.points?.length || 0} pts)`);
+    return true;
+  } catch (e) {
+    console.error(`[3D MAP] Save failed:`, e.message);
+    return false;
+  }
+}
+
+// Load 3D map from disk
+function load3DMap(name) {
+  try {
+    const filename = `${name}.json`;
+    const filepath = path.join(MAPS_DIR, filename);
+    if (fs.existsSync(filepath)) {
+      return JSON.parse(fs.readFileSync(filepath, 'utf8'));
+    }
+  } catch (e) {
+    console.error(`[3D MAP] Load failed:`, e.message);
+  }
+  return null;
+}
+
 // Ensure compile directories exist
 compile.ensureDirectories();
 
@@ -183,13 +276,32 @@ wss.on("connection", (ws, req) => {
 
     try {
       const msgStr = msg.toString();
+      // Debug: log first chars of ALL messages to catch issues
+      if (msgStr.startsWith('{"type":')) {
+        const typeMatch = msgStr.match(/"type"\s*:\s*"([^"]+)"/);
+        const msgType = typeMatch ? typeMatch[1] : 'unknown';
+        // Only log non-routine messages
+        if (!['lidar', 'serial', 'TELEM', 'COMPASS', 'SONAR'].includes(msgType)) {
+          console.log("[RAW MSG]", msgType, msgStr.substring(0, 120));
+        }
+      }
       if (msgStr.includes('ptz') || msgStr.includes('PTZ')) {
         console.log("[RAW PTZ]", msgStr.substring(0, 150));
       }
       const data = JSON.parse(msg);
 
-      // Log ALL messages for debugging
-      console.log("[MSG]", data.type, JSON.stringify(data).substring(0, 100));
+      // Log ALL messages for debugging (skip high-frequency lidar/serial)
+      if (!['lidar', 'serial'].includes(data.type)) {
+        console.log("[MSG]", data.type, JSON.stringify(data).substring(0, 150));
+      }
+      // EXPLICIT DEBUG for register_processor - this is critical for map display!
+      if (data.type === 'register_processor') {
+        console.log("[REGISTER] *** PROCESSOR REGISTRATION RECEIVED ***", JSON.stringify(data));
+      }
+      // Always log processor-related messages
+      if (data.type === 'register_processor' || data.type === 'accumulated_map') {
+        console.log("[PROCESSOR-MSG]", data.type, "isProcessor:", ws.isProcessor, "points:", data.points?.length || data.total || 0);
+      }
 
       // Extra debug for autonomous control
       if (data.type === "autonomous_control") {
@@ -310,8 +422,19 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Click-to-navigate target from UI
+  // Click-to-navigate target from UI - HUMAN INPUT, overrides autonomous
   if (data.type === "nav_target") {
+    // Set manual override - human is navigating
+    setManualOverride();
+
+    // Stop autonomous if running
+    if (global.autoInterval) {
+      clearInterval(global.autoInterval);
+      global.autoInterval = null;
+      console.log("[OVERRIDE] Click-to-navigate - stopping autonomous mode");
+      state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+    }
+
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
       // Calculate angle and distance to target
@@ -379,13 +502,33 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Emergency stop
+  // Emergency stop - STICKY: blocks autonomous until explicitly cleared
   if (data.type === "emergency_stop") {
+    // Set sticky E-stop flag - autonomous CANNOT resume until cleared
+    setEmergencyStop();
+
+    // Stop autonomous loop immediately
+    if (global.autoInterval) {
+      clearInterval(global.autoInterval);
+      global.autoInterval = null;
+      console.log("[E-STOP] Autonomous loop terminated");
+      state.broadcast({ type: "autonomous_status", running: false, reason: "emergency_stop" });
+    }
+
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
       rs.send(JSON.stringify({ type: "emergency_stop" }));
-      console.log("[MOVE] EMERGENCY STOP");
+      console.log("[E-STOP] EMERGENCY STOP sent to robot");
     }
+
+    // Notify browsers
+    state.broadcast({ type: "emergency_stop_active", active: true });
+  }
+
+  // Clear emergency stop - allows autonomous to resume
+  if (data.type === "clear_emergency_stop") {
+    clearEmergencyStop();
+    state.broadcast({ type: "emergency_stop_active", active: false });
   }
 
   // Compile and flash
@@ -488,12 +631,14 @@ function handleMessage(ws, data) {
 
   // Detection settings from browser - broadcast to Jetson
   if (data.type === "detection_settings") {
-    console.log(`[DETECT] Settings: filter=${data.filter_mode}, confidence=${data.confidence}`);
-    // Send to all Jetson detection clients
+    const cam = data.active_camera || 1;
+    console.log(`[DETECT] Settings: cam=${cam}, filter=${data.filter_mode}, confidence=${data.confidence}`);
+    // Send to all Jetson clients (detection AND relay for quality adjustment)
     wss.clients.forEach(client => {
-      if (client.isJetsonDetection && client.readyState === WebSocket.OPEN) {
+      if ((client.isJetsonDetection || client.isJetsonRelay) && client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({
           type: "DETECTION_SETTINGS",
+          active_camera: cam,
           filter_mode: data.filter_mode,
           confidence: data.confidence
         }));
@@ -536,6 +681,12 @@ function handleMessage(ws, data) {
     const rs = state.getRobotSocket();
 
     if (data.cmd === "START") {
+      // Clear E-stop when user explicitly starts autonomous - they're ready to go
+      if (global.emergencyStopActive) {
+        clearEmergencyStop();
+        state.broadcast({ type: "emergency_stop_active", active: false });
+      }
+
       console.log(`[AUTONOMOUS] START received - robotSocket: ${rs ? 'exists' : 'null'}, state: ${rs ? rs.readyState : 'N/A'}`);
       // Switch robot to mapping mode
       if (rs && rs.readyState === WebSocket.OPEN) {
@@ -741,7 +892,15 @@ function handleMessage(ws, data) {
 
   // Accumulated map from Mac Mini - broadcast to browsers for visualization
   // New format: points with {x, y, z, r, g, b, c(confidence)} for textured 3D point cloud
-  if (data.type === "accumulated_map" && ws.isProcessor) {
+  // Accept from ANY connected client sending accumulated_map (auto-register as processor)
+  if (data.type === "accumulated_map") {
+    // Auto-register as processor if not already
+    if (!ws.isProcessor) {
+      ws.isProcessor = true;
+      ws.processorName = "mac-auto-registered";
+      console.log("[PROCESSOR] Auto-registered processor from accumulated_map");
+      state.broadcast({ type: "processor_status", connected: true, name: ws.processorName });
+    }
     const pointCount = data.total || (data.points ? data.points.length : 0);
     const stats = data.stats || {};
     // Store latest accumulated map
@@ -818,6 +977,39 @@ function handleMessage(ws, data) {
     ws.isBrowser = true;
     ws.send(JSON.stringify({ type: "status", ...state.robotStatus, camera: state.cameraStatus, teensyConnected: state.teensyStatus.connected }));
     ws.send(JSON.stringify({ type: "camera_streams", cameras: state.perCameraStatus }));
+    // Send saved fingerprints to browser
+    ws.send(JSON.stringify({ type: "saved_fingerprints", fingerprints: savedFingerprints }));
+  }
+
+  // ============ FINGERPRINT & MAP PERSISTENCE ============
+  // Save fingerprint from browser
+  if (data.type === "save_fingerprint") {
+    if (saveFingerprint(data.fingerprint)) {
+      ws.send(JSON.stringify({ type: "fingerprint_saved", name: data.fingerprint.name }));
+    }
+  }
+
+  // Save 3D map from browser/processor
+  if (data.type === "save_3d_map") {
+    if (save3DMap(data.name, data.mapData)) {
+      ws.send(JSON.stringify({ type: "map_saved", name: data.name }));
+    }
+  }
+
+  // Load 3D map (when area recognized)
+  if (data.type === "load_3d_map") {
+    const mapData = load3DMap(data.name);
+    if (mapData) {
+      ws.send(JSON.stringify({ type: "loaded_3d_map", name: data.name, mapData: mapData }));
+      console.log(`[3D MAP] Loaded for browser: ${data.name}`);
+    } else {
+      ws.send(JSON.stringify({ type: "load_3d_map_failed", name: data.name }));
+    }
+  }
+
+  // Request all fingerprints
+  if (data.type === "get_fingerprints") {
+    ws.send(JSON.stringify({ type: "saved_fingerprints", fingerprints: savedFingerprints }));
   }
 
   // Audio mute
@@ -835,10 +1027,11 @@ function handleMessage(ws, data) {
     state.setCameraSocket(ws);
     ws.isCamera = true;
     ws.isBrowser = false;
+    ws.isJetsonRelay = (data.source === 'jetson');  // Mark as Jetson relay for detection settings
     state.cameraStatus.connected = true;
     state.cameraStatus.ip = data.ip || "unknown";
     state.broadcast({ type: "camera_status", ...state.cameraStatus });
-    console.log("[CAMERA] Relay connected, IP:", state.cameraStatus.ip);
+    console.log("[CAMERA] Relay connected, source:", data.source || "unknown");
   }
 
   // Forward camera results to browsers

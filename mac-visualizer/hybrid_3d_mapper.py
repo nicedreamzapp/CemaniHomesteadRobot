@@ -112,23 +112,20 @@ POINT_MERGE_DISTANCE = 0.008  # 8mm - VERY tight merging for crisp edges
 # Tilt: can go all the way DOWN, only -75 UP max (negative=up, positive=down)
 CAM1_SCAN_PATTERNS = {
     "mapping": [
-        # Pan limited to 45°, can tilt down freely
-        (0, 0, 0.8),      # Center
-        (-45, 0, 0.8),    # Max left
-        (45, 0, 0.8),     # Max right
-        (0, 30, 0.8),     # Look down at floor
+        # Camera embedded in chassis - VERY limited range!
+        # Pan: max 15° left/right before hitting frame
+        # Tilt: NO down tilt (sees chassis), slight up only
+        (0, 0, 0.8),      # Center (forward)
+        (-15, 0, 0.8),    # Slight left
+        (15, 0, 0.8),     # Slight right
         (0, 0, 0.5),      # Return to center
     ],
     "detailed": [
-        (0, 0, 1.0),      # Center
-        (-45, 0, 1.0),    # Max left
-        (-22, 0, 1.0),
-        (22, 0, 1.0),
-        (45, 0, 1.0),     # Max right
-        (0, 45, 1.0),     # Look down
-        (-30, 30, 1.0),
-        (30, 30, 1.0),
-        (0, 0, 0.5),
+        (0, 0, 1.0),      # Center (forward)
+        (-15, 0, 1.0),    # Slight left
+        (15, 0, 1.0),     # Slight right
+        (0, -5, 1.0),     # Slight UP (negative = up)
+        (0, 0, 0.5),      # Return to center
     ]
 }
 
@@ -1480,12 +1477,24 @@ async def handle_hybrid_connection():
     async with websockets.connect(VPS_WS, max_size=10_000_000, ping_interval=None, ping_timeout=None) as ws:
         print("[VPS] Connected!", flush=True)
 
-        # Register as processor
-        await ws.send(json.dumps({
+        # Small delay to let server fully establish connection
+        await asyncio.sleep(0.5)
+
+        # Register as processor - MUST be first message!
+        reg_msg = json.dumps({
             "type": "register_processor",
             "name": "hybrid-3d-mapper",
             "capabilities": ["lidar_fusion", "depth_estimation", "3d_mapping", "jetson_direct"]
-        }))
+        })
+        print(f"[VPS] Sending register_processor ({len(reg_msg)} bytes): {reg_msg[:80]}...", flush=True)
+        try:
+            await ws.send(reg_msg)
+            print("[VPS] register_processor SENT SUCCESSFULLY!", flush=True)
+        except Exception as e:
+            print(f"[VPS] FAILED to send register_processor: {e}", flush=True)
+
+        # Give server time to process before sending data
+        await asyncio.sleep(0.2)
 
         print("[WS] Waiting for data streams...", flush=True)
         print("[WS] Features enabled:", flush=True)
@@ -1555,7 +1564,13 @@ async def handle_hybrid_connection():
                     mapper.last_map_send = now
                     if len(mapper.accumulated_points) > 50:
                         map_data = mapper.get_map_data()
-                        await ws.send(json.dumps(map_data))
+                        try:
+                            map_json = json.dumps(map_data)
+                            await ws.send(map_json)
+                            print(f"[DEBUG] Sent {len(map_json)} bytes to VPS", flush=True)
+                        except Exception as e:
+                            print(f"[ERROR] Failed to send map: {e}", flush=True)
+                            raise  # Re-raise to trigger reconnect
                         stats = mapper.stats
                         jetson_status = "DIRECT" if jetson_connected.is_set() else "vps"
                         print(f"[MAP] Sent {map_data['total']} points | lidar={stats['lidar_points']} mono={stats['mono_points']} | cam={jetson_status} | scale={mapper.depth_scale:.2f}", flush=True)

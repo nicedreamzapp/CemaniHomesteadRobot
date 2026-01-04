@@ -491,15 +491,45 @@
   <div class="cameras-column glass">
     <!-- FRONT CAM -->
     <div class="cam-wrapper">
-      <div class="cam-label-centered" style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">
-        <span>&#9650; FRONT CAM</span>
-        <!-- Detection filter + Depth toggle -->
-        <div id="detectionFilter" style="display:flex;gap:2px;background:rgba(255,255,255,0.1);backdrop-filter:blur(4px);border-radius:3px;padding:1px 3px;font-size:8px;">
-          <span id="filterAll" onclick="setDetectionFilter('all')" style="padding:1px 4px;border-radius:2px;cursor:pointer;color:#fc0;">ALL</span>
-          <span id="filterIn" onclick="setDetectionFilter('indoor')" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:rgba(90,170,255,0.8);color:#000;">IN</span>
-          <span id="filterOut" onclick="setDetectionFilter('outdoor')" style="padding:1px 4px;border-radius:2px;cursor:pointer;color:#0f8;">OUT</span>
-          <span id="confDisplay" style="padding:1px 3px;color:#888;cursor:pointer;" onclick="cycleConfidence()" title="Click to cycle confidence">5%</span>
-          <span id="depthToggle1" onclick="toggleDepthView(1)" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:#0f8;color:#000;margin-left:4px;" title="Toggle Depth View">DEPTH ON</span>
+      <!-- Header with mode selector and controls -->
+      <div style="display:flex;flex-direction:column;gap:4px;padding:4px 6px;background:rgba(0,0,0,0.5);backdrop-filter:blur(8px);">
+        <!-- Row 1: Mode selector + Label -->
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:10px;font-weight:600;color:#fff;">&#9650; FRONT CAM</span>
+          <!-- Mode Toggle (Detect / OCR) -->
+          <div style="display:flex;background:rgba(255,255,255,0.1);border-radius:6px;overflow:hidden;">
+            <button id="modeDetect" onclick="setCameraMode('detect')" style="padding:3px 8px;border:none;background:rgba(90,170,255,0.8);color:#000;font-size:9px;font-weight:700;cursor:pointer;">🎯 Detect</button>
+            <button id="modeOCR" onclick="setCameraMode('ocr')" style="padding:3px 8px;border:none;background:transparent;color:#fff;font-size:9px;font-weight:600;cursor:pointer;">📝 OCR</button>
+          </div>
+        </div>
+        <!-- Row 2: Filter + Confidence + Speech (Detection mode controls) -->
+        <div id="detectControlsHeader" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+          <!-- Filter Toggle -->
+          <div style="display:flex;background:rgba(255,255,255,0.1);border-radius:5px;overflow:hidden;">
+            <button id="filterAll" onclick="setDetectionFilter('all')" style="padding:2px 6px;border:none;background:transparent;color:#fc0;font-size:8px;font-weight:600;cursor:pointer;">All</button>
+            <button id="filterIn" onclick="setDetectionFilter('indoor')" style="padding:2px 6px;border:none;background:rgba(90,170,255,0.8);color:#000;font-size:8px;font-weight:600;cursor:pointer;">Indoor</button>
+            <button id="filterOut" onclick="setDetectionFilter('outdoor')" style="padding:2px 6px;border:none;background:transparent;color:#0f8;font-size:8px;font-weight:600;cursor:pointer;">Outdoor</button>
+          </div>
+          <!-- Camera Selection for Detection (next to filter) -->
+          <div style="display:flex;background:rgba(255,255,255,0.1);border-radius:5px;overflow:hidden;">
+            <button id="camFront" onclick="setActiveCamera(1)" style="padding:2px 6px;border:none;background:rgba(255,128,0,0.8);color:#000;font-size:8px;font-weight:600;cursor:pointer;">Front</button>
+            <button id="camRear" onclick="setActiveCamera(2)" style="padding:2px 6px;border:none;background:transparent;color:#fff;font-size:8px;font-weight:600;cursor:pointer;">Rear</button>
+          </div>
+          <!-- Confidence Slider -->
+          <div style="display:flex;align-items:center;gap:3px;">
+            <span style="font-size:12px;">👁</span>
+            <input type="range" id="confidenceSlider" min="1" max="100" value="5" oninput="updateConfidence(this.value)" style="width:50px;height:3px;accent-color:#5af;cursor:pointer;">
+            <span id="confDisplay" style="font-size:9px;font-weight:600;color:#5af;min-width:22px;">5%</span>
+          </div>
+          <!-- Speech Toggle -->
+          <button id="speechToggle" onclick="toggleSpeech()" style="padding:2px 6px;border:1px solid rgba(255,255,255,0.3);background:rgba(0,0,0,0.4);border-radius:10px;font-size:11px;cursor:pointer;" title="Speech">🗣️</button>
+          <!-- Depth Toggle -->
+          <span id="depthToggle1" onclick="toggleDepthView(1)" style="padding:2px 5px;border-radius:3px;cursor:pointer;background:#0f8;color:#000;font-size:7px;font-weight:600;">DEPTH</span>
+        </div>
+        <!-- Row 2b: OCR Controls (hidden by default) -->
+        <div id="ocrControlsHeader" style="display:none;align-items:center;justify-content:center;gap:8px;">
+          <button id="ocrCapture" onclick="captureOCR()" style="padding:4px 12px;border:none;background:linear-gradient(135deg,#5af,#38f);color:#fff;font-size:9px;font-weight:700;cursor:pointer;border-radius:12px;">📸 Capture Text</button>
+          <button id="ocrSpeak" onclick="speakOCR()" style="padding:4px 10px;border:1px solid rgba(255,255,255,0.3);background:rgba(0,0,0,0.4);color:#fff;font-size:9px;font-weight:600;cursor:pointer;border-radius:12px;">🔊 Speak</button>
         </div>
       </div>
       <div class="cam-container" id="cam1-container">
@@ -507,7 +537,17 @@
           <div id="cam1-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
           <canvas id="overlayCanvas1" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
         </div>
-        <div id="detectionPanel1" style="position:absolute;bottom:2px;left:2px;font-size:10px;color:#0f8;background:rgba(0,0,0,0.6);padding:2px 4px;border-radius:3px;max-width:90%;overflow:hidden;white-space:nowrap;"></div>
+        <!-- iOS-style detection info overlay (top-right) -->
+        <div style="position:absolute;top:6px;right:6px;display:flex;flex-direction:column;gap:4px;pointer-events:none;">
+          <div id="fpsDisplay1" style="padding:4px 8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);border-radius:10px;font-size:11px;color:#fff;border:1px solid rgba(255,255,255,0.2);font-weight:600;">⚡ 0.0 <span style="opacity:0.7">FPS</span></div>
+          <div id="objectCount1" style="padding:4px 8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);border-radius:10px;font-size:11px;color:#fff;border:1px solid rgba(255,255,255,0.2);font-weight:600;">👁 0</div>
+        </div>
+        <!-- OCR Result Panel (shown in OCR mode) -->
+        <div id="ocrResultPanel" style="display:none;position:absolute;bottom:6px;left:6px;right:6px;max-height:60px;overflow-y:auto;padding:6px 10px;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);border-radius:10px;font-size:11px;color:#fff;line-height:1.3;">
+          <span style="opacity:0.5;font-style:italic;">Point camera at text and tap Capture...</span>
+        </div>
+        <!-- Detection panel (bottom-left) -->
+        <div id="detectionPanel1" style="position:absolute;bottom:6px;left:6px;font-size:10px;color:#fff;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);padding:4px 8px;border-radius:10px;max-width:85%;overflow:hidden;white-space:nowrap;"></div>
         <div class="cam-overlay">
           <div class="cam-status-badge" id="cam1-status">OFFLINE</div>
           <div class="ptz-overlay">
@@ -536,10 +576,19 @@
           <div id="cam2-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
           <canvas id="overlayCanvas2" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
         </div>
-        <div id="detectionPanel2" style="position:absolute;bottom:2px;left:2px;font-size:10px;color:#0f8;background:rgba(0,0,0,0.6);padding:2px 4px;border-radius:3px;max-width:90%;overflow:hidden;white-space:nowrap;"></div>
+        <!-- Speaker toggle (center top) -->
+        <div style="position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:10;">
+          <div class="speaker-btn muted" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound" style="padding:4px 10px;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);border-radius:10px;font-size:14px;cursor:pointer;border:1px solid rgba(255,255,255,0.2);">🔇</div>
+        </div>
+        <!-- iOS-style detection info overlay (top-right) -->
+        <div style="position:absolute;top:6px;right:6px;display:flex;flex-direction:column;gap:4px;pointer-events:none;">
+          <div id="fpsDisplay2" style="display:none;padding:4px 8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);border-radius:10px;font-size:11px;color:#fff;border:1px solid rgba(255,255,255,0.2);font-weight:600;">⚡ 0.0 <span style="opacity:0.7">FPS</span></div>
+          <div id="objectCount2" style="display:none;padding:4px 8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);border-radius:10px;font-size:11px;color:#fff;border:1px solid rgba(255,255,255,0.2);font-weight:600;">👁 0</div>
+        </div>
+        <!-- Detection panel (bottom-left) -->
+        <div id="detectionPanel2" style="position:absolute;bottom:6px;left:6px;font-size:10px;color:#fff;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);padding:4px 8px;border-radius:10px;max-width:85%;overflow:hidden;white-space:nowrap;"></div>
         <div class="cam-overlay">
           <div class="cam-status-badge" id="cam2-status">OFFLINE</div>
-          <div class="speaker-btn muted" id="speakerBtn2" onclick="toggleMute2()" title="Toggle Sound">🔇</div>
           <div class="ptz-overlay">
             <div class="ptz-btn empty"></div>
             <div class="ptz-btn" data-ptz2="up">&#9650;</div>
@@ -600,7 +649,19 @@
         </div>
         <div class="dpad-row">
           <div class="dpad-btn" id="mobileDirL">&#9664;<br>L</div>
-          <div class="dpad-center">DIR</div>
+          <div class="dpad-center">
+            <div class="mini-tank">
+              <div class="mini-track left">
+                <div class="mini-wheel" id="mWheelLF"></div>
+                <div class="mini-wheel" id="mWheelLR"></div>
+              </div>
+              <div class="mini-body">CEMANI</div>
+              <div class="mini-track right">
+                <div class="mini-wheel" id="mWheelRF"></div>
+                <div class="mini-wheel" id="mWheelRR"></div>
+              </div>
+            </div>
+          </div>
           <div class="dpad-btn" id="mobileDirR">R<br>&#9654;</div>
         </div>
         <div class="dpad-row">
@@ -1005,6 +1066,67 @@ function setDetectionFilter(mode) {
   }
 }
 
+// Camera selection for detection (which camera runs detection)
+let activeDetectionCamera = 1;
+
+function setActiveCamera(camId) {
+  activeDetectionCamera = camId;
+  // Send to server (which broadcasts to Jetson)
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'detection_settings',
+      active_camera: camId,
+      filter_mode: currentDetectionFilter,
+      confidence: currentConfidence / 100
+    }));
+    console.log('[DETECTION] Active camera:', camId === 1 ? 'Front' : 'Rear');
+  }
+  // Update UI buttons
+  const camFront = document.getElementById('camFront');
+  const camRear = document.getElementById('camRear');
+  if (!camFront) return;
+
+  camFront.style.background = 'transparent';
+  camFront.style.color = '#fff';
+  camRear.style.background = 'transparent';
+  camRear.style.color = '#fff';
+
+  if (camId === 1) {
+    camFront.style.background = 'rgba(255,128,0,0.8)';
+    camFront.style.color = '#000';
+  } else {
+    camRear.style.background = 'rgba(255,128,0,0.8)';
+    camRear.style.color = '#000';
+  }
+
+  // Show FPS/count only on active detection camera
+  const fps1 = document.getElementById('fpsDisplay1');
+  const fps2 = document.getElementById('fpsDisplay2');
+  const cnt1 = document.getElementById('objectCount1');
+  const cnt2 = document.getElementById('objectCount2');
+  if (camId === 1) {
+    if (fps1) fps1.style.display = 'block';
+    if (cnt1) cnt1.style.display = 'block';
+    if (fps2) fps2.style.display = 'none';
+    if (cnt2) cnt2.style.display = 'none';
+    // Clear camera 2 overlay
+    const canvas2 = document.getElementById('overlayCanvas2');
+    if (canvas2) canvas2.getContext('2d').clearRect(0, 0, canvas2.width, canvas2.height);
+    const panel2 = document.getElementById('detectionPanel2');
+    if (panel2) panel2.innerHTML = '';
+  } else {
+    if (fps1) fps1.style.display = 'none';
+    if (cnt1) cnt1.style.display = 'none';
+    if (fps2) fps2.style.display = 'block';
+    if (cnt2) cnt2.style.display = 'block';
+    // Clear camera 1 overlay
+    const canvas1 = document.getElementById('overlayCanvas1');
+    if (canvas1) canvas1.getContext('2d').clearRect(0, 0, canvas1.width, canvas1.height);
+    const panel1 = document.getElementById('detectionPanel1');
+    if (panel1) panel1.innerHTML = '';
+  }
+}
+
 function cycleConfidence() {
   confIndex = (confIndex + 1) % confidenceLevels.length;
   currentConfidence = confidenceLevels[confIndex];
@@ -1025,6 +1147,139 @@ function updateConfidence(value) {
   currentConfidence = parseInt(value);
   const confDisplay = document.getElementById('confDisplay');
   if (confDisplay) confDisplay.textContent = value + '%';
+
+  // Send to Jetson (debounced - only send on change)
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'detection_settings',
+      filter_mode: currentDetectionFilter,
+      confidence: currentConfidence / 100
+    }));
+    console.log('[DETECTION] Confidence:', currentConfidence + '%');
+  }
+}
+
+// ========== CAMERA MODE (DETECT / OCR) ==========
+let currentCameraMode = 'detect';
+let lastOCRText = '';
+
+function setCameraMode(mode) {
+  currentCameraMode = mode;
+  const modeDetect = document.getElementById('modeDetect');
+  const modeOCR = document.getElementById('modeOCR');
+  const detectControlsHeader = document.getElementById('detectControlsHeader');
+  const ocrControlsHeader = document.getElementById('ocrControlsHeader');
+  const ocrResultPanel = document.getElementById('ocrResultPanel');
+  const detectionPanel1 = document.getElementById('detectionPanel1');
+
+  if (mode === 'detect') {
+    modeDetect.style.background = 'rgba(90,170,255,0.8)';
+    modeDetect.style.color = '#000';
+    modeOCR.style.background = 'transparent';
+    modeOCR.style.color = '#fff';
+    if (detectControlsHeader) detectControlsHeader.style.display = 'flex';
+    if (ocrControlsHeader) ocrControlsHeader.style.display = 'none';
+    if (ocrResultPanel) ocrResultPanel.style.display = 'none';
+    if (detectionPanel1) detectionPanel1.style.display = 'block';
+    console.log('[MODE] Object Detection');
+  } else {
+    modeOCR.style.background = 'rgba(90,170,255,0.8)';
+    modeOCR.style.color = '#000';
+    modeDetect.style.background = 'transparent';
+    modeDetect.style.color = '#fff';
+    if (detectControlsHeader) detectControlsHeader.style.display = 'none';
+    if (ocrControlsHeader) ocrControlsHeader.style.display = 'flex';
+    if (ocrResultPanel) ocrResultPanel.style.display = 'block';
+    if (detectionPanel1) detectionPanel1.style.display = 'none';
+    console.log('[MODE] OCR');
+  }
+}
+
+// OCR using Tesseract.js (load dynamically)
+let tesseractLoaded = false;
+let tesseractWorker = null;
+
+async function loadTesseract() {
+  if (tesseractLoaded) return true;
+  try {
+    // Load Tesseract.js from CDN
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
+    document.head.appendChild(script);
+    await new Promise((resolve, reject) => {
+      script.onload = resolve;
+      script.onerror = reject;
+    });
+    tesseractLoaded = true;
+    console.log('[OCR] Tesseract loaded');
+    return true;
+  } catch (e) {
+    console.error('[OCR] Failed to load Tesseract:', e);
+    return false;
+  }
+}
+
+async function captureOCR() {
+  const resultPanel = document.getElementById('ocrResultPanel');
+  resultPanel.innerHTML = '<span style="color:#5af;">Capturing...</span>';
+
+  // Get frame from front camera canvas
+  const cam1Video = document.getElementById('cam1-video');
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 360;
+  const ctx = canvas.getContext('2d');
+
+  // Try to get image from the video element or existing canvas
+  const img = cam1Video.querySelector('img');
+  if (img) {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  } else {
+    resultPanel.innerHTML = '<span style="color:#f55;">No camera feed available</span>';
+    return;
+  }
+
+  // Load Tesseract if needed
+  if (!await loadTesseract()) {
+    resultPanel.innerHTML = '<span style="color:#f55;">OCR library failed to load</span>';
+    return;
+  }
+
+  resultPanel.innerHTML = '<span style="color:#5af;">Recognizing text...</span>';
+
+  try {
+    const result = await Tesseract.recognize(canvas, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          resultPanel.innerHTML = `<span style="color:#5af;">Recognizing... ${Math.round(m.progress * 100)}%</span>`;
+        }
+      }
+    });
+
+    lastOCRText = result.data.text.trim();
+    if (lastOCRText) {
+      resultPanel.innerHTML = `<div style="color:#fff;">${lastOCRText.replace(/\n/g, '<br>')}</div>`;
+      console.log('[OCR] Detected:', lastOCRText);
+    } else {
+      resultPanel.innerHTML = '<span style="opacity:0.5;font-style:italic;">No text detected. Try moving closer to the text.</span>';
+    }
+  } catch (e) {
+    console.error('[OCR] Error:', e);
+    resultPanel.innerHTML = '<span style="color:#f55;">OCR failed: ' + e.message + '</span>';
+  }
+}
+
+function speakOCR() {
+  if (!lastOCRText) {
+    const utterance = new SpeechSynthesisUtterance('No text to speak');
+    speechSynthesis.speak(utterance);
+    return;
+  }
+  const utterance = new SpeechSynthesisUtterance(lastOCRText);
+  utterance.rate = 0.9;
+  utterance.pitch = 1.0;
+  speechSynthesis.speak(utterance);
+  console.log('[OCR] Speaking:', lastOCRText.substring(0, 50) + '...');
 }
 
 // ========== GPU STREAM TOGGLE ==========

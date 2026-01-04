@@ -1,581 +1,373 @@
 #!/usr/bin/env python3
 """
-YOLOv8 OIV7 Object Detection - Jetson
-Uses ffmpeg subprocess for reliable RTSP capture
-With indoor/outdoor filtering and master controls
-Now includes semantic map learning in all modes!
+YOLOv8 Object Detection - SHARED STREAM via TCP
+Receives JPEG frames from relay.js = ONE FFmpeg per camera!
 """
 
 import os
 import cv2
 import json
 import time
-import math
+import socket
+import struct
 import threading
-import subprocess
 import numpy as np
 import websocket
 
 from ultralytics import YOLO
 
-# Import semantic mapping for learning in all modes
-try:
-    from semantic_map import SemanticMap
-    SEMANTIC_MAP_AVAILABLE = True
-except ImportError as e:
-    print(f"[SEMANTIC] Semantic map not available: {e}")
-    SEMANTIC_MAP_AVAILABLE = False
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
 
-# Cameras (RTSP)
-CAMERAS = [
-    {"id": 1, "name": "Front", "url": "rtsp://admin:kookster1@192.168.1.191:554/onvif1"},
-    {"id": 2, "name": "Rear", "url": "rtsp://admin:kookster1@192.168.1.27:554/onvif1"}
-]
-
-# VPS WebSocket
 VPS_WS = "ws://72.60.124.34:3001"
+LOCAL_PORT = 9998  # TCP port for relay frames
 
-# Frame size (720p)
-WIDTH, HEIGHT = 1280, 720
+# =============================================================================
+# SETTINGS
+# =============================================================================
 
-# ========== MASTER CONTROLS (updated via WebSocket) ==========
-filter_mode = "indoor"  # "all", "indoor", "outdoor" - default to indoor
-confidence_threshold = 0.35  # 35% minimum - filters out false positives
-settings_lock = threading.Lock()
+class Settings:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.active_camera = 1
+        self.filter_mode = "indoor"
+        self.confidence = 0.25
 
-# ========== ROBOT POSITION (from server dead_reckoning) ==========
-robot_position = {"x": 0, "y": 0, "heading": 0}
-position_lock = threading.Lock()
+    def get(self):
+        with self.lock:
+            return {
+                "active_camera": self.active_camera,
+                "filter_mode": self.filter_mode,
+                "confidence": self.confidence
+            }
 
-# ========== SEMANTIC MAP (learns in all modes) ==========
-semantic_map = None
+    def update(self, **kwargs):
+        with self.lock:
+            for k, v in kwargs.items():
+                if hasattr(self, k):
+                    old = getattr(self, k)
+                    setattr(self, k, v)
+                    if old != v:
+                        print(f"[SETTINGS] {k}: {old} → {v}")
 
-def init_semantic_map():
-    """Initialize semantic map for learning in manual mode"""
-    global semantic_map
-    if not SEMANTIC_MAP_AVAILABLE:
-        return
+settings = Settings()
 
-    def get_pose():
-        with position_lock:
-            return (robot_position["x"], robot_position["y"],
-                    math.radians(robot_position["heading"]))
+# =============================================================================
+# CLASS FILTERS
+# =============================================================================
 
-    # No ws_send for detect.py - semantic map will just learn locally
-    semantic_map = SemanticMap(ws_send_func=None, get_pose_func=get_pose)
-    print(f"[SEMANTIC] Initialized - {len(semantic_map.zones)} zones, {len(semantic_map.objects)} objects")
-
-def update_robot_position(x, y, heading):
-    """Update robot position from server dead_reckoning"""
-    global robot_position
-    with position_lock:
-        robot_position["x"] = x
-        robot_position["y"] = y
-        robot_position["heading"] = heading
-
-def feed_detection_to_semantic(cam_id, detection):
-    """Feed a detection to the semantic map for learning"""
-    if not semantic_map:
-        return
-
-    with position_lock:
-        robot_x = robot_position["x"]
-        robot_y = robot_position["y"]
-        robot_heading = robot_position["heading"]
-
-    obj_class = detection.get("class", "unknown")
-    confidence = detection.get("confidence", 0.5)
-    bbox = detection.get("bbox", {})
-
-    # Skip low confidence
-    if confidence < 0.4:
-        return
-
-    # Calculate object position in world coordinates
-    x1 = bbox.get("x1", 0)
-    x2 = bbox.get("x2", 1)
-    y1 = bbox.get("y1", 0)
-    y2 = bbox.get("y2", 1)
-
-    obj_center_x = (x1 + x2) / 2
-    obj_height = y2 - y1
-
-    # Estimate depth from bounding box
-    if obj_height > 0.5:
-        depth = 50
-    elif obj_height > 0.3:
-        depth = 100
-    elif obj_height > 0.15:
-        depth = 200
-    else:
-        depth = 150
-
-    # Calculate angle
-    CAMERA_HFOV = 70
-    angle_offset = (obj_center_x - 0.5) * CAMERA_HFOV
-
-    if cam_id == 1:
-        world_angle = robot_heading + angle_offset
-    else:
-        world_angle = robot_heading + 180 + angle_offset
-
-    world_angle_rad = math.radians(world_angle)
-    obj_x = robot_x + depth * math.cos(world_angle_rad)
-    obj_y = robot_y + depth * math.sin(world_angle_rad)
-
-    # Add observation
-    semantic_map.add_observation(
-        object_type=obj_class,
-        x=obj_x,
-        y=obj_y,
-        z=0,
-        width=(x2 - x1) * depth * 0.01 * CAMERA_HFOV,
-        height=obj_height * depth,
-        confidence=confidence,
-        camera_id=cam_id
-    )
-
-# Living creatures get circle overlay
-living_classes = {"person", "bird", "cat", "dog", "horse", "sheep", "cow",
-                  "elephant", "bear", "zebra", "giraffe", "rabbit", "duck",
-                  "chicken", "deer", "turkey", "goose", "boy", "girl", "man",
-                  "woman", "owl", "parrot", "eagle", "falcon", "penguin",
-                  "tiger", "lion", "leopard", "fox", "wolf", "monkey", "panda",
-                  "kangaroo", "koala", "squirrel", "mouse", "rat", "pig",
-                  "goat", "donkey", "camel", "llama", "alpaca"}
-
-# Small objects need lower threshold
-small_objects = {"pen", "pencil", "eraser", "marker", "key", "coin", "button",
-                 "needle", "pin", "clip", "scissors", "nail", "screw", "ring",
-                 "watch", "glasses", "spoon", "fork", "knife", "earrings",
-                 "necklace", "lipstick", "toothbrush"}
-
-# ========== INDOOR/OUTDOOR CLASS FILTERING (from Swift app) ==========
 indoor_classes = {
-    "Accordion", "Adhesive tape", "Alarm clock", "Armadillo", "Backpack", "Bagel",
-    "Baked goods", "Balance beam", "Band-aid", "Banjo", "Barrel", "Bathroom accessory",
-    "Bathroom cabinet", "Bathtub", "Beaker", "Bed", "Beer", "Belt", "Bench",
-    "Bicycle helmet", "Bidet", "Billiard table", "Blender", "Book", "Bookcase",
-    "Boot", "Bottle", "Bottle opener", "Bowl", "Bowling equipment", "Box", "Boy",
-    "Brassiere", "Bread", "Briefcase", "Broccoli", "Bust", "Cabinetry", "Cake",
-    "Cake stand", "Calculator", "Camera", "Can opener", "Candle", "Candy",
-    "Cassette deck", "Cat furniture", "Ceiling fan", "Cello", "Chair", "Cheese",
-    "Chest of drawers", "Chicken", "Chime", "Chisel", "Chopsticks", "Christmas tree",
-    "Clock", "Closet", "Clothing", "Coat", "Cocktail", "Cocktail shaker", "Coconut",
-    "Coffee", "Coffee cup", "Coffee table", "Coffeemaker", "Coin", "Computer keyboard",
-    "Computer monitor", "Computer mouse", "Container", "Convenience store", "Cookie",
-    "Cooking spray", "Corded phone", "Cosmetics", "Couch", "Countertop", "Cream",
-    "Cricket ball", "Crutch", "Cupboard", "Curtain", "Cutting board", "Dagger",
-    "Dairy Product", "Desk", "Dessert", "Diaper", "Dice", "Digital clock",
-    "Dishwasher", "Dog bed", "Doll", "Door", "Door handle", "Doughnut", "Drawer",
-    "Dress", "Drill (Tool)", "Drink", "Drinking straw", "Drum", "Dumbbell",
-    "Earrings", "Egg (Food)", "Envelope", "Eraser", "Face powder",
-    "Facial tissue holder", "Fashion accessory", "Fast food", "Fax", "Fedora",
-    "Filing cabinet", "Fireplace", "Flag", "Flashlight", "Flowerpot", "Flute",
-    "Food", "Food processor", "Football helmet", "Frying pan", "Furniture",
-    "Gas stove", "Girl", "Glasses", "Glove", "Goggles", "Grinder", "Guacamole",
-    "Guitar", "Hair dryer", "Hair spray", "Hamburger", "Hammer", "Hand dryer",
-    "Handbag", "Harmonica", "Harp", "Harpsichord", "Hat", "Headphones", "Heater",
-    "Home appliance", "Honeycomb", "Horizontal bar", "Hot dog", "Houseplant",
-    "Human arm", "Human beard", "Human body", "Human ear", "Human eye", "Human face",
-    "Human foot", "Human hair", "Human hand", "Human head", "Human leg",
-    "Human mouth", "Human nose", "Humidifier", "Ice cream", "Indoor rower",
-    "Infant bed", "Ipod", "Jacket", "Jacuzzi", "Jeans", "Jug", "Juice", "Kettle",
-    "Kitchen & dining room table", "Kitchen appliance", "Kitchen knife",
-    "Kitchen utensil", "Kitchenware", "Knife", "Ladder", "Ladle", "Lamp",
-    "Lantern", "Laptop", "Lavender (Plant)", "Light bulb", "Light switch", "Lily",
-    "Lipstick", "Loveseat", "Luggage and bags", "Man", "Maracas", "Measuring cup",
-    "Mechanical fan", "Medical equipment", "Microphone", "Microwave oven", "Milk",
-    "Miniskirt", "Mirror", "Mixer", "Mixing bowl", "Mobile phone", "Mouse",
-    "Muffin", "Mug", "Musical instrument", "Musical keyboard", "Nail (Construction)",
-    "Necklace", "Nightstand", "Oboe", "Organ (Musical Instrument)", "Oven",
-    "Paper cutter", "Paper towel", "Pastry", "Pen", "Pencil case", "Pencil sharpener",
-    "Perfume", "Personal care", "Piano", "Picnic basket", "Picture frame", "Pillow",
-    "Pizza cutter", "Plastic bag", "Plate", "Platter", "Plumbing fixture", "Popcorn",
-    "Porch", "Poster", "Power plugs and sockets", "Pressure cooker", "Pretzel",
-    "Printer", "Punching bag", "Racket", "Refrigerator", "Remote control",
-    "Ring binder", "Rose", "Ruler", "Salad", "Salt and pepper shakers", "Sandal",
-    "Sandwich", "Saucer", "Saxophone", "Scale", "Scarf", "Scissors", "Screwdriver",
-    "Sculpture", "Serving tray", "Sewing machine", "Shelf", "Shirt", "Shorts",
-    "Shower", "Sink", "Skirt", "Slow cooker", "Soap dispenser", "Sock", "Sofa bed",
-    "Sombrero", "Spatula", "Spice rack", "Spoon", "Stairs", "Stapler",
-    "Stationary bicycle", "Stethoscope", "Stool", "Studio couch", "Suit", "Suitcase",
-    "Sun hat", "Sunglasses", "Swim cap", "Swimwear", "Table", "Table tennis racket",
-    "Tablet computer", "Tableware", "Tap", "Tea", "Teapot", "Teddy bear",
-    "Telephone", "Television", "Tennis racket", "Tiara", "Tie", "Tin can", "Toaster",
-    "Toilet", "Toilet paper", "Tool", "Toothbrush", "Torch", "Towel", "Toy",
-    "Training bench", "Treadmill", "Tripod", "Trombone", "Trousers", "Trumpet",
-    "Umbrella", "Vase", "Watch", "Whisk", "Whiteboard", "Willow", "Window",
-    "Window blind", "Wine", "Wine glass", "Wine rack", "Wok", "Woman",
-    "Wood-burning stove", "Wrench", "Apple", "Artichoke", "Banana", "Bell pepper",
-    "Cabbage", "Cantaloupe", "Carrot", "Common fig", "Cucumber", "Garden Asparagus",
-    "Grape", "Grapefruit", "Lemon", "Mango", "Orange", "Peach", "Pear", "Pineapple",
-    "Pomegranate", "Potato", "Pumpkin", "Radish", "Strawberry", "Tomato", "Vegetable",
-    "Watermelon", "Winter melon", "Zucchini"
+    "Accordion", "Adhesive tape", "Alarm clock", "Backpack", "Bagel",
+    "Baked goods", "Bathroom cabinet", "Bathtub", "Bed", "Beer", "Belt",
+    "Blender", "Book", "Bookcase", "Boot", "Bottle", "Bowl", "Box", "Boy",
+    "Bread", "Briefcase", "Broccoli", "Cabinetry", "Cake", "Calculator",
+    "Camera", "Can opener", "Candle", "Candy", "Ceiling fan", "Chair",
+    "Cheese", "Chest of drawers", "Chopsticks", "Clock", "Closet", "Clothing",
+    "Coat", "Coffee", "Coffee cup", "Coffee table", "Coffeemaker", "Coin",
+    "Computer keyboard", "Computer monitor", "Computer mouse", "Container",
+    "Cookie", "Couch", "Countertop", "Cup", "Cupboard", "Curtain",
+    "Cutting board", "Desk", "Dishwasher", "Dog bed", "Doll", "Door",
+    "Doughnut", "Drawer", "Dress", "Drill (Tool)", "Dumbbell", "Earrings",
+    "Envelope", "Fan", "Fireplace", "Flashlight", "Flowerpot", "Food",
+    "Fork", "Frying pan", "Furniture", "Gas stove", "Girl", "Glasses",
+    "Glove", "Hair dryer", "Hamburger", "Hammer", "Handbag", "Hat",
+    "Headphones", "Heater", "Home appliance", "Hot dog", "Houseplant",
+    "Human face", "Jacket", "Jeans", "Jug", "Juice", "Kettle", "Kitchen knife",
+    "Knife", "Ladder", "Lamp", "Laptop", "Light bulb", "Lipstick", "Loveseat",
+    "Man", "Measuring cup", "Microphone", "Microwave oven", "Milk", "Mirror",
+    "Mixer", "Mobile phone", "Muffin", "Mug", "Musical keyboard", "Necklace",
+    "Nightstand", "Oven", "Pen", "Pencil case", "Perfume", "Piano",
+    "Picture frame", "Pillow", "Pizza", "Plate", "Platter", "Poster",
+    "Printer", "Refrigerator", "Remote control", "Ruler", "Salad", "Sandal",
+    "Sandwich", "Saucer", "Scissors", "Screwdriver", "Shelf", "Shirt",
+    "Shorts", "Shower", "Sink", "Skirt", "Slow cooker", "Soap dispenser",
+    "Sock", "Sofa bed", "Spatula", "Spoon", "Stairs", "Stapler", "Stool",
+    "Suit", "Suitcase", "Sunglasses", "Table", "Tablet computer", "Tap",
+    "Tea", "Teapot", "Teddy bear", "Telephone", "Television", "Tie",
+    "Tin can", "Toaster", "Toilet", "Toilet paper", "Tool", "Toothbrush",
+    "Towel", "Toy", "Tripod", "Trousers", "Umbrella", "Vase", "Watch",
+    "Whisk", "Window", "Wine", "Wine glass", "Wok", "Woman", "Wrench",
+    "Apple", "Banana", "Carrot", "Cucumber", "Grape", "Lemon", "Mango",
+    "Orange", "Peach", "Pear", "Pineapple", "Strawberry", "Tomato", "Vegetable",
+    "Person"
 }
 
 outdoor_classes = {
-    "Aircraft", "Airplane", "Alpaca", "Ambulance", "Animal", "Ant", "Antelope",
-    "Auto part", "Axe", "Ball", "Balloon", "Barge", "Baseball bat", "Baseball glove",
-    "Bat (Animal)", "Bear", "Bee", "Beehive", "Beetle", "Bicycle", "Bicycle wheel",
-    "Billboard", "Binoculars", "Bird", "Blue jay", "Boat", "Bomb", "Bow and arrow",
-    "Brown bear", "Building", "Bull", "Bus", "Butterfly", "Camel", "Cannon", "Canoe",
-    "Car", "Carnivore", "Cart", "Castle", "Caterpillar", "Cattle", "Centipede",
-    "Cheetah", "Crab", "Crocodile", "Crow", "Crown", "Deer", "Dinosaur", "Dog",
-    "Dolphin", "Dragonfly", "Duck", "Eagle", "Elephant", "Falcon", "Fire hydrant", "Fish",
-    "Flower", "Flying disc", "Football", "Fountain", "Fox", "Frog", "Giraffe", "Goat",
-    "Goldfish", "Golf ball", "Golf cart", "Gondola", "Goose", "Harbor seal",
-    "Hedgehog", "Helicopter", "Hippopotamus", "Horse", "House", "Jaguar (Animal)",
-    "Jellyfish", "Jet ski", "Kangaroo", "Kite", "Koala", "Ladybug", "Land vehicle",
-    "Leopard", "Lighthouse", "Limousine", "Lion", "Lizard", "Lobster", "Lynx",
-    "Mammal", "Marine invertebrates", "Marine mammal", "Missile", "Monkey",
-    "Moths and butterflies", "Motorcycle", "Mule", "Mushroom", "Office building",
-    "Ostrich", "Otter", "Owl", "Oyster", "Paddle", "Palm tree", "Panda", "Parachute",
-    "Parking meter", "Parrot", "Penguin", "Person", "Pig", "Polar bear", "Porcupine", "Rabbit",
-    "Raccoon", "Raven", "Rays and skates", "Red panda", "Reptile", "Rhinoceros",
-    "Rocket", "Roller skates", "Rugby ball", "Scorpion", "Sea lion", "Sea turtle",
-    "Seafood", "Seahorse", "Segway", "Shark", "Sheep", "Shellfish", "Shotgun",
-    "Shrimp", "Skateboard", "Ski", "Skull", "Skunk", "Skyscraper", "Snail", "Snake",
-    "Snowboard", "Snowman", "Snowmobile", "Snowplow", "Sparrow", "Spider",
-    "Sports equipment", "Sports uniform", "Squash (Plant)", "Squid", "Squirrel",
-    "Starfish", "Stop sign", "Street light", "Stretcher", "Submarine",
-    "Submarine sandwich", "Surfboard", "Sushi", "Swan", "Swimming pool", "Sword",
-    "Syringe", "Tank", "Taco", "Taxi", "Tennis ball", "Tent", "Tick", "Tiger", "Tire",
-    "Tortoise", "Tower", "Traffic light", "Traffic sign", "Train", "Tree",
-    "Tree house", "Truck", "Turkey", "Turtle", "Unicycle", "Van", "Vehicle",
-    "Vehicle registration plate", "Violin", "Volleyball (Ball)", "Waffle",
-    "Waffle iron", "Wall clock", "Wardrobe", "Washing machine", "Waste container",
-    "Watercraft", "Weapon", "Whale", "Wheel", "Wheelchair", "Worm", "Woodpecker",
-    "Zebra"
+    "Aircraft", "Airplane", "Ambulance", "Animal", "Ant", "Backpack",
+    "Ball", "Balloon", "Baseball bat", "Baseball glove", "Bear", "Bee",
+    "Beetle", "Bicycle", "Bird", "Boat", "Bus", "Butterfly", "Camel",
+    "Canoe", "Car", "Cat", "Caterpillar", "Cattle", "Chicken", "Cow",
+    "Crab", "Crocodile", "Crow", "Deer", "Dog", "Dolphin", "Dragonfly",
+    "Duck", "Eagle", "Elephant", "Falcon", "Fire hydrant", "Fish", "Flower",
+    "Football", "Fountain", "Fox", "Frog", "Giraffe", "Goat", "Goldfish",
+    "Golf ball", "Goose", "Helicopter", "Horse", "House", "Jaguar (Animal)",
+    "Kangaroo", "Kite", "Koala", "Ladybug", "Leopard", "Lighthouse", "Lion",
+    "Lizard", "Lobster", "Monkey", "Motorcycle", "Mushroom", "Ostrich",
+    "Otter", "Owl", "Panda", "Parachute", "Parking meter", "Parrot",
+    "Penguin", "Person", "Pig", "Polar bear", "Rabbit", "Raccoon", "Raven",
+    "Rhinoceros", "Rocket", "Scorpion", "Shark", "Sheep", "Skateboard",
+    "Ski", "Snail", "Snake", "Snowboard", "Sparrow", "Spider", "Squirrel",
+    "Stop sign", "Street light", "Surfboard", "Swan", "Tank", "Taxi",
+    "Tennis ball", "Tent", "Tiger", "Tire", "Tortoise", "Tower",
+    "Traffic light", "Traffic sign", "Train", "Tree", "Truck", "Turkey",
+    "Turtle", "Van", "Vehicle", "Whale", "Wheel", "Zebra",
 }
 
-# Classes that can reasonably appear BOTH indoors AND outdoors
-both_classes = {
-    "Beer", "Bell pepper", "Book", "Bottle", "Bowl", "Boy", "Bread", "Broccoli",
-    "Bronze sculpture", "Burrito", "Cabbage", "Canary", "Cantaloupe", "Carrot",
-    "Cat", "Chainsaw", "Christmas tree", "Clothing", "Coat", "Cocktail", "Coconut",
-    "Coffee", "Coin", "Common fig", "Common sunflower", "Computer mouse", "Cookie",
-    "Cowboy hat", "Cream", "Croissant", "Cucumber", "Cupboard", "Curtain",
-    "Cutting board", "Dessert",
-    "Digital clock", "Dog", "Door", "Drink", "Drum", "Earrings", "Egg (Food)",
-    "Envelope", "Eraser", "Face powder", "Fashion accessory", "Fast food", "Flag",
-    "Flashlight", "Flower", "Flute", "Food", "Football", "Footwear", "Fork",
-    "French fries", "French horn", "Fruit", "Frying pan", "Garden Asparagus",
-    "Girl", "Glasses", "Glove", "Goggles", "Grape", "Grapefruit", "Guacamole",
-    "Guitar", "Hair dryer", "Hair spray", "Hamburger", "Hammer", "Hamster",
-    "Hand dryer", "Handbag", "Handgun", "Hat", "Headphones", "Heater", "Helmet",
-    "High heels", "Hiking equipment", "Honeycomb", "Hot dog", "Human arm", "Human beard", "Human body",
-    "Human ear", "Human eye", "Human face", "Human foot", "Human hair", "Human hand",
-    "Human head", "Human leg", "Human mouth", "Human nose", "Ice cream", "Insect",
-    "Invertebrate", "Isopod", "Jacket", "Jeans", "Juice", "Kitchen utensil", "Knife",
-    "Ladybug", "Lemon", "Lily", "Lizard", "Magpie", "Man", "Maple", "Maracas",
-    "Measuring cup", "Mechanical fan", "Microphone", "Milk", "Miniskirt", "Mirror",
-    "Mixer", "Mixing bowl", "Mobile phone", "Moths and butterflies", "Mouse",
-    "Muffin", "Mug", "Mushroom", "Musical instrument", "Musical keyboard",
-    "Nail (Construction)", "Necklace", "Nightstand", "Oboe", "Office supplies",
-    "Orange", "Organ (Musical Instrument)", "Owl", "Pancake", "Paper cutter",
-    "Paper towel", "Parrot", "Pasta", "Pastry", "Peach", "Pear", "Pen", "Pencil case",
-    "Pencil sharpener", "Perfume", "Person", "Personal care", "Personal flotation device",
-    "Piano", "Picnic basket",
-    "Picture frame", "Pillow", "Pineapple", "Pitcher (Container)", "Pizza", "Plant",
-    "Plastic bag", "Plate", "Platter", "Plumbing fixture", "Pomegranate", "Popcorn",
-    "Porch", "Poster", "Potato", "Power plugs and sockets", "Pressure cooker",
-    "Pretzel", "Printer", "Pumpkin", "Punching bag", "Rabbit", "Racket", "Radish",
-    "Ratchet (Device)", "Refrigerator", "Remote control", "Rifle", "Ring binder",
-    "Rose", "Rugby ball", "Ruler", "Salad", "Salt and pepper shakers", "Sandal",
-    "Sandwich", "Saucer", "Saxophone", "Scale", "Scarf", "Scissors", "Scoreboard",
-    "Screwdriver", "Sculpture", "Seat belt", "Serving tray", "Sewing machine",
-    "Shelf", "Shirt", "Shorts", "Shower", "Sink", "Skateboard", "Ski", "Skirt",
-    "Skull", "Slow cooker", "Snack", "Spatula", "Spice rack", "Spider", "Spoon",
-    "Sports equipment", "Sports uniform", "Stationary bicycle", "Stethoscope",
-    "Stool", "Strawberry", "Stretcher", "Studio couch", "Submarine sandwich", "Suit",
-    "Suitcase", "Sun hat", "Sunglasses", "Sushi", "Swim cap", "Swimwear", "Sword",
-    "Syringe", "Table", "Table tennis racket", "Tablet computer", "Tableware", "Taco",
-    "Tap", "Tart", "Tea", "Teapot", "Teddy bear", "Telephone", "Television",
-    "Tennis ball", "Tennis racket", "Tent", "Tiara", "Tick", "Tie", "Tin can",
-    "Toaster", "Toilet", "Toilet paper", "Tomato", "Tool", "Toothbrush", "Torch",
-    "Towel", "Toy", "Training bench", "Treadmill", "Tripod", "Trombone", "Trousers",
-    "Trumpet", "Turtle", "Umbrella", "Vase", "Vegetable", "Violin", "Volleyball (Ball)",
-    "Waffle", "Waffle iron", "Wall clock", "Wardrobe", "Washing machine",
-    "Waste container", "Watch", "Watermelon", "Weapon", "Wheelchair", "Whisk",
-    "Whiteboard", "Window", "Window blind", "Wine", "Wine glass", "Wine rack",
-    "Winter melon", "Wok", "Woman", "Wood-burning stove", "Wrench", "Zucchini"
+living_classes = {
+    "person", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant",
+    "bear", "zebra", "giraffe", "rabbit", "duck", "chicken", "deer",
+    "turkey", "goose", "boy", "girl", "man", "woman", "owl", "parrot",
+    "eagle", "falcon", "penguin", "tiger", "lion", "leopard", "fox",
+    "wolf", "monkey", "panda", "kangaroo", "koala", "squirrel", "pig",
+    "goat", "donkey", "camel", "human face"
 }
 
-# Load model
-print("Loading YOLOv8 OIV7 model...")
-model = YOLO("yolov8n-oiv7.pt")
-print(f"Loaded {len(model.names)} classes")
+# =============================================================================
+# MODEL
+# =============================================================================
 
-# WebSocket connection
-ws = None
-ws_lock = threading.Lock()
+print("=" * 50)
+print("  YOLOv8 SHARED STREAM - TCP Mode")
+print("=" * 50)
 
-def get_allowed_classes():
-    """Get the set of allowed classes based on current filter mode"""
-    with settings_lock:
-        mode = filter_mode.lower()
+script_dir = os.path.dirname(os.path.abspath(__file__))
+engine_path = os.path.join(script_dir, "yolov8n-oiv7.engine")
+model_path = os.path.join(script_dir, "yolov8n-oiv7.pt")
 
-    if mode == "indoor":
-        return indoor_classes.union(both_classes)
-    elif mode == "outdoor":
-        return outdoor_classes.union(both_classes)
-    else:  # "all"
-        return None  # None means allow all
+import torch
+print(f"[GPU] CUDA: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"[GPU] Device: {torch.cuda.get_device_name(0)}")
 
-def is_class_allowed(class_name):
-    """Check if a class is allowed by current filter"""
-    allowed = get_allowed_classes()
-    if allowed is None:
-        return True
-    return class_name in allowed
+if os.path.exists(engine_path):
+    print(f"[MODEL] TensorRT: {engine_path}")
+    model = YOLO(engine_path, task='detect')
+else:
+    print(f"[MODEL] PyTorch: {model_path}")
+    model = YOLO(model_path)
+    if torch.cuda.is_available():
+        model.to('cuda:0')
 
-def connect_ws():
-    global ws
-    print("[WS] Attempting to connect...")
+print(f"[MODEL] {len(model.names)} classes loaded")
+
+# =============================================================================
+# VPS CONNECTION
+# =============================================================================
+
+vps_ws = None
+vps_lock = threading.Lock()
+
+def connect_vps():
+    global vps_ws
     while True:
         try:
-            print(f"[WS] Trying {VPS_WS}...")
-            with ws_lock:
-                ws = websocket.create_connection(VPS_WS, timeout=10)
-            print(f"[WS] Connected to {VPS_WS}")
-            # Send registration message
-            reg_msg = {"type": "JETSON_REGISTER", "capabilities": ["detection"]}
-            with ws_lock:
-                ws.send(json.dumps(reg_msg))
-            print("[WS] Registration sent")
+            print(f"[VPS] Connecting to {VPS_WS}...")
+            vps_ws = websocket.create_connection(VPS_WS, timeout=10)
+            vps_ws.send(json.dumps({"type": "JETSON_REGISTER", "capabilities": ["detection"]}))
+            print("[VPS] Connected!")
             return
         except Exception as e:
-            print(f"[WS] Connection failed: {e}, retrying in 3s...")
+            print(f"[VPS] Error: {e}, retrying...")
             time.sleep(3)
 
 def send_detections(cam_id, detections):
-    global ws
-    if not detections:
+    global vps_ws
+    try:
+        with vps_lock:
+            if vps_ws:
+                msg = {
+                    "type": "DETECTIONS",
+                    "camera": cam_id,
+                    "detections": detections,
+                    "count": len(detections),
+                    "timestamp": int(time.time() * 1000)
+                }
+                vps_ws.send(json.dumps(msg))
+    except Exception as e:
+        print(f"[VPS] Send error: {e}")
+        threading.Thread(target=connect_vps, daemon=True).start()
+
+def vps_listener():
+    global vps_ws
+    while True:
+        try:
+            if vps_ws is None:
+                time.sleep(1)
+                continue
+            msg = vps_ws.recv()
+            data = json.loads(msg)
+            if data.get("type") == "DETECTION_SETTINGS":
+                settings.update(
+                    active_camera=data.get("active_camera", settings.active_camera),
+                    filter_mode=data.get("filter_mode", settings.filter_mode),
+                    confidence=data.get("confidence", settings.confidence)
+                )
+        except Exception as e:
+            print(f"[VPS] Receive error: {e}")
+            vps_ws = None
+            time.sleep(1)
+            connect_vps()
+
+# =============================================================================
+# FRAME PROCESSING
+# =============================================================================
+
+detect_times = []
+last_print = 0
+frame_count = 0
+
+def process_frame(cam_id, jpeg_data):
+    global last_print, detect_times, frame_count
+
+    s = settings.get()
+    if cam_id != s["active_camera"]:
         return
 
-    # Feed detections to semantic map for learning (runs in all modes)
-    for det in detections:
-        feed_detection_to_semantic(cam_id, det)
-
     try:
-        with ws_lock:
-            if ws is None:
-                # Silently skip if not connected - connect_ws will retry
-                return
-            msg = {
-                "type": "DETECTIONS",
-                "camera": cam_id,
-                "detections": detections,
-                "count": len(detections),
-                "timestamp": int(time.time() * 1000)  # Milliseconds for staleness check
-            }
-            ws.send(json.dumps(msg))
-    except Exception as e:
-        print(f"[WS] Send error: {e}, reconnecting...")
-        with ws_lock:
-            ws = None
-        # Reconnect in background
-        threading.Thread(target=connect_ws, daemon=True).start()
+        # Decode JPEG
+        arr = np.frombuffer(jpeg_data, dtype=np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return
 
-def ws_listener():
-    """Listen for settings updates from VPS"""
-    global ws, filter_mode, confidence_threshold
+        # Resize for detection (smaller = faster)
+        frame = cv2.resize(frame, (320, 320))
 
-    while True:
-        try:
-            with ws_lock:
-                if ws is None:
-                    time.sleep(1)
+        # Run detection
+        t0 = time.time()
+        results = model(frame, conf=s["confidence"], iou=0.45, verbose=False)
+        detect_time = (time.time() - t0) * 1000
+        detect_times.append(detect_time)
+        if len(detect_times) > 30:
+            detect_times.pop(0)
+
+        frame_count += 1
+
+        # Process results
+        detections = []
+        h, w = frame.shape[:2]
+
+        for r in results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = float(box.conf[0])
+                cls_id = int(box.cls[0])
+                class_name = model.names[cls_id]
+
+                # Filter by mode
+                mode = s["filter_mode"]
+                if mode == "indoor" and class_name not in indoor_classes:
+                    continue
+                elif mode == "outdoor" and class_name not in outdoor_classes:
                     continue
 
-            # Set a timeout so we can check connection status
-            try:
-                with ws_lock:
-                    ws.settimeout(1.0)
-                    data = ws.recv()
-            except websocket.WebSocketTimeoutException:
-                continue
-            except Exception as e:
-                print(f"[WS] Receive error: {e}")
-                with ws_lock:
-                    ws = None
-                connect_ws()
-                continue
+                bw = (x2 - x1) / w
+                bh = (y2 - y1) / h
+                if bw * bh > 0.85:
+                    continue
 
-            if data:
-                # Skip binary data (video frames)
-                if isinstance(data, bytes):
-                    # Only try to decode if it looks like JSON (starts with '{')
-                    if len(data) < 2 or data[0] != ord('{'):
-                        continue
-                    try:
-                        data = data.decode('utf-8')
-                    except:
-                        continue
+                detections.append({
+                    "class": class_name,
+                    "confidence": round(conf, 2),
+                    "bbox": {
+                        "x": round((x1 + x2) / 2 / w, 3),
+                        "y": round((y1 + y2) / 2 / h, 3),
+                        "w": round(bw, 3),
+                        "h": round(bh, 3)
+                    },
+                    "is_living": class_name.lower() in living_classes
+                })
 
-                try:
-                    msg = json.loads(data)
-                    msg_type = msg.get("type", "")
-
-                    # Handle settings updates
-                    if msg_type == "DETECTION_SETTINGS":
-                        with settings_lock:
-                            if "filter_mode" in msg:
-                                old_mode = filter_mode
-                                filter_mode = msg["filter_mode"]
-                                if old_mode != filter_mode:
-                                    print(f"[SETTINGS] Filter mode: {filter_mode}")
-                            if "confidence" in msg:
-                                old_conf = confidence_threshold
-                                confidence_threshold = max(0.01, min(1.0, float(msg["confidence"])))
-                                if abs(old_conf - confidence_threshold) > 0.01:
-                                    print(f"[SETTINGS] Confidence: {confidence_threshold:.2f}")
-
-                    # Handle robot position updates (for semantic learning)
-                    if msg_type == "dead_reckoning":
-                        x = msg.get("x", 0)
-                        y = msg.get("y", 0)
-                        heading = msg.get("heading", 0)
-                        update_robot_position(x, y, heading)
-
-                except json.JSONDecodeError:
-                    pass
-
-        except Exception as e:
-            print(f"[WS Listener] Error: {e}")
-            time.sleep(1)
-
-def process_camera(cam):
-    global confidence_threshold
-    cam_id = cam["id"]
-    cam_name = cam["name"]
-    url = cam["url"]
-
-    print(f"[CAM{cam_id}] Starting {cam_name}...")
-
-    while True:
-        try:
-            # Use ffmpeg to capture RTSP and pipe raw frames
-            cmd = [
-                'ffmpeg',
-                '-rtsp_transport', 'udp',
-                '-i', url,
-                '-f', 'rawvideo',
-                '-pix_fmt', 'bgr24',
-                '-s', f'{WIDTH}x{HEIGHT}',
-                '-r', '5',  # 5 fps for detection
-                '-'
-            ]
-
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                bufsize=WIDTH * HEIGHT * 3
-            )
-
-            print(f"[CAM{cam_id}] Connected to {cam_name}")
-            frame_size = WIDTH * HEIGHT * 3
-            last_detect = 0
-
-            while True:
-                raw = proc.stdout.read(frame_size)
-                if len(raw) != frame_size:
-                    print(f"[CAM{cam_id}] Lost stream")
+                if len(detections) >= 15:
                     break
 
-                # Convert to numpy array
-                frame = np.frombuffer(raw, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
+        # Send to VPS
+        send_detections(cam_id, detections)
 
-                # Run detection every 200ms
-                now = time.time()
-                if now - last_detect < 0.2:
-                    continue
-                last_detect = now
+        # Print stats
+        now = time.time()
+        if now - last_print > 2.0:
+            avg = sum(detect_times) / len(detect_times) if detect_times else 0
+            fps = frame_count / 2.0
+            frame_count = 0
+            cam_name = "Front" if cam_id == 1 else "Rear"
+            det_list = ", ".join([d["class"] for d in detections[:3]])
+            print(f"[{cam_name}] {fps:.1f}fps {len(detections)} obj ({avg:.0f}ms) {det_list}")
+            last_print = now
 
-                # Get current confidence threshold
-                with settings_lock:
-                    conf_thresh = confidence_threshold
+    except Exception as e:
+        print(f"[DETECT] Error: {e}")
 
-                # Run YOLOv8
-                results = model(frame, conf=0.03, iou=0.4, verbose=False)
+# =============================================================================
+# TCP SERVER - Receives frames from relay.js
+# Protocol: [4-byte length][1-byte cam_id][jpeg_data]
+# =============================================================================
 
-                detections = []
-                for r in results:
-                    for box in r.boxes:
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        conf = float(box.conf[0])
-                        cls_id = int(box.cls[0])
-                        class_name = model.names[cls_id]
-                        class_name_lower = class_name.lower()
+def tcp_server():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(('127.0.0.1', LOCAL_PORT))
+    server.listen(1)
+    print(f"[TCP] Listening on port {LOCAL_PORT}")
 
-                        # Filter by confidence
-                        if conf < 0.05:
-                            continue
-
-                        # Indoor filtering - skip outdoor-only classes indoors
-                        with settings_lock:
-                            mode = filter_mode
-                        if mode == "indoor" and class_name in outdoor_classes and class_name not in indoor_classes:
-                            continue
-                        elif mode == "outdoor" and class_name in indoor_classes and class_name not in outdoor_classes:
-                            continue
-
-                        # Normalized bbox
-                        cx = (x1 + x2) / 2 / WIDTH
-                        cy = (y1 + y2) / 2 / HEIGHT
-                        bw = (x2 - x1) / WIDTH
-                        bh = (y2 - y1) / HEIGHT
-
-                        detections.append({
-                            "class": class_name,
-                            "confidence": round(conf, 2),
-                            "bbox": {"x": round(cx, 3), "y": round(cy, 3),
-                                    "w": round(bw, 3), "h": round(bh, 3)},
-                            "is_living": class_name_lower in living_classes
-                        })
-
-                        if len(detections) >= 40:  # Match Swift app limit
-                            break
-
-                if detections:
-                    classes = [d["class"] for d in detections]
-                    print(f"[CAM{cam_id}] {len(detections)}: {', '.join(classes[:5])}")
-                    send_detections(cam_id, detections)
-
-            proc.kill()
-
-        except Exception as e:
-            print(f"[CAM{cam_id}] Error: {e}")
-
-        time.sleep(2)
-
-# Start
-print("=" * 40)
-print("  YOLOv8 OIV7 - 601 Classes")
-print("  Indoor/Outdoor Filtering Enabled")
-print("  Semantic Learning: ALL MODES")
-print("=" * 40)
-
-connect_ws()
-
-# Initialize semantic map for learning in all modes
-init_semantic_map()
-
-# Start WebSocket listener thread
-ws_thread = threading.Thread(target=ws_listener, daemon=True)
-ws_thread.start()
-print("[WS] Settings listener started")
-
-# Start camera threads
-for cam in CAMERAS:
-    t = threading.Thread(target=process_camera, args=(cam,), daemon=True)
-    t.start()
-
-# Keep running
-try:
     while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    print("\nStopping...")
+        try:
+            conn, addr = server.accept()
+            print(f"[TCP] Relay connected: {addr}")
+            handle_connection(conn)
+        except Exception as e:
+            print(f"[TCP] Accept error: {e}")
+            time.sleep(1)
+
+def handle_connection(conn):
+    try:
+        conn.settimeout(5.0)
+        while True:
+            # Read 4-byte length header
+            header = b''
+            while len(header) < 4:
+                chunk = conn.recv(4 - len(header))
+                if not chunk:
+                    raise Exception("Connection closed")
+                header += chunk
+
+            length = struct.unpack('>I', header)[0]
+            if length > 1000000:  # Max 1MB
+                raise Exception(f"Frame too large: {length}")
+
+            # Read frame data
+            data = b''
+            while len(data) < length:
+                chunk = conn.recv(min(65536, length - len(data)))
+                if not chunk:
+                    raise Exception("Connection closed during frame")
+                data += chunk
+
+            # First byte is camera ID marker
+            if len(data) > 1:
+                cam_marker = data[0]
+                cam_id = 1 if cam_marker == 0 else 2
+                jpeg_data = data[1:]
+                process_frame(cam_id, jpeg_data)
+
+    except Exception as e:
+        print(f"[TCP] Connection error: {e}")
+    finally:
+        conn.close()
+        print("[TCP] Connection closed")
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+if __name__ == "__main__":
+    # Connect to VPS
+    connect_vps()
+
+    # Start VPS listener
+    threading.Thread(target=vps_listener, daemon=True).start()
+
+    # Start TCP server
+    print(f"[READY] Waiting for frames from relay.js on TCP port {LOCAL_PORT}")
+    tcp_server()

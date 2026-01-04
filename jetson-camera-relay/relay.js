@@ -77,9 +77,85 @@ CONFIG.cameras.forEach(cam => {
   };
 });
 
+// Detection camera tracking - reduces quality on non-detection camera
+let activeDetectionCamera = 1;
+
+function getStreamQuality(camId) {
+  // Detection camera gets full quality, other gets reduced
+  if (camId === activeDetectionCamera) {
+    return { scale: '960:540', fps: 12, quality: 10 };  // Full quality
+  } else {
+    return { scale: '480:270', fps: 6, quality: 15 };   // Reduced quality
+  }
+}
+
+function restartCameraForDetection(newActiveCamera) {
+  if (newActiveCamera === activeDetectionCamera) return;
+
+  console.log('[DETECT-Q] Switching detection camera:', activeDetectionCamera, '->', newActiveCamera);
+  activeDetectionCamera = newActiveCamera;
+
+  // Restart both cameras with appropriate quality
+  CONFIG.cameras.filter(c => c.id <= 2).forEach(cam => {
+    const state = cameraState[cam.id];
+    if (state && state.videoProcess) {
+      const q = getStreamQuality(cam.id);
+      console.log(`[DETECT-Q] Restarting CAM${cam.id}: ${q.scale} @ ${q.fps}fps`);
+      stopVideoStream(cam);
+      setTimeout(() => startVideoStream(cam), 500);
+    }
+  });
+}
+
 // Packet markers: Cam1: 0x00=video, 0x01=audio | Cam2: 0x02=video, 0x03=audio
 function getVideoMarker(camId) { return (camId - 1) * 2; }
 function getAudioMarker(camId) { return (camId - 1) * 2 + 1; }
+
+// =============================================================================
+// LOCAL DETECTION - Send frames to detect.py via TCP
+// Protocol: [4-byte length BE][1-byte cam_id][jpeg_data]
+// =============================================================================
+const net = require('net');
+let detectSocket = null;
+let detectConnected = false;
+
+function connectToDetection() {
+  try {
+    detectSocket = new net.Socket();
+
+    detectSocket.connect(9998, '127.0.0.1', () => {
+      detectConnected = true;
+      console.log('[DETECT-TCP] Connected to local detection server');
+    });
+
+    detectSocket.on('close', () => {
+      detectConnected = false;
+      console.log('[DETECT-TCP] Disconnected, reconnecting in 2s...');
+      setTimeout(connectToDetection, 2000);
+    });
+
+    detectSocket.on('error', (err) => {
+      detectConnected = false;
+    });
+  } catch (e) {
+    setTimeout(connectToDetection, 2000);
+  }
+}
+
+function sendFrameToDetection(camId, jpegBuffer) {
+  if (!detectConnected || !detectSocket) return;
+  try {
+    // Protocol: [4-byte length][1-byte marker][jpeg]
+    const marker = getVideoMarker(camId);
+    const payload = Buffer.concat([Buffer.from([marker]), jpegBuffer]);
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(payload.length, 0);
+    detectSocket.write(Buffer.concat([header, payload]));
+  } catch (e) {}
+}
+
+// Start detection connection after 2 seconds (give detect.py time to start)
+setTimeout(connectToDetection, 2000);
 
 function killExistingFfmpeg(camIp) {
   try {
@@ -185,6 +261,13 @@ function connectToVPS() {
       if (msg.type === 'cam_setting') {
         const cam = CONFIG.cameras.find(c => c.id === (msg.camera || 1));
         if (cam) await handleSetting(cam, msg);
+      }
+
+      // Handle detection camera changes - adjust stream quality
+      if (msg.type === 'DETECTION_SETTINGS' || msg.type === 'detection_settings') {
+        if (msg.active_camera && msg.active_camera !== activeDetectionCamera) {
+          restartCameraForDetection(msg.active_camera);
+        }
       }
 
       if (msg.type === 'cam_snapshot') {
@@ -338,8 +421,9 @@ function startVideoStream(cam) {
   let proc;
 
   if (cam.id === 1) {
-    // CAM 1: VIDEO ONLY (UDP transport)
-    console.log(`[CAM${cam.id}] Starting video only (UDP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
+    // CAM 1: VIDEO ONLY (UDP transport) - quality based on detection camera
+    const q = getStreamQuality(cam.id);
+    console.log(`[CAM${cam.id}] Starting (${q.scale} @ ${q.fps}fps): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
       '-rtsp_transport', 'udp',
       '-fflags', 'nobuffer+discardcorrupt',
@@ -348,11 +432,11 @@ function startVideoStream(cam) {
       '-probesize', '500000',
       '-i', rtspUrl,
       '-map', '0:v',
-      '-vf', `scale=${CONFIG.stream.scale}`,
+      '-vf', `scale=${q.scale}`,
       '-f', 'image2pipe',
       '-c:v', 'mjpeg',
-      '-q:v', '10',
-      '-r', '12',
+      '-q:v', String(q.quality),
+      '-r', String(q.fps),
       'pipe:1'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
   } else if (cam.id === 3) {
@@ -375,8 +459,9 @@ function startVideoStream(cam) {
       'pipe:1'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
   } else {
-    // CAM 2: VIDEO + AUDIO (UDP)
-    console.log(`[CAM${cam.id}] Starting video+audio (UDP): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
+    // CAM 2: VIDEO + AUDIO (UDP) - quality based on detection camera
+    const q = getStreamQuality(cam.id);
+    console.log(`[CAM${cam.id}] Starting (${q.scale} @ ${q.fps}fps): rtsp://${cam.ip}:${cam.rtspPort}${cam.rtspPath}`);
     proc = spawn(FFMPEG, [
       '-rtsp_transport', 'udp',
       '-fflags', 'nobuffer+discardcorrupt',
@@ -385,11 +470,11 @@ function startVideoStream(cam) {
       '-probesize', '500000',
       '-i', rtspUrl,
       '-map', '0:v',
-      '-vf', `scale=${CONFIG.stream.scale}`,
+      '-vf', `scale=${q.scale}`,
       '-f', 'image2pipe',
       '-c:v', 'mjpeg',
-      '-q:v', '10',
-      '-r', '12',
+      '-q:v', String(q.quality),
+      '-r', String(q.fps),
       'pipe:1',
       '-map', '0:a?',
       '-acodec', 'libmp3lame',
@@ -440,6 +525,9 @@ function startVideoStream(cam) {
           vpsSocket.send(Buffer.concat([Buffer.from([videoMarker]), frame]));
         }
       }
+
+      // Send to local detection server (shares camera stream = faster!)
+      sendFrameToDetection(cam.id, frame);
     }
 
     if (frameBuffer.length > 100000) {
