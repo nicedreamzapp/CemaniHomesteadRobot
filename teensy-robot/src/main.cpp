@@ -435,13 +435,13 @@ void readCompass() {
 
   // Calculate magnetic heading (0-360 degrees)
   // Negate both X and Y to correct orientation for IST8310 mounting
-  // Arrow on GPS/compass module should point toward robot's front
   compassHeading = atan2((float)-compassY, (float)-compassX) * 180.0 / PI;
   if (compassHeading < 0) compassHeading += 360;
 
-  // Apply magnetic declination to get TRUE north heading
+  // Apply mounting offset (arrow on GPS/compass points to BACK of robot)
+  // Then apply magnetic declination to get TRUE north heading
   // Result: 0°=True North, 90°=East, 180°=South, 270°=West
-  compassHeading = fmod(compassHeading + MAGNETIC_DECLINATION + 360.0f, 360.0f);
+  compassHeading = fmod(compassHeading + COMPASS_MOUNTING_OFFSET + MAGNETIC_DECLINATION + 360.0f, 360.0f);
 }
 
 // ===== MAIN LOOP =====
