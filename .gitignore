@@ -97,3 +97,10 @@ __pycache__/
 
 # Temporary files from Claude Code sessions
 /tmp/claude/
+
+# Scan data (large point cloud files)
+*.ply
+mac-visualizer/room_scans/
+mac-visualizer/*_recovered.json
+mac-visualizer/*_clean.json
+mac-visualizer/*_pcd.ply

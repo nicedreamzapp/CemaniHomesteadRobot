@@ -25,11 +25,13 @@ let lastFingerprintCheck = 0;
 const FINGERPRINT_CHECK_INTERVAL = 2000;  // Check every 2 seconds
 const FINGERPRINT_MATCH_THRESHOLD = 0.75;  // 75% match = recognized
 
-// AUTO-SAVE: Automatically save map when we have enough points
+// AUTO-SAVE: Automatically save map + fingerprint when we have enough points
 let lastAutoSave = 0;
 const AUTO_SAVE_INTERVAL = 60000;  // Auto-save every 60 seconds
-const AUTO_SAVE_MIN_POINTS = 10000;  // Need at least 10k points to save
+const AUTO_SAVE_MIN_POINTS = 5000;  // Need at least 5k points to save
 let autoSaveEnabled = true;
+let lastAutoSavePosition = { x: 0, y: 0 };  // Track where we last saved
+const AUTO_SAVE_MIN_DISTANCE = 200;  // Must move 2m from last save to create new fingerprint
 let lidar3dUltrasonicCones = { FL: null, FR: null, RL: null, RR: null };
 const SLAM_MAX_POINTS = 50000;
 const SLAM_POINT_SPACING = 0.03;
@@ -708,6 +710,9 @@ function updateLidar3D(points) {
   // Check for recognized area (fingerprint matching)
   checkForRecognizedArea(points);
 
+  // Auto-save fingerprint when we have good data
+  autoSaveFingerprint(points);
+
   // Add SLAM points with spacing filter
   for (const np of slamNewPoints) {
     let tooClose = false;
@@ -1138,10 +1143,18 @@ function checkForRecognizedArea(points) {
     }
   }
 
-  // If good match found, load that map
+  // If good match found, load that map from server
   if (bestMatch.score >= FINGERPRINT_MATCH_THRESHOLD && bestMatch.name) {
     console.log(`[RECOGNIZE] Area recognized: ${bestMatch.name} (${Math.round(bestMatch.score * 100)}% match)`);
-    loadMap(bestMatch.name);
+
+    // Request 3D map from server
+    if (window.robotWs && window.robotWs.readyState === WebSocket.OPEN) {
+      window.robotWs.send(JSON.stringify({
+        type: 'load_3d_map',
+        name: bestMatch.name
+      }));
+    }
+
     // Show notification
     showRecognitionNotice(bestMatch.name, bestMatch.score);
   }
@@ -1162,17 +1175,143 @@ function showRecognitionNotice(name, score) {
 }
 
 function loadSavedFingerprints() {
-  savedFingerprints = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('robotFingerprint_')) {
-      try {
-        const data = JSON.parse(localStorage.getItem(key));
-        savedFingerprints.push(data);
-      } catch (e) {}
+  // Fingerprints are now loaded from server via WebSocket
+  // This is called when we receive 'saved_fingerprints' message
+  console.log(`[FINGERPRINT] ${savedFingerprints.length} fingerprints available from server`);
+}
+
+// Handle fingerprints received from server
+function handleSavedFingerprints(fingerprints) {
+  savedFingerprints = fingerprints || [];
+  console.log(`[FINGERPRINT] Loaded ${savedFingerprints.length} fingerprints from server`);
+}
+
+// Handle loaded 3D map from server (when area recognized)
+function handleLoaded3DMap(name, mapData) {
+  if (!mapData || !mapData.points) {
+    console.log(`[3D MAP] No map data for ${name}`);
+    return;
+  }
+
+  console.log(`[3D MAP] Loading saved map: ${name} (${mapData.points.length} points)`);
+
+  // Clear current SLAM points and add saved ones
+  lidar3dSlamPoints = [];
+
+  // Add points from saved map
+  for (const pt of mapData.points) {
+    lidar3dSlamPoints.push({
+      x: pt.x || 0,
+      y: pt.y || 0,
+      z: pt.z || 0,
+      r: pt.r || 128,
+      g: pt.g || 128,
+      b: pt.b || 128
+    });
+  }
+
+  console.log(`[3D MAP] Loaded ${lidar3dSlamPoints.length} points from saved map`);
+
+  // Show notification
+  showRecognitionNotice(name, 1.0);
+}
+
+// AUTO-SAVE: Automatically save fingerprint when we have good data
+function autoSaveFingerprint(points) {
+  if (!autoSaveEnabled) return;
+  if (!window.robotWs || window.robotWs.readyState !== WebSocket.OPEN) return;
+
+  const now = Date.now();
+  if (now - lastAutoSave < AUTO_SAVE_INTERVAL) return;
+
+  // Check if we have enough points
+  const totalPoints = lidar3dSlamPoints.length;
+  if (totalPoints < AUTO_SAVE_MIN_POINTS) return;
+
+  // Get current robot position
+  const odom = window.odomState || { x: 0, y: 0 };
+  const robotX = odom.x || 0;
+  const robotY = odom.y || 0;
+
+  // Check if we've moved enough from last save position
+  const dx = robotX - lastAutoSavePosition.x;
+  const dy = robotY - lastAutoSavePosition.y;
+  const distFromLastSave = Math.sqrt(dx * dx + dy * dy);
+
+  // Only create NEW fingerprint if moved enough, otherwise update existing
+  const isNewArea = distFromLastSave >= AUTO_SAVE_MIN_DISTANCE;
+
+  // Create fingerprint from current scan
+  const fingerprint = createFingerprint(points);
+  if (!fingerprint) return;
+
+  // Generate area name based on position
+  const areaName = isNewArea
+    ? `area_${Math.round(robotX / 100)}_${Math.round(robotY / 100)}_${Date.now()}`
+    : findClosestSavedArea(robotX, robotY) || `area_${Math.round(robotX / 100)}_${Math.round(robotY / 100)}`;
+
+  // Save fingerprint to SERVER (persistent storage)
+  const fpData = {
+    name: areaName,
+    fingerprint: fingerprint,
+    position: { x: robotX, y: robotY },
+    pointCount: totalPoints,
+    timestamp: Date.now()
+  };
+
+  // Send fingerprint to server for persistent storage
+  window.robotWs.send(JSON.stringify({
+    type: 'save_fingerprint',
+    fingerprint: fpData
+  }));
+
+  // Also save the 3D map points to server
+  const mapData = {
+    points: lidar3dSlamPoints.slice(-50000),  // Last 50k points
+    timestamp: Date.now(),
+    position: { x: robotX, y: robotY }
+  };
+  window.robotWs.send(JSON.stringify({
+    type: 'save_3d_map',
+    name: areaName,
+    mapData: mapData
+  }));
+
+  // Update local fingerprints array
+  const existingIdx = savedFingerprints.findIndex(fp => fp.name === areaName);
+  if (existingIdx >= 0) {
+    savedFingerprints[existingIdx] = fpData;
+  } else {
+    savedFingerprints.push(fpData);
+  }
+
+  // Update tracking
+  lastAutoSave = now;
+  if (isNewArea) {
+    lastAutoSavePosition = { x: robotX, y: robotY };
+    console.log(`[AUTO-SAVE] NEW area: ${areaName} (${totalPoints} pts) → Server`);
+  } else {
+    console.log(`[AUTO-SAVE] Updated: ${areaName} (${totalPoints} pts) → Server`);
+  }
+}
+
+// Find closest saved area to current position
+function findClosestSavedArea(x, y) {
+  let closest = null;
+  let minDist = Infinity;
+
+  for (const fp of savedFingerprints) {
+    if (fp.position) {
+      const dx = x - fp.position.x;
+      const dy = y - fp.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < minDist && dist < AUTO_SAVE_MIN_DISTANCE) {
+        minDist = dist;
+        closest = fp.name;
+      }
     }
   }
-  console.log(`[FINGERPRINT] Loaded ${savedFingerprints.length} saved fingerprints`);
+  return closest;
 }
 
 function saveCurrentMap(name) {
@@ -2017,5 +2156,8 @@ window.lidar3dModule = {
   toggleSemanticVisible,
   // Map quality filters
   setMapFilters,
-  getMapFilters
+  getMapFilters,
+  // Fingerprint & persistent map storage
+  handleSavedFingerprints,
+  handleLoaded3DMap
 };

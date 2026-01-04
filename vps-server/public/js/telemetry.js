@@ -157,10 +157,10 @@ function updateDriverTelemetry(data) {
     if (el) el.textContent = Math.round((data.motorTempL_F + data.motorTempR_F) / 2);
   }
 
-  // Velocities
-  updateWheelVelocity(data.velL, 'L', ['wheelLF', 'wheelLR'], ['arrowLF', 'arrowLR'],
+  // Velocities (desktop + mobile mini-tank wheels)
+  updateWheelVelocity(data.velL, 'L', ['wheelLF', 'wheelLR', 'mWheelLF', 'mWheelLR'], ['arrowLF', 'arrowLR'],
                        ['ctrlWheelLF', 'ctrlWheelLR'], ['ctrlArrowLF', 'ctrlArrowLR']);
-  updateWheelVelocity(data.velR, 'R', ['wheelRF', 'wheelRR'], ['arrowRF', 'arrowRR'],
+  updateWheelVelocity(data.velR, 'R', ['wheelRF', 'wheelRR', 'mWheelRF', 'mWheelRR'], ['arrowRF', 'arrowRR'],
                        ['ctrlWheelRF', 'ctrlWheelRR'], ['ctrlArrowRF', 'ctrlArrowRR']);
 
   // Torque
