@@ -63,7 +63,7 @@ except ImportError:
     print("[WARN] open3d not available - surface reconstruction disabled")
 
 # ============ CONFIGURATION ============
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "wss://robot.marijuanaunion.com"
 
 # DIRECT JETSON CONNECTION (bypasses VPS for camera data)
 # Camera frames: Jetson direct (local WiFi, low latency)
@@ -181,6 +181,14 @@ DEPTH_SCALE_DEFAULT = 4.0  # Initial depth scale for monocular
 LIDAR_DEPTH_CORRELATION_THRESHOLD = 0.3  # Max angle diff for LIDAR-camera correlation
 
 # ============ DATA STRUCTURES ============
+
+# Dynamic object classification thresholds
+MIN_OBS_FOR_STATIC = 3        # Must be seen 3+ times to be considered static
+MAX_MISSES_FOR_STATIC = 1     # Can miss at most 1 expected observation
+MOTION_SCORE_DYNAMIC = 0.4    # Above this = likely dynamic
+DYNAMIC_DECAY_MULTIPLIER = 4.0  # Dynamic points decay 4x faster
+MAX_OBSERVER_HISTORY = 5      # Keep last 5 robot poses that saw this point
+
 @dataclass
 class Point3D:
     x: float
@@ -194,6 +202,16 @@ class Point3D:
     observations: int = 1  # How many times this point has been seen
     last_seen: float = 0.0  # Timestamp of last observation
     is_static: bool = False  # True if seen enough times to be considered static
+
+    # Dynamic object tracking (NEW)
+    observer_positions: list = None  # [(robot_x, robot_y, timestamp), ...] - where robot was when it saw this
+    expected_observations: int = 0   # Times robot SHOULD have seen this (was in FOV)
+    missed_observations: int = 0     # Times robot was in position to see it but didn't
+    motion_score: float = 0.0        # 0 = static, 1 = dynamic
+
+    def __post_init__(self):
+        if self.observer_positions is None:
+            self.observer_positions = []
 
 @dataclass
 class RobotPose:
@@ -214,6 +232,70 @@ class CameraFrame:
 class LidarScan:
     points: List[Tuple[float, float]]  # (angle_deg, distance_mm)
     timestamp: float = 0.0
+
+
+# ============ DYNAMIC OBJECT CLASSIFICATION ============
+
+def compute_motion_score(point: Point3D) -> float:
+    """
+    Compute motion score: 0 = definitely static, 1 = definitely moving.
+    Based on persistence (how often seen when expected).
+    """
+    if point.expected_observations == 0:
+        return 0.5  # Unknown - not enough data
+
+    persistence_ratio = point.observations / max(1, point.expected_observations)
+    miss_ratio = point.missed_observations / max(1, point.expected_observations)
+
+    # High persistence + low misses = static (score → 0)
+    # Low persistence + high misses = dynamic (score → 1)
+    motion_score = miss_ratio * (1.0 - min(1.0, persistence_ratio))
+    return min(1.0, max(0.0, motion_score))
+
+
+def classify_point(point: Point3D) -> str:
+    """
+    Classify point as static, dynamic, or uncertain.
+    """
+    # Not enough data yet
+    if point.expected_observations < 2:
+        return "uncertain"
+
+    # STATIC: Seen multiple times, rarely missed
+    if (point.observations >= MIN_OBS_FOR_STATIC and
+        point.missed_observations <= MAX_MISSES_FOR_STATIC and
+        point.motion_score < MOTION_SCORE_DYNAMIC):
+        return "static"
+
+    # DYNAMIC: High miss rate or high motion score
+    if (point.missed_observations > point.observations or
+        point.motion_score >= MOTION_SCORE_DYNAMIC):
+        return "dynamic"
+
+    return "uncertain"
+
+
+def should_expect_observation(point: Point3D, robot_x: float, robot_y: float) -> bool:
+    """
+    Check if robot is in position to observe this point.
+    Returns True if point should be visible from current robot position.
+    """
+    dx = point.x - robot_x
+    dy = point.y - robot_y
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    # Too far - LIDAR can't see it (8m max range)
+    if distance > 8.0:
+        return False
+
+    # Too close - minimum range
+    if distance < 0.1:
+        return False
+
+    # LIDAR is 360°, so no angle check needed for LIDAR points
+    # For camera-source points, could add FOV check (future enhancement)
+    return True
+
 
 # ============ HYBRID 3D MAPPER ============
 class Hybrid3DMapper:
@@ -460,10 +542,13 @@ class Hybrid3DMapper:
             print(f"[FRAME] Error processing cam {camera_id}: {e}")
 
     def _process_lidar_scan(self, scan: LidarScan):
-        """Process LIDAR scan - project to 3D world coordinates"""
+        """Process LIDAR scan - project to 3D world coordinates and track expected observations"""
         pose = self.robot_pose
         cos_h = math.cos(pose.heading)
         sin_h = math.sin(pose.heading)
+
+        # Track which points we observed in this scan
+        points_observed_this_scan = set()
 
         for angle_deg, dist_mm in scan.points:
             if dist_mm < 100 or dist_mm > 8000:
@@ -487,10 +572,27 @@ class Hybrid3DMapper:
             world_y = pose.y + robot_x * sin_h + robot_y * cos_h
             world_z = robot_z
 
+            # Track grid key for this observation
+            gx = int(world_x / GRID_SIZE)
+            gy = int(world_y / GRID_SIZE)
+            gz = int(world_z / GRID_SIZE)
+            key = f"{gx},{gy},{gz}"
+            points_observed_this_scan.add(key)
+
             # SKIP adding grey points - only add colored points from camera fusion
             # The grey points look bad and clutter the visualization
             # Camera fusion will add properly colored LIDAR points
-            pass
+
+        # Update expected observations for all points that SHOULD have been visible
+        # This is the key to dynamic object detection!
+        for key, point in self.accumulated_points.items():
+            if should_expect_observation(point, pose.x, pose.y):
+                point.expected_observations += 1
+                if key not in points_observed_this_scan:
+                    # We should have seen this point but didn't - it may have moved!
+                    point.missed_observations += 1
+                    # Update motion score
+                    point.motion_score = compute_motion_score(point)
 
         self.stats["lidar_points"] = len([p for p in self.accumulated_points.values() if p.source == "lidar"])
 
@@ -772,8 +874,10 @@ class Hybrid3DMapper:
             self.stats["mono_points"] += points_added
 
     def _add_point(self, point: Point3D, update_color: bool = False):
-        """Add point to accumulated map with grid-based deduplication and static filtering"""
+        """Add point to accumulated map with grid-based deduplication and dynamic object tracking"""
         now = time.time()
+        robot_x = self.robot_pose.x
+        robot_y = self.robot_pose.y
 
         # Grid key for deduplication
         gx = int(point.x / GRID_SIZE)
@@ -788,11 +892,30 @@ class Hybrid3DMapper:
             existing.observations += 1
             existing.last_seen = now
 
-            # Mark as static if seen enough times
-            if existing.observations >= MIN_OBSERVATIONS:
-                existing.is_static = True
+            # Track observer position (where robot was when it saw this point)
+            if existing.observer_positions is None:
+                existing.observer_positions = []
+            existing.observer_positions.append((robot_x, robot_y, now))
+            # Keep only recent observations
+            if len(existing.observer_positions) > MAX_OBSERVER_HISTORY:
+                existing.observer_positions = existing.observer_positions[-MAX_OBSERVER_HISTORY:]
 
-            # Update existing point
+            # Update motion score
+            existing.motion_score = compute_motion_score(existing)
+
+            # Classify and update is_static based on dynamic classification
+            classification = classify_point(existing)
+            if classification == "static":
+                existing.is_static = True
+                # Reduce confidence penalty for dynamic behavior if now static
+                if existing.motion_score < 0.2:
+                    existing.confidence = min(1.0, existing.confidence * 1.1)
+            elif classification == "dynamic":
+                existing.is_static = False
+                # Reduce confidence for dynamic objects
+                existing.confidence *= 0.9
+
+            # Update existing point position/color
             if update_color or point.confidence > existing.confidence:
                 # Running average of position (weighted by observations)
                 n = existing.observations
@@ -813,7 +936,11 @@ class Hybrid3DMapper:
             # New point - starts with 1 observation
             point.observations = 1
             point.last_seen = now
-            point.is_static = True  # All points are static immediately - build map fast!
+            point.is_static = False  # New points start as uncertain, not static
+            point.expected_observations = 1
+            point.missed_observations = 0
+            point.motion_score = 0.5  # Unknown initially
+            point.observer_positions = [(robot_x, robot_y, now)]
 
             # Limit total points - remove oldest non-static or decayed points first
             if len(self.accumulated_points) >= MAX_POINTS:
@@ -825,29 +952,43 @@ class Hybrid3DMapper:
         self.stats["static_points"] = len([p for p in self.accumulated_points.values() if p.is_static])
 
     def _cleanup_old_points(self, now: float):
-        """Remove points that haven't been seen recently (likely moving objects)"""
+        """Remove points that haven't been seen recently, with faster decay for dynamic objects"""
         to_remove = []
+        dynamic_removed = 0
+        static_kept = 0
 
         for key, point in self.accumulated_points.items():
             age = now - point.last_seen
 
             # NEVER remove static/confirmed points - they are the map!
             if point.is_static and point.observations >= CONFIRM_THRESHOLD:
+                static_kept += 1
                 continue
 
-            # Remove transient points not seen for REMOVAL_TIME
-            if age > REMOVAL_TIME:
+            # Calculate effective decay time based on motion score
+            # Dynamic points (high motion_score) decay faster
+            if point.motion_score > MOTION_SCORE_DYNAMIC:
+                effective_decay = DECAY_TIME / DYNAMIC_DECAY_MULTIPLIER  # 75 seconds for dynamic
+                effective_removal = REMOVAL_TIME / DYNAMIC_DECAY_MULTIPLIER  # 15 minutes for dynamic
+            else:
+                effective_decay = DECAY_TIME  # 5 minutes for static
+                effective_removal = REMOVAL_TIME  # 1 hour for static
+
+            # Remove transient points not seen for their removal time
+            if age > effective_removal:
                 to_remove.append(key)
+                if point.motion_score > MOTION_SCORE_DYNAMIC:
+                    dynamic_removed += 1
             # Also remove non-static points that are decaying
-            elif not point.is_static and age > DECAY_TIME:
+            elif not point.is_static and age > effective_decay:
                 to_remove.append(key)
 
         # Only remove more points if we're WAY over the limit
         if len(self.accumulated_points) > MAX_POINTS * 1.1 and len(to_remove) < 500:
-            # Sort by (is_static, observations) - remove non-static low-observation first
+            # Sort by (is_static, -motion_score, observations) - remove dynamic low-observation first
             sorted_points = sorted(
                 self.accumulated_points.items(),
-                key=lambda x: (x[1].is_static, x[1].observations)
+                key=lambda x: (x[1].is_static, -x[1].motion_score, x[1].observations)
             )
             excess = len(self.accumulated_points) - MAX_POINTS
             for key, pt in sorted_points[:excess]:
@@ -1022,17 +1163,17 @@ class Hybrid3DMapper:
         pending_count = 0
         filtered_count = 0
 
-        # ======== AGGRESSIVE QUALITY FILTERS ========
-        # LIDAR is accurate, monocular depth is noisy - filter heavily!
-        MIN_OBSERVATIONS = 5       # Must be seen 5+ times (removes single-frame noise)
-        MIN_CONFIDENCE = 0.6       # Filters out monocular (0.3) but keeps LIDAR (0.9)
-        MIN_HEIGHT = 0.10          # 10cm above floor (removes floor noise)
-        MAX_HEIGHT = 2.2           # 2.2m max (removes ceiling, keep walls only)
-        VOXEL_SIZE = 0.05          # 5cm voxel grid - coarser = cleaner
-        LIDAR_PRIORITY = True      # Always include LIDAR points even with fewer observations
+        # ======== QUALITY FILTERS - REALTIME MAPPING ========
+        MIN_OBSERVATIONS_LIDAR = 1   # Show LIDAR immediately
+        MIN_OBSERVATIONS_MONO = 2    # Show mono after 2 observations
+        MIN_CONFIDENCE = 0.2         # Include mono depth
+        MIN_HEIGHT = 0.10            # 10cm above floor
+        MAX_HEIGHT = 2.2             # 2.2m max
+        VOXEL_SIZE = 0.10            # 10cm voxel grid - clean
+        LIDAR_PRIORITY = True
 
-        # Limit points to prevent WebSocket overflow
-        MAX_SEND_POINTS = 30000    # Reduced for cleaner UI
+        # Limit points
+        MAX_SEND_POINTS = 8000
 
         # Sort by confidence and observations for priority
         sorted_points = sorted(
@@ -1045,24 +1186,24 @@ class Hybrid3DMapper:
         voxel_grid = set()
 
         for p in sorted_points:
-            # Only send points that have been seen enough times (static objects)
-            if not p.is_static:
+            # Count static vs pending for stats
+            if p.is_static:
+                static_count += 1
+            else:
                 pending_count += 1
-                continue
-
-            static_count += 1
+            # Show ALL points during active mapping (filter by observations instead)
 
             # ======== APPLY QUALITY FILTERS ========
             # LIDAR points get priority - they are accurate!
             is_lidar = p.source == "lidar"
 
-            # 1. Observation filter - relax for LIDAR (accurate), strict for mono (noisy)
-            min_obs = 2 if is_lidar else MIN_OBSERVATIONS  # LIDAR needs only 2 obs
+            # 1. Observation filter - per-source thresholds
+            min_obs = MIN_OBSERVATIONS_LIDAR if is_lidar else MIN_OBSERVATIONS_MONO
             if p.observations < min_obs:
                 filtered_count += 1
                 continue
 
-            # 2. Confidence filter - LIDAR always passes (0.9 > 0.6)
+            # 2. Confidence filter - now includes monocular depth (0.3 > 0.2)
             if p.confidence < MIN_CONFIDENCE:
                 filtered_count += 1
                 continue
@@ -1085,21 +1226,25 @@ class Hybrid3DMapper:
             # Passed all filters - add to output
             if len(points) < MAX_SEND_POINTS:
                 # Compact format: use arrays instead of dicts to save bandwidth
+                # NEW: Include motion_score as 0-100 int for dynamic object visualization
+                # IMPORTANT: Convert all to native Python types to avoid JSON UTF-8 issues
+                motion_pct = int(p.motion_score * 100) if hasattr(p, 'motion_score') else 0
                 points.append([
-                    round(p.x, 2), round(p.y, 2), round(p.z, 2),
-                    p.r, p.g, p.b,
-                    p.observations  # Include obs count for UI filtering
+                    float(round(p.x, 2)), float(round(p.y, 2)), float(round(p.z, 2)),
+                    int(p.r), int(p.g), int(p.b),
+                    int(p.observations),  # Include obs count for UI filtering
+                    int(motion_pct)       # 0 = static, 100 = definitely moving
                 ])
 
         return {
             "type": "accumulated_map",
             "points": points,
-            "total": len(points),
-            "static_points": static_count,
-            "pending_points": pending_count,
-            "filtered_points": filtered_count,
-            "stats": self.stats,
-            "format": "compact"  # [x, y, z, r, g, b, obs] arrays
+            "total": int(len(points)),
+            "static_points": int(static_count),
+            "pending_points": int(pending_count),
+            "filtered_points": int(filtered_count),
+            "stats": {k: int(v) for k, v in self.stats.items()},  # Ensure native ints
+            "format": "compact_v2"  # [x, y, z, r, g, b, obs, motion] arrays
         }
 
     def clear_map(self):
@@ -1565,7 +1710,7 @@ async def handle_hybrid_connection():
                     if len(mapper.accumulated_points) > 50:
                         map_data = mapper.get_map_data()
                         try:
-                            map_json = json.dumps(map_data)
+                            map_json = json.dumps(map_data, ensure_ascii=True)
                             await ws.send(map_json)
                             print(f"[DEBUG] Sent {len(map_json)} bytes to VPS", flush=True)
                         except Exception as e:

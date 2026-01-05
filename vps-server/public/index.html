@@ -523,8 +523,6 @@
           </div>
           <!-- Speech Toggle -->
           <button id="speechToggle" onclick="toggleSpeech()" style="padding:2px 6px;border:1px solid rgba(255,255,255,0.3);background:rgba(0,0,0,0.4);border-radius:10px;font-size:11px;cursor:pointer;" title="Speech">🗣️</button>
-          <!-- Depth Toggle -->
-          <span id="depthToggle1" onclick="toggleDepthView(1)" style="padding:2px 5px;border-radius:3px;cursor:pointer;background:#0f8;color:#000;font-size:7px;font-weight:600;">DEPTH</span>
         </div>
         <!-- Row 2b: OCR Controls (hidden by default) -->
         <div id="ocrControlsHeader" style="display:none;align-items:center;justify-content:center;gap:8px;">
@@ -569,7 +567,6 @@
     <div class="cam-wrapper">
       <div class="cam-label-centered" style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">
         <span>&#9660; REAR CAM</span>
-        <span id="depthToggle2" onclick="toggleDepthView(2)" style="padding:1px 4px;border-radius:2px;cursor:pointer;background:#0f8;color:#000;font-size:8px;" title="Toggle Depth View">DEPTH ON</span>
       </div>
       <div class="cam-container" id="cam2-container">
         <div class="cam-video">
@@ -761,39 +758,36 @@
   <div class="light-cam-wide glass">
     <div class="lidar3d-container" id="lidar3dContainer">
       <!-- Three.js renders here (browser GPU) -->
-      <!-- GPU Stream from Mac (hidden by default) -->
-      <img id="gpuStreamImg" src="/gpu-stream" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;z-index:5;">
       <div class="lidar3d-overlay" style="pointer-events:none;">
-        <!-- LIDAR status and buttons floating on grid -->
-        <div class="lidar-status" id="lidar3dStatus">LIDAR: --</div>
-        <div class="lidar-btns-row" style="pointer-events:auto;">
+        <!-- Top bar: LIDAR status, Heading/GPS, Fullscreen - centered -->
+        <div style="position:absolute;top:6px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;pointer-events:auto;z-index:20;">
+          <!-- LIDAR status -->
+          <div id="lidar3dStatus" style="background:rgba(0,0,0,0.7);color:#0f8;padding:3px 8px;border-radius:4px;font-size:10px;font-family:monospace;white-space:nowrap;">LIDAR: --</div>
+          <!-- Compact Heading + GPS -->
+          <div id="compassGpsDisplay" style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.75);border:1px solid rgba(0,255,136,0.4);border-radius:6px;padding:4px 8px;">
+            <!-- Mini Compass -->
+            <div style="position:relative;width:28px;height:28px;border:1px solid #0f8;border-radius:50%;">
+              <div id="compassNeedle" style="width:2px;height:10px;background:linear-gradient(to bottom, #f44 50%, #aaa 50%);position:absolute;left:50%;top:4px;margin-left:-1px;transform-origin:bottom center;transition:transform 0.15s;"></div>
+              <div style="position:absolute;top:0px;left:50%;transform:translateX(-50%);font-size:6px;color:#f44;font-weight:bold;">N</div>
+            </div>
+            <!-- Heading + GPS text -->
+            <div style="font-size:10px;color:#0f8;line-height:1.2;">
+              <div style="font-weight:bold;"><span id="compassHeading">0</span>° <span id="compassDir" style="color:#5af;">N</span></div>
+              <div style="color:#666;font-size:8px;">GPS <span id="gpsStatus" style="color:#f44;">--</span></div>
+            </div>
+            <span id="calState" style="display:none;"></span>
+            <span id="gpsSats" style="display:none;">0</span>
+            <span id="gpsLat" style="display:none;">0</span>
+            <span id="gpsLon" style="display:none;">0</span>
+          </div>
+          <!-- Fullscreen button -->
           <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen" style="pointer-events:auto;">⛶</button>
-          <button id="gpuToggleBtn" onclick="toggleGpuStream()" title="Toggle GPU Rendering" style="background:rgba(20,40,60,0.8);border:1px solid #0af;color:#0af;padding:2px 6px;border-radius:4px;font-size:10px;cursor:pointer;margin-left:5px;">GPU</button>
         </div>
         <!-- Bottom control bar -->
         <div style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:20;">
           <button onclick="window.lidar3dModule && window.lidar3dModule.clearAllPoints()" style="background:rgba(40,20,20,0.8);border:1px solid #f66;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">RESET</button>
           <button id="mapModeBtn" onclick="toggleMapMode()" style="background:rgba(20,30,50,0.8);border:1px solid #5af;color:#5af;padding:3px 10px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP</button>
           <button id="emergencyStopBtn" onclick="emergencyStopMapping()" style="background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
-        </div>
-        <!-- Compass and GPS combined - above ultrasonic badges -->
-        <div id="compassGpsDisplay" style="position:absolute;bottom:90px;right:10px;background:rgba(0,0,0,0.75);border:1px solid rgba(0,255,136,0.4);border-radius:8px;padding:8px;display:flex;align-items:center;gap:12px;">
-          <!-- Compass -->
-          <div style="position:relative;width:50px;height:50px;border:1px solid #0f8;border-radius:50%;">
-            <div id="compassNeedle" style="width:3px;height:18px;background:linear-gradient(to bottom, #f44 50%, #aaa 50%);position:absolute;left:50%;top:8px;margin-left:-1.5px;transform-origin:bottom center;transition:transform 0.15s;"></div>
-            <div style="position:absolute;top:1px;left:50%;transform:translateX(-50%);font-size:0.4rem;color:#f44;font-weight:bold;">N</div>
-            <div style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);font-size:0.35rem;color:#666;">S</div>
-            <div style="position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:0.35rem;color:#666;">W</div>
-            <div style="position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:0.35rem;color:#666;">E</div>
-          </div>
-          <!-- Heading + GPS -->
-          <div style="font-size:0.55rem;color:#0f8;line-height:1.4;">
-            <div style="font-weight:bold;font-size:0.75rem;"><span id="compassHeading">0</span>° <span id="compassDir" style="color:#5af;">N</span></div>
-            <div style="color:#888;font-size:0.45rem;">GPS <span id="gpsStatus" style="color:#f44;">--</span> <span id="gpsSats" style="color:#fc0;">0</span>sat</div>
-            <div style="color:#5af;font-size:0.4rem;"><span id="gpsLat">0.00000</span>, <span id="gpsLon">0.00000</span></div>
-          </div>
-          <!-- Hidden for JS compatibility -->
-          <span id="calState" style="display:none;"></span>
         </div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
@@ -1281,48 +1275,6 @@ function speakOCR() {
   speechSynthesis.speak(utterance);
   console.log('[OCR] Speaking:', lastOCRText.substring(0, 50) + '...');
 }
-
-// ========== GPU STREAM TOGGLE ==========
-let gpuStreamActive = false;
-
-function toggleGpuStream() {
-  gpuStreamActive = !gpuStreamActive;
-  const btn = document.getElementById('gpuToggleBtn');
-  const img = document.getElementById('gpuStreamImg');
-  const canvas = document.querySelector('#lidar3dContainer canvas');
-
-  if (gpuStreamActive) {
-    // Show GPU stream, hide Three.js canvas
-    img.style.display = 'block';
-    img.src = '/gpu-stream?' + Date.now(); // Force reload
-    if (canvas) canvas.style.display = 'none';
-    btn.style.background = 'rgba(0,170,255,0.9)';
-    btn.style.color = '#000';
-    btn.textContent = 'GPU ON';
-    console.log('[GPU] Switched to Mac GPU rendering');
-  } else {
-    // Show Three.js canvas, hide GPU stream
-    img.style.display = 'none';
-    img.src = ''; // Stop stream
-    if (canvas) canvas.style.display = 'block';
-    btn.style.background = 'rgba(20,40,60,0.8)';
-    btn.style.color = '#0af';
-    btn.textContent = 'GPU';
-    console.log('[GPU] Switched to browser rendering');
-  }
-}
-
-// Check GPU renderer status on load
-fetch('/gpu-status').then(r => r.json()).then(status => {
-  const btn = document.getElementById('gpuToggleBtn');
-  if (status.connected) {
-    btn.title = 'GPU Renderer Connected - Click to toggle';
-    btn.style.borderColor = '#0f0';
-  } else {
-    btn.title = 'GPU Renderer not connected';
-    btn.style.opacity = '0.5';
-  }
-}).catch(() => {});
 
 // ========== AUTONOMOUS MAP MODE ==========
 let mapModeActive = false;
