@@ -1541,38 +1541,45 @@ function updateAccumulatedMap(data) {
   const positions = [];
   const colors = [];
   const sizes = [];
+  const alphas = [];  // NEW: Per-point opacity for dynamic objects
 
-  // Support both compact format [x, y, z, r, g, b] and object format {x, y, z, r, g, b}
-  const isCompact = data.format === 'compact' || (points.length > 0 && Array.isArray(points[0]));
+  // Support compact_v2 format [x, y, z, r, g, b, obs, motion] and legacy formats
+  const isCompactV2 = data.format === 'compact_v2';
+  const isCompact = isCompactV2 || data.format === 'compact' || (points.length > 0 && Array.isArray(points[0]));
 
   let filteredCount = 0;
   let skippedObs = 0;
   let skippedConf = 0;
   let skippedZ = 0;
+  let dynamicCount = 0;  // Track dynamic objects
 
   for (const p of points) {
-    let px, py, pz, pr, pg, pb, pobs, pconf;
+    let px, py, pz, pr, pg, pb, pobs, pmotion;
 
     if (isCompact) {
-      // Compact format: [x, y, z, r, g, b, obs?, conf?]
-      [px, py, pz, pr, pg, pb, pobs, pconf] = p;
+      // Compact format: [x, y, z, r, g, b, obs, motion?]
+      // compact_v2: motion is 0-100 (0 = static, 100 = dynamic)
+      // legacy compact: 8th element might be conf (0-1 float)
+      [px, py, pz, pr, pg, pb, pobs, pmotion] = p;
       pobs = pobs || 1;
-      pconf = pconf || 1.0;
+
+      // Detect format: compact_v2 sends motion as 0-100 int, legacy sent conf as 0-1 float
+      if (isCompactV2) {
+        pmotion = pmotion || 0;  // 0-100, default static
+      } else {
+        pmotion = 0;  // Legacy format - treat as static
+      }
     } else {
       // Object format: {x, y, z, r, g, b, obs, c}
       px = p.x; py = p.y; pz = p.z;
       pr = p.r; pg = p.g; pb = p.b;
       pobs = p.obs || 1;
-      pconf = p.c || 1.0;
+      pmotion = p.motion || 0;
     }
 
     // Filter by quality thresholds
     if (pobs < mapMinObservations) {
       skippedObs++;
-      continue;
-    }
-    if (pconf < mapMinConfidence) {
-      skippedConf++;
       continue;
     }
     if (pz < mapMinZ || pz > mapMaxZ) {
@@ -1582,28 +1589,63 @@ function updateAccumulatedMap(data) {
 
     filteredCount++;
 
+    // Track dynamic objects
+    const motionScore = pmotion / 100;  // Normalize to 0-1
+    if (motionScore > 0.4) dynamicCount++;
+
     // Convert to Three.js coordinates
     // px, py are world coords in meters, pz is height
     positions.push(px, pz || 0.15, -py);
 
     // Use actual RGB colors from camera imagery (0-255 -> 0-1)
-    let r, g, b;
+    // NEW: Apply color tinting based on motion score
+    let r, g, b, alpha;
     if (pr !== undefined && pg !== undefined && pb !== undefined) {
       // Boost brightness for better visibility
       const boost = 1.15;
       r = Math.min((pr / 255) * boost, 1);
       g = Math.min((pg / 255) * boost, 1);
       b = Math.min((pb / 255) * boost, 1);
+
+      // Apply dynamic object tinting based on motion score
+      if (motionScore < 0.2) {
+        // STATIC: Use actual color, full opacity
+        alpha = 1.0;
+      } else if (motionScore < 0.5) {
+        // UNCERTAIN: Slight yellow tint, slightly reduced opacity
+        const tintAmount = (motionScore - 0.2) / 0.3;  // 0-1 within this range
+        r = r * (1 - tintAmount * 0.2) + tintAmount * 0.2;  // Blend toward yellow
+        g = g * (1 - tintAmount * 0.2) + tintAmount * 0.2;
+        b = b * (1 - tintAmount * 0.3);  // Reduce blue
+        alpha = 0.9 - tintAmount * 0.1;  // 0.9 to 0.8
+      } else {
+        // DYNAMIC: Orange/red tint, pulsing opacity
+        const tintAmount = (motionScore - 0.5) / 0.5;  // 0-1 within this range
+        r = r * (1 - tintAmount * 0.4) + tintAmount * 0.4;  // Strong orange
+        g = g * (1 - tintAmount * 0.3);  // Reduce green
+        b = b * (1 - tintAmount * 0.5);  // Reduce blue more
+        // Pulsing effect based on time (will update on next render)
+        alpha = 0.5 + 0.3 * Math.sin(Date.now() / 200 + px * 10);
+      }
     } else {
       // Fallback color
       r = 0.5; g = 0.8; b = 0.9;
+      alpha = 1.0;
     }
     colors.push(r, g, b);
+    alphas.push(alpha);
 
     // Size based on observation count - more observed = larger/more confident
+    // Dynamic objects rendered slightly smaller
     const baseSize = mapRenderMode === 'splats' ? 0.10 : 0.06;
     const obsBonus = Math.min(pobs / 20, 1) * 0.04;  // Up to +0.04 for high obs
-    sizes.push(baseSize + obsBonus);
+    const dynamicPenalty = motionScore > 0.4 ? 0.02 : 0;  // Slightly smaller for dynamic
+    sizes.push(baseSize + obsBonus - dynamicPenalty);
+  }
+
+  // Log dynamic object stats
+  if (dynamicCount > 0) {
+    console.log(`[3D MAP] Dynamic objects detected: ${dynamicCount}/${filteredCount}`);
   }
 
   console.log(`[3D MAP] Filtered: ${filteredCount}/${points.length} (skipped: obs=${skippedObs}, conf=${skippedConf}, z=${skippedZ})`);
@@ -1617,6 +1659,7 @@ function updateAccumulatedMap(data) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('customColor', new THREE.Float32BufferAttribute(colors, 3));
   geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+  geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));  // Per-point opacity for dynamic objects
 
   if (mapRenderMode === 'splats') {
     // Use custom shader for photorealistic splats
@@ -1656,8 +1699,12 @@ function updateAccumulatedMap(data) {
   const statusEl = document.getElementById('map3dStatus');
   if (statusEl) {
     const stats = data.stats || {};
-    statusEl.textContent = `3D: ${points.length.toLocaleString()} pts | scale=${stats.depth_scale || '?'}`;
+    const dynamicInfo = dynamicCount > 0 ? ` | dynamic=${dynamicCount}` : '';
+    statusEl.textContent = `3D: ${points.length.toLocaleString()} pts${dynamicInfo} | scale=${stats.depth_scale || '?'}`;
   }
+
+  // Store dynamic count globally for other UI elements
+  window.dynamicObjectCount = dynamicCount;
 }
 
 // Create surface approximation using billboarded quads
