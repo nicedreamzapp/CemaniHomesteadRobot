@@ -14,6 +14,14 @@
 
 [Demo Videos](#demo) | [3D Mapping](#-3d-mapping--sensor-fusion) | [AI Detection](#-ai-object-detection) | [Web Interface](#-web-interface) | [Hardware](#-hardware)
 
+---
+
+### Command Center Live
+
+![Command Center](docs/command-center.png)
+
+*Real-time web interface: dual PTZ cameras with AI object detection, 3D LIDAR point cloud mapping, and tank drive controls*
+
 </div>
 
 ---
