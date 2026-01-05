@@ -16,6 +16,10 @@
 
 ---
 
+![Robot Diagram](docs/robot-diagram.png)
+
+---
+
 ### Command Center Live
 
 ![Command Center](docs/command-center.png)
