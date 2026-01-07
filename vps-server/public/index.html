@@ -1387,10 +1387,18 @@ async function toggleMap1Mode() {
   // Helper: pan both cameras (exact sequence from mapper)
   async function panCameras() {
     if (map1Cancelled) return;
-    setStatus('Scanning cameras...');
+    setStatus('Centering cameras...');
     var socket = window.ws;
     if (!socket || socket.readyState !== 1) return;
 
+    // First, send cameras to HOME position (center)
+    for (let cam = 1; cam <= 2; cam++) {
+      socket.send(JSON.stringify({ type: 'cam_ptz', camera: cam, action: 'absolute', pan: 0, tilt: 0, zoom: 0 }));
+    }
+    console.log('[PTZ] Sent cameras to HOME position');
+    await new Promise(r => setTimeout(r, 2000));  // Wait 2 sec for cameras to center
+
+    setStatus('Scanning cameras...');
     const PTZ_SPEED = 0.5;
     const MOVE_TIME = 1000;  // 1 second per click
     const SETTLE_TIME = 300;  // ms settle
