@@ -562,6 +562,16 @@ function handlePTZ(cam, msg, usePtzSocket = false) {
     case 'goto_preset':
       body = `<tptz:GotoPreset><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken><tptz:PresetToken>${msg.preset}</tptz:PresetToken></tptz:GotoPreset>`;
       break;
+    case 'set_home':
+      // Save current position as home position
+      body = `<tptz:SetHomePosition><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken></tptz:SetHomePosition>`;
+      console.log(`[PTZ] Cam${cam} - SAVING current position as HOME`);
+      break;
+    case 'go_home':
+      // Go to saved home position
+      body = `<tptz:GotoHomePosition><tptz:ProfileToken>IPCProfilesToken0</tptz:ProfileToken></tptz:GotoHomePosition>`;
+      console.log(`[PTZ] Cam${cam} - Going to HOME position`);
+      break;
     case 'absolute':
       // Sricam cameras DON'T support AbsoluteMove!
       // Simulate by going home (preset 1), then using timed ContinuousMove
