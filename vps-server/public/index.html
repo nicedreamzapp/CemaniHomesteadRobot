@@ -785,9 +785,9 @@
         </div>
         <!-- Bottom control bar -->
         <div style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:20;">
-          <button onclick="window.lidar3dModule && window.lidar3dModule.clearAllPoints()" style="background:rgba(40,20,20,0.8);border:1px solid #f66;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">RESET</button>
-          <button id="mapModeBtn" onclick="toggleMapMode()" style="background:rgba(20,30,50,0.8);border:1px solid #5af;color:#5af;padding:3px 10px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP</button>
-          <button id="emergencyStopBtn" onclick="emergencyStopMapping()" style="background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
+          <button id="map1Btn" onclick="event.stopPropagation(); toggleMap1Mode()" title="Full Room Scan: 3x120° turns with camera sweeps" style="background:rgba(30,50,20,0.8);border:1px solid #0f8;color:#0f8;padding:3px 10px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP 1</button>
+          <button id="emergencyStopBtn" onclick="event.stopPropagation(); emergencyStopMapping()" style="background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
+          <button onclick="event.stopPropagation(); window.lidar3dModule && window.lidar3dModule.clearAllPoints()" title="Clear current session (map auto-corrects via fingerprints)" style="background:rgba(30,30,30,0.6);border:1px solid #666;color:#888;padding:2px 5px;border-radius:3px;font-size:7px;cursor:pointer;">CLR</button>
         </div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
@@ -956,9 +956,9 @@
 <script src="js/cameras-ptz.js?v=1"></script>
 <script src="js/lidar2d.js?v=1"></script>
 <script src="js/occupancy-grid.js?v=1"></script>
-<script src="js/lidar3d.js?v=5"></script>
+<script src="js/lidar3d.js?v=8"></script>
 <script src="js/sonar-display.js?v=1"></script>
-<script src="js/websocket.js?v=60"></script>
+<script src="js/websocket.js?v=66"></script>
 <script>
 // Map save/load prompts
 function saveMapPrompt() {
@@ -1289,14 +1289,18 @@ function toggleMapMode() {
   console.log('[MAP] toggleMapMode called, mapModeActive:', mapModeActive);
 
   if (mapModeActive) {
-    // IMMEDIATELY change button appearance
-    btn.style.background = 'rgba(90,170,255,0.9)';
-    btn.style.color = '#000';
-    btn.style.borderColor = '#5af';
-    btn.textContent = 'AUTO';
+    // IMMEDIATELY change button appearance - make it VERY obvious
+    console.log('[MAP] Activating AUTO mode...');
+    if (btn) {
+      btn.style.background = '#00ff00';  // Bright green - very obvious
+      btn.style.color = '#000';
+      btn.style.borderColor = '#0f0';
+      btn.textContent = 'AUTO';
+      console.log('[MAP] Button changed to AUTO, bg=green');
+    }
     if (status) status.style.display = 'block';
     if (statusText) {
-      statusText.textContent = 'Autonomous Navigation';
+      statusText.textContent = 'Starting...';
       statusText.style.color = '#5af';
     }
 
@@ -1309,7 +1313,15 @@ function toggleMapMode() {
       console.log('[MAP] ✓ Sent START command');
     } else {
       console.error('[MAP] WebSocket not ready!');
-      // Still keep button in AUTO state - might connect later
+      // Revert button since we can't send
+      mapModeActive = false;
+      btn.style.background = 'rgba(20,30,50,0.8)';
+      btn.style.color = '#5af';
+      btn.textContent = 'MAP';
+      if (statusText) {
+        statusText.textContent = 'WebSocket not connected!';
+        statusText.style.color = '#f44';
+      }
     }
   } else {
     // Deactivate autonomous - back to manual
@@ -1331,6 +1343,160 @@ function toggleMapMode() {
 
 // Ensure function is globally accessible
 window.toggleMapMode = toggleMapMode;
+
+// ========== MAP 1: FULL ROOM SCAN (Direct Control) ==========
+let map1ModeActive = false;
+let map1Cancelled = false;
+
+async function toggleMap1Mode() {
+  var btn = document.getElementById('map1Btn');
+  var status = document.getElementById('mapModeStatus');
+  var statusText = document.getElementById('mapStatusText');
+
+  if (map1ModeActive) {
+    // Cancel scan
+    map1Cancelled = true;
+    map1ModeActive = false;
+    if (btn) {
+      btn.style.background = 'rgba(30,50,20,0.8)';
+      btn.style.color = '#0f8';
+      btn.textContent = 'MAP 1';
+    }
+    if (statusText) statusText.textContent = 'Cancelled';
+    setTimeout(() => { if (status) status.style.display = 'none'; }, 1000);
+    return;
+  }
+
+  map1ModeActive = true;
+  map1Cancelled = false;
+  console.log('[MAP1] Starting Full Room Scan (3x120° + camera pans)');
+
+  if (btn) {
+    btn.style.background = '#00ff88';
+    btn.style.color = '#000';
+    btn.textContent = 'STOP';
+  }
+  if (status) status.style.display = 'block';
+
+  // Helper: update status
+  function setStatus(msg) {
+    if (statusText) { statusText.textContent = msg; statusText.style.color = '#0f8'; }
+    console.log('[MAP1]', msg);
+  }
+
+  // Helper: pan both cameras (exact sequence from mapper)
+  async function panCameras() {
+    if (map1Cancelled) return;
+    setStatus('Scanning cameras...');
+    var socket = window.ws;
+    if (!socket || socket.readyState !== 1) return;
+
+    const PTZ_SPEED = 0.5;
+    const MOVE_TIME = 1000;  // 1 second per click
+    const SETTLE_TIME = 300;  // ms settle
+
+    // Helper: one click both cameras
+    async function clickBoth(pan, tilt, clickNum, dir) {
+      console.log('[PTZ] Click ' + clickNum + ' ' + dir + ' - START');
+      for (let cam = 1; cam <= 2; cam++) {
+        socket.send(JSON.stringify({ type: 'cam_ptz', camera: cam, action: 'move', pan: pan, tilt: tilt, zoom: 0 }));
+      }
+      await new Promise(r => setTimeout(r, MOVE_TIME));
+      for (let cam = 1; cam <= 2; cam++) {
+        socket.send(JSON.stringify({ type: 'cam_ptz', camera: cam, action: 'stop' }));
+      }
+      console.log('[PTZ] Click ' + clickNum + ' ' + dir + ' - STOP');
+      await new Promise(r => setTimeout(r, SETTLE_TIME));
+    }
+
+    // Helper: do N clicks in direction
+    async function doClicks(direction, n) {
+      console.log('[PTZ] === ' + n + ' clicks ' + direction.toUpperCase() + ' ===');
+      let pan = 0, tilt = 0;
+      if (direction === 'left') pan = -PTZ_SPEED;
+      else if (direction === 'right') pan = PTZ_SPEED;
+      else if (direction === 'up') tilt = PTZ_SPEED;
+      else if (direction === 'down') tilt = -PTZ_SPEED;
+      for (let i = 0; i < n; i++) {
+        if (map1Cancelled) return;
+        await clickBoth(pan, tilt, i+1, direction);
+      }
+    }
+
+    // 3 left, 3 back to center
+    await doClicks('left', 3);
+    await doClicks('right', 3);
+
+    // 3 right, 3 back to center
+    await doClicks('right', 3);
+    await doClicks('left', 3);
+
+    // 3 up, 3 back to center
+    await doClicks('up', 3);
+    await doClicks('down', 3);
+
+    // 3 down, 3 back to center
+    await doClicks('down', 3);
+    await doClicks('up', 3);
+  }
+
+  // Helper: spin robot 120 degrees
+  async function spinRobot() {
+    if (map1Cancelled) return;
+    setStatus('Spinning robot 120°...');
+    var socket = window.ws;
+    if (socket && socket.readyState === 1) {
+      socket.send(JSON.stringify({ type: 'serial_cmd', cmd: 'MOVE,120,0' }));
+    }
+    // Wait for turn (120° at ~100ms/degree = 12 seconds, add buffer)
+    await new Promise(r => setTimeout(r, 14000));
+  }
+
+  try {
+    // Position 1 (0°)
+    setStatus('Position 1/3 (0°)');
+    await panCameras();
+    if (map1Cancelled) throw 'cancelled';
+
+    // Spin to Position 2 (120°)
+    await spinRobot();
+    if (map1Cancelled) throw 'cancelled';
+
+    // Position 2 (120°)
+    setStatus('Position 2/3 (120°)');
+    await panCameras();
+    if (map1Cancelled) throw 'cancelled';
+
+    // Spin to Position 3 (240°)
+    await spinRobot();
+    if (map1Cancelled) throw 'cancelled';
+
+    // Position 3 (240°)
+    setStatus('Position 3/3 (240°)');
+    await panCameras();
+    if (map1Cancelled) throw 'cancelled';
+
+    // Spin back to start (360° = 0°)
+    await spinRobot();
+    if (map1Cancelled) throw 'cancelled';
+
+    setStatus('Scan Complete!');
+    await new Promise(r => setTimeout(r, 2000));
+  } catch (e) {
+    if (e !== 'cancelled') console.error('[MAP1] Error:', e);
+  }
+
+  // Reset button
+  map1ModeActive = false;
+  if (btn) {
+    btn.style.background = 'rgba(30,50,20,0.8)';
+    btn.style.color = '#0f8';
+    btn.textContent = 'MAP 1';
+  }
+  if (status) status.style.display = 'none';
+}
+
+window.toggleMap1Mode = toggleMap1Mode;
 
 // ========== VISUAL MAPPING ==========
 function startVisualScan(cameraId = 1) {
