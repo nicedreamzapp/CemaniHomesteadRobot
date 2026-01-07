@@ -99,26 +99,45 @@ LIDAR_HEIGHT = 0.70  # 70cm above ground
 LIDAR_OFFSET = np.array([0.15, LIDAR_HEIGHT, 0.0])  # Right side of robot
 
 # 3D mapping parameters - MAXIMUM QUALITY for beautiful maps
-GRID_SIZE = 0.015  # 1.5cm grid cells - DENSER for photorealistic look
+GRID_SIZE = 0.08  # 8cm grid cells - LARGER to eliminate "walls behind walls" from depth variance
 MAX_POINTS = 1000000  # 1M points for maximum detail like reference image
 POINT_MERGE_DISTANCE = 0.008  # 8mm - VERY tight merging for crisp edges
 
-# PTZ SCAN PATTERNS - triggered when robot stops during mapping
+# DYNAMIC OBJECT FILTERING - exclude moving things from map
+# Objects in this list will be excluded when detected
+DYNAMIC_OBJECT_CLASSES = {
+    # Living things that move
+    "person", "boy", "girl", "man", "woman", "human body", "human face",
+    "dog", "cat", "bird", "chicken", "duck", "goose", "turkey", "rabbit",
+    "horse", "cow", "sheep", "pig", "mouse", "rat",
+    # Vehicles
+    "car", "truck", "bicycle", "motorcycle", "bus",
+    # Objects that might be moved
+    "chair", "office chair", "stool"  # Remove if you want chairs mapped
+}
+DETECTION_BBOX_PADDING = 20  # Extra pixels around bbox to exclude
+DETECTION_EXPIRY_MS = 500  # Detections expire after 500ms
+
+# PTZ SCAN PATTERNS - CONTINUOUS scanning during mapping
 # Each position is (pan, tilt) in degrees, with dwell time in seconds
 # PER-CAMERA patterns to avoid seeing the 2020 frame
+
+# CONTINUOUS SCAN SETTINGS
+CONTINUOUS_PTZ_SCAN = True  # Enable continuous PTZ sweeping
+CONTINUOUS_SCAN_INTERVAL = 0.8  # Seconds between position changes
 
 # Camera 1 (front) is INSIDE the LIDAR tower - LIMITED field of view
 # Pan: -45 to +45 only (frame posts block further)
 # Tilt: can go all the way DOWN, only -75 UP max (negative=up, positive=down)
 CAM1_SCAN_PATTERNS = {
     "mapping": [
-        # Camera embedded in chassis - VERY limited range!
-        # Pan: max 15° left/right before hitting frame
-        # Tilt: NO down tilt (sees chassis), slight up only
-        (0, 0, 0.8),      # Center (forward)
-        (-15, 0, 0.8),    # Slight left
-        (15, 0, 0.8),     # Slight right
-        (0, 0, 0.5),      # Return to center
+        # Per user: -30 to +30 pan, down and 30 up
+        # But cam1 is limited - max 15° pan before hitting frame
+        (0, 0, 0.6),      # Center
+        (-15, 0, 0.6),    # Left (max for cam1)
+        (15, 0, 0.6),     # Right (max for cam1)
+        (0, -15, 0.6),    # Up 15° (limited by frame)
+        (0, 0, 0.4),      # Back to center
     ],
     "detailed": [
         (0, 0, 1.0),      # Center (forward)
@@ -130,15 +149,27 @@ CAM1_SCAN_PATTERNS = {
 }
 
 # Camera 2 (rear) is on external arm - FULL field of view
+# MAXIMUM COVERAGE: floors, ceilings, walls - everything!
 CAM2_SCAN_PATTERNS = {
     "mapping": [
-        # Full sweep - no obstructions
-        (0, 0, 0.8),      # Center
-        (-60, 0, 0.8),    # Left
-        (60, 0, 0.8),     # Right
-        (0, -25, 0.8),    # Up (can look higher)
-        (0, 20, 0.8),     # Down
-        (0, 0, 0.5),      # Return to center
+        # Full sweep for maximum coverage of floors/ceilings/walls
+        # Pan: -30 to +30, Tilt: -45 (ceiling) to +60 (floor)
+        (0, 0, 0.5),       # Center level
+        (-30, 0, 0.5),     # Left 30°
+        (30, 0, 0.5),      # Right 30°
+        (0, -45, 0.5),     # CEILING (up 45°)
+        (0, 60, 0.5),      # FLOOR (down 60°)
+        (-30, -45, 0.5),   # Left + ceiling
+        (30, -45, 0.5),    # Right + ceiling
+        (-30, 60, 0.5),    # Left + floor
+        (30, 60, 0.5),     # Right + floor
+        (0, -30, 0.5),     # Upper walls
+        (-30, -30, 0.5),   # Upper left
+        (30, -30, 0.5),    # Upper right
+        (0, 30, 0.5),      # Lower walls
+        (-30, 30, 0.5),    # Lower left
+        (30, 30, 0.5),     # Lower right
+        (0, 0, 0.3),       # Back to center
     ],
     "detailed": [
         (0, 0, 1.0),
@@ -174,7 +205,7 @@ COLOR_CONTRAST_BOOST = 1.4  # 40% more contrast - punchy colors
 COLOR_BRIGHTNESS_BOOST = 1.15  # 15% brighter
 
 # Point sampling density - MORE points per frame
-SAMPLE_DENSITY = 6  # Sample every 6th pixel (was ~12)
+SAMPLE_DENSITY = 4  # Sample every 4th pixel - MORE DETAIL with 64GB GPU
 
 # Depth calibration
 DEPTH_SCALE_DEFAULT = 4.0  # Initial depth scale for monocular
@@ -307,6 +338,10 @@ class Hybrid3DMapper:
         self.recent_camera_frames = {1: None, 2: None}
         self.camera_ptz = {1: (0, 0), 2: (0, 0)}  # (pan, tilt) degrees
 
+        # MAPPING CONTROL - can be started/stopped remotely from UI
+        self.mapping_active = False  # Start inactive, wait for UI command
+        self.mapping_paused_by_override = False  # Paused due to manual override
+
         # Depth calibration state
         self.depth_scale = DEPTH_SCALE_DEFAULT
         self.depth_calibration_samples = []
@@ -343,11 +378,96 @@ class Hybrid3DMapper:
         self.last_ptz_scan_time = 0
         self.ptz_scan_ws = None  # WebSocket to send PTZ commands through
 
+        # DYNAMIC OBJECT DETECTION - store current detections per camera
+        # Format: {cam_id: [(class_name, bbox, timestamp), ...]}
+        self.current_detections = {1: [], 2: []}
+
+        # MAPPING SEQUENCE STATE
+        self.mapping_sequence_active = False
+        self.current_heading = 0.0  # Track robot heading for spin commands
+        self.capture_frame_for_map = False  # Flag to capture frame at current camera position
+        self.frames_captured_this_position = 0  # Count frames captured at each position
+
         # Persistence - load saved walls on startup
         print("[INIT] About to load confirmed walls...", flush=True)
         if PERSISTENCE_ENABLED:
             self._load_confirmed_walls()
         print("[INIT] Mapper initialization complete!", flush=True)
+        print("[INIT] Waiting for MAP button to start mapping...", flush=True)
+
+    def start_mapping(self):
+        """Start active mapping mode - triggered by UI MAP button"""
+        self.mapping_active = True
+        self.mapping_paused_by_override = False
+        self.mapping_sequence_active = True  # Start the full mapping sequence
+        print("=" * 50)
+        print("[MAPPING] *** MAPPING STARTED ***")
+        print("[MAPPING] GPU processing ACTIVE")
+        print("[MAPPING] Full mapping sequence will begin!")
+        print("=" * 50)
+
+    def stop_mapping(self):
+        """Stop mapping mode - triggered by UI or manual stop"""
+        self.mapping_active = False
+        self.mapping_paused_by_override = False
+        print("=" * 50)
+        print("[MAPPING] *** MAPPING STOPPED ***")
+        print("[MAPPING] Entering standby mode")
+        print("=" * 50)
+        # Auto-save on stop
+        if PERSISTENCE_ENABLED:
+            self._save_confirmed_walls()
+
+    def pause_for_override(self):
+        """Temporarily pause mapping during manual override"""
+        if self.mapping_active and not self.mapping_paused_by_override:
+            self.mapping_paused_by_override = True
+            print("[MAPPING] Paused for manual override (Xbox/UI)")
+
+    def resume_from_override(self):
+        """Resume mapping after manual override ends"""
+        if self.mapping_active and self.mapping_paused_by_override:
+            self.mapping_paused_by_override = False
+            print("[MAPPING] Resumed from manual override - continuing from current position")
+
+    def update_detections(self, cam_id: int, detections: list):
+        """Update current detections for a camera. Called when DETECTIONS message received."""
+        now = time.time() * 1000  # ms
+        dynamic_dets = []
+        for det in detections:
+            class_name = det.get("class", "").lower()
+            # Only track dynamic objects (people, dogs, etc.)
+            if class_name in DYNAMIC_OBJECT_CLASSES:
+                bbox = det.get("bbox", {})
+                dynamic_dets.append({
+                    "class": class_name,
+                    "x1": bbox.get("x1", 0),
+                    "y1": bbox.get("y1", 0),
+                    "x2": bbox.get("x2", 0),
+                    "y2": bbox.get("y2", 0),
+                    "timestamp": now
+                })
+        self.current_detections[cam_id] = dynamic_dets
+        if dynamic_dets:
+            classes = [d["class"] for d in dynamic_dets]
+            print(f"[DETECT] Cam{cam_id}: {len(dynamic_dets)} dynamic objects: {classes}")
+
+    def is_pixel_in_detection(self, cam_id: int, u: int, v: int, img_w: int, img_h: int) -> bool:
+        """Check if a pixel falls within a detected dynamic object bounding box."""
+        now = time.time() * 1000
+        for det in self.current_detections.get(cam_id, []):
+            # Skip expired detections
+            if now - det["timestamp"] > DETECTION_EXPIRY_MS:
+                continue
+            # Scale bbox to image size (detections might be at different resolution)
+            x1 = det["x1"] - DETECTION_BBOX_PADDING
+            y1 = det["y1"] - DETECTION_BBOX_PADDING
+            x2 = det["x2"] + DETECTION_BBOX_PADDING
+            y2 = det["y2"] + DETECTION_BBOX_PADDING
+            # Check if pixel is inside bbox
+            if x1 <= u <= x2 and y1 <= v <= y2:
+                return True
+        return False
 
     def _load_confirmed_walls(self):
         """Load previously confirmed walls from file"""
@@ -428,7 +548,7 @@ class Hybrid3DMapper:
             # Load model with explicit device and dtype
             from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
-            model_name = "depth-anything/Depth-Anything-V2-Small-hf"
+            model_name = "depth-anything/Depth-Anything-V2-Large-hf"  # LARGE model - uses more GPU for best quality
             print(f"[DEPTH] Loading {model_name}...", flush=True)
 
             self.depth_processor = AutoImageProcessor.from_pretrained(model_name)
@@ -585,6 +705,8 @@ class Hybrid3DMapper:
 
         # Update expected observations for all points that SHOULD have been visible
         # This is the key to dynamic object detection!
+        # AGGRESSIVE: Remove mono points that LIDAR doesn't confirm
+        points_to_remove = []
         for key, point in self.accumulated_points.items():
             if should_expect_observation(point, pose.x, pose.y):
                 point.expected_observations += 1
@@ -593,6 +715,18 @@ class Hybrid3DMapper:
                     point.missed_observations += 1
                     # Update motion score
                     point.motion_score = compute_motion_score(point)
+
+                    # AGGRESSIVE REMOVAL: Mono points that LIDAR doesn't confirm
+                    # If LIDAR has scanned this area 3+ times and never sees it, DELETE IT
+                    if point.source == "mono" and not point.is_static:
+                        if point.expected_observations >= 3 and point.observations < 2:
+                            points_to_remove.append(key)
+
+        # Remove unconfirmed mono points
+        for key in points_to_remove:
+            del self.accumulated_points[key]
+        if points_to_remove:
+            print(f"[LIDAR-VALID] Removed {len(points_to_remove)} unconfirmed mono points")
 
         self.stats["lidar_points"] = len([p for p in self.accumulated_points.values() if p.source == "lidar"])
 
@@ -703,9 +837,9 @@ class Hybrid3DMapper:
         try:
             import torch
 
-            # Resize image for depth estimation (smaller = faster)
+            # Resize image for depth estimation - larger = better quality
             img = Image.fromarray(frame.image)
-            img_small = img.resize((518, 392))  # Optimal size for Depth Anything V2
+            img_small = img.resize((640, 480))  # Higher res for better depth accuracy
 
             # Preprocess on CPU, then move to GPU
             with torch.no_grad():
@@ -829,6 +963,10 @@ class Hybrid3DMapper:
                 if int(r) + int(g) + int(b) < 15:
                     continue
 
+                # DYNAMIC OBJECT FILTER: Skip pixels inside detected people/dogs/etc
+                if self.is_pixel_in_detection(cam_id, px, py, img_w, img_h):
+                    continue
+
                 # Project to camera 3D
                 x_cam = (u - cx) * d / fx
                 y_cam = (v - cy) * d / fy
@@ -879,11 +1017,54 @@ class Hybrid3DMapper:
         robot_x = self.robot_pose.x
         robot_y = self.robot_pose.y
 
+        # QUALITY FILTER: Reject low-confidence depth readings
+        MIN_CONFIDENCE = 0.3  # Reject points with <30% confidence
+        if point.confidence < MIN_CONFIDENCE:
+            return
+
+        # DISTANCE FILTER: Depth estimates get worse with distance
+        MAX_DEPTH_DISTANCE = 8.0  # Don't trust depths beyond 8 meters
+        point_dist = math.sqrt((point.x - robot_x)**2 + (point.y - robot_y)**2)
+        if point_dist > MAX_DEPTH_DISTANCE:
+            return
+
         # Grid key for deduplication
         gx = int(point.x / GRID_SIZE)
         gy = int(point.y / GRID_SIZE)
         gz = int(point.z / GRID_SIZE)
         key = f"{gx},{gy},{gz}"
+
+        # FALSE READING DETECTION: Check for same color in 3D neighborhood
+        # If we see the same color at nearby but different positions, keep only the closest one
+        COLOR_SIMILARITY_THRESHOLD = 50  # RGB distance threshold (more lenient)
+        CONFLICT_RANGE_XY = 2  # Check +/- 2 grid cells in XY
+        CONFLICT_RANGE_Z = 8   # Check +/- 8 grid cells in Z (depth varies more)
+
+        for dx in range(-CONFLICT_RANGE_XY, CONFLICT_RANGE_XY + 1):
+            for dy in range(-CONFLICT_RANGE_XY, CONFLICT_RANGE_XY + 1):
+                for dz in range(-CONFLICT_RANGE_Z, CONFLICT_RANGE_Z + 1):
+                    if dx == 0 and dy == 0 and dz == 0:
+                        continue  # Skip same cell
+                    check_key = f"{gx + dx},{gy + dy},{gz + dz}"
+                    if check_key in self.accumulated_points:
+                        existing = self.accumulated_points[check_key]
+                        # Calculate color similarity
+                        color_dist = abs(point.r - existing.r) + abs(point.g - existing.g) + abs(point.b - existing.b)
+                        if color_dist < COLOR_SIMILARITY_THRESHOLD:
+                            # Same color nearby - likely duplicate from depth variance
+                            # Keep the one that's closer to robot (more reliable)
+                            robot_dist_new = math.sqrt((point.x - robot_x)**2 + (point.y - robot_y)**2)
+                            robot_dist_existing = math.sqrt((existing.x - robot_x)**2 + (existing.y - robot_y)**2)
+
+                            if robot_dist_new < robot_dist_existing:
+                                # New point is closer - replace the old one
+                                del self.accumulated_points[check_key]
+                                break  # Only replace one, then add new point
+                            else:
+                                # Existing point is closer - skip adding this point
+                                return
+                    if check_key not in self.accumulated_points:
+                        continue  # Key was deleted, continue checking
 
         if key in self.accumulated_points:
             existing = self.accumulated_points[key]
@@ -1338,6 +1519,205 @@ class Hybrid3DMapper:
         finally:
             self.ptz_scan_in_progress = False
 
+    async def spin_robot_to_heading(self, ws, target_heading: float):
+        """
+        Spin robot to exact compass heading using compass feedback.
+        Uses serial_cmd with AUTO_LEFT/AUTO_RIGHT,<degrees>
+        """
+        print(f"[ROBOT] Target heading: {target_heading:.1f}°, current: {self.current_heading:.1f}°", flush=True)
+
+        # Calculate turn direction and amount
+        diff = target_heading - self.current_heading
+        # Normalize to -180 to 180
+        while diff > 180:
+            diff -= 360
+        while diff < -180:
+            diff += 360
+
+        turn_degrees = int(abs(diff))
+        direction = 'RIGHT' if diff > 0 else 'LEFT'
+        print(f"[ROBOT] Turning {direction} {turn_degrees}°...", flush=True)
+
+        # Send turn command using robot_spin message (server will forward to robot)
+        spin_cmd = {
+            "type": "robot_spin",
+            "direction": direction,
+            "degrees": turn_degrees
+        }
+        print(f"[ROBOT] Sending: {spin_cmd}", flush=True)
+        await ws.send(json.dumps(spin_cmd))
+
+        # Wait for turn to complete (~10 seconds for 120°)
+        wait_time = max(8, turn_degrees // 12)  # ~12 degrees per second
+        print(f"[ROBOT] Waiting {wait_time}s for turn...", flush=True)
+        await asyncio.sleep(wait_time)
+
+        print(f"[ROBOT] Turn complete, heading: {self.current_heading:.1f}° (target was {target_heading:.1f}°)", flush=True)
+
+    async def scan_both_cameras(self, ws):
+        """
+        Scan both cameras with smooth 4-click sequence.
+        Both cameras move SIMULTANEOUSLY using MAIN VPS websocket (no separate PTZ connection).
+        Sequence: 4 LEFT -> 4 RIGHT (center) -> 4 RIGHT -> 4 LEFT (center)
+                  4 UP -> 4 DOWN (center) -> 4 DOWN -> 4 UP (center)
+        """
+        # PTZ settings - FAST for rapid scanning
+        PTZ_SPEED = 0.5  # Fast speed
+        MOVE_TIME = 0.15  # 150ms per click (quick!)
+        SETTLE_TIME = 0.1  # 100ms settle for frames
+        CLICKS_PAN = 2  # 2 clicks per pan direction
+        CLICKS_TILT = 2  # 2 clicks per tilt direction
+
+        async def one_click_both(direction):
+            """Move both cameras one click in direction using main VPS websocket"""
+            pan = -PTZ_SPEED if direction == 'left' else PTZ_SPEED if direction == 'right' else 0
+            tilt = PTZ_SPEED if direction == 'up' else -PTZ_SPEED if direction == 'down' else 0
+
+            # Move both cameras simultaneously using main ws connection
+            for cam_id in [1, 2]:
+                await ws.send(json.dumps({
+                    'type': 'cam_ptz', 'camera': cam_id, 'action': 'move',
+                    'pan': pan, 'tilt': tilt, 'zoom': 0
+                }))
+
+            await asyncio.sleep(MOVE_TIME)
+
+            # Stop both cameras
+            for cam_id in [1, 2]:
+                await ws.send(json.dumps({
+                    'type': 'cam_ptz', 'camera': cam_id, 'action': 'stop'
+                }))
+
+            await asyncio.sleep(SETTLE_TIME)
+
+            # CAPTURE FRAME at this position for mapping!
+            self.capture_frame_for_map = True
+
+        async def do_clicks(direction, count, label):
+            print(f"[PTZ] {label}: {count}x {direction.upper()}", flush=True)
+            for i in range(count):
+                await one_click_both(direction)
+
+        try:
+            print("[PTZ] === CAMERA SCAN SEQUENCE START ===", flush=True)
+
+            # PAN sequence: LEFT -> center -> RIGHT -> center
+            await do_clicks('left', CLICKS_PAN, "Pan LEFT")
+            await do_clicks('right', CLICKS_PAN, "Back to CENTER")
+            await do_clicks('right', CLICKS_PAN, "Pan RIGHT")
+            await do_clicks('left', CLICKS_PAN, "Back to CENTER")
+
+            # TILT sequence: UP -> center -> DOWN -> center
+            await do_clicks('up', CLICKS_TILT, "Tilt UP")
+            await do_clicks('down', CLICKS_TILT, "Back to CENTER")
+            await do_clicks('down', CLICKS_TILT, "Tilt DOWN")
+            await do_clicks('up', CLICKS_TILT, "Back to CENTER")
+
+            print("[PTZ] === CAMERA SCAN SEQUENCE COMPLETE ===", flush=True)
+
+        except Exception as e:
+            print(f"[PTZ] Camera scan error: {e}", flush=True)
+
+    async def full_mapping_sequence(self, ws):
+        """
+        FULL MAPPING SEQUENCE - 3 positions with 120° turns for complete 360° coverage
+
+        FLOW: Robot spins FIRST, then cameras scan at each position
+        - Spin 120° to Position 1, scan cameras
+        - Spin 120° to Position 2, scan cameras
+        - Spin 120° to Position 3, scan cameras
+        - Total: 360° rotation (ends back at start)
+
+        Uses compass heading for precise turns
+        """
+        print("=" * 60, flush=True)
+        print("[MAPPING] STARTING FULL MAPPING SEQUENCE (3 x 120°)", flush=True)
+        print("[MAPPING] Robot SPINS first, then cameras scan at each position", flush=True)
+        print("=" * 60, flush=True)
+
+        try:
+            while self.mapping_sequence_active:
+                # Get starting heading
+                start_heading = self.current_heading
+                print(f"\n[SEQ] Starting heading: {start_heading:.1f}°", flush=True)
+
+                # === SPIN 120° RIGHT to Position 1 ===
+                target1 = (start_heading + 120) % 360
+                print(f"\n[SEQ] === SPINNING 120° to Position 1 ({target1:.1f}°) ===", flush=True)
+                await self.spin_robot_to_heading(ws, target1)
+
+                if not self.mapping_sequence_active:
+                    break
+
+                # === POSITION 1: Scan at 120° ===
+                print("\n[SEQ] === POSITION 1: Camera scan ===", flush=True)
+                await self.scan_both_cameras(ws)
+
+                if not self.mapping_sequence_active:
+                    break
+
+                # === SPIN 120° RIGHT to Position 2 ===
+                target2 = (start_heading + 240) % 360
+                print(f"\n[SEQ] === SPINNING 120° to Position 2 ({target2:.1f}°) ===", flush=True)
+                await self.spin_robot_to_heading(ws, target2)
+
+                if not self.mapping_sequence_active:
+                    break
+
+                # === POSITION 2: Scan at 240° ===
+                print("\n[SEQ] === POSITION 2: Camera scan ===", flush=True)
+                await self.scan_both_cameras(ws)
+
+                if not self.mapping_sequence_active:
+                    break
+
+                # === SPIN 120° RIGHT to Position 3 (back to start) ===
+                print(f"\n[SEQ] === SPINNING 120° to Position 3 ({start_heading:.1f}°) ===", flush=True)
+                await self.spin_robot_to_heading(ws, start_heading)
+
+                if not self.mapping_sequence_active:
+                    break
+
+                # === POSITION 3: Final scan (back at start heading) ===
+                print("\n[SEQ] === POSITION 3: Camera scan (final) ===", flush=True)
+                await self.scan_both_cameras(ws)
+
+                print("\n[SEQ] === FULL 360° SCAN COMPLETE! ===", flush=True)
+                print("[SEQ] Stopping sequence (single pass complete)", flush=True)
+                self.mapping_sequence_active = False
+                break
+
+        except Exception as e:
+            print(f"[SEQ] Mapping sequence error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+
+        print("[SEQ] Mapping sequence ended", flush=True)
+
+    async def continuous_ptz_scan(self, ws):
+        """
+        Runs the full mapping sequence when mapping is active
+        """
+        print("[PTZ] Waiting for mapping to start...", flush=True)
+
+        while True:
+            try:
+                # Wait until mapping sequence is activated
+                if not self.mapping_sequence_active:
+                    await asyncio.sleep(0.5)
+                    continue
+
+                if self.mapping_paused_by_override:
+                    await asyncio.sleep(0.5)
+                    continue
+
+                # Run the full mapping sequence
+                await self.full_mapping_sequence(ws)
+
+            except Exception as e:
+                print(f"[PTZ] Error: {e}", flush=True)
+                await asyncio.sleep(1)
+
 
 # ============ WEBSOCKET CLIENT ============
 mapper = Hybrid3DMapper()
@@ -1404,6 +1784,8 @@ async def handle_vps_connection():
                     compass_heading = data.get("heading", 0)
                     # Update heading only, keep x/y position
                     mapper.robot_pose.heading = math.radians(compass_heading)
+                    # Also update current_heading for the mapping sequence
+                    mapper.current_heading = compass_heading
 
                 # VELOCITY-BASED position estimate (since encoders broken)
                 if data.get("type") == "teensy_telemetry":
@@ -1434,7 +1816,41 @@ async def handle_vps_connection():
                 if data.get("type") == "clear_3d_map":
                     mapper.clear_map()
 
-                # Periodically compute stereo depth
+                # MAPPING CONTROL - start/stop from UI MAP button
+                if data.get("type") == "mapping_control":
+                    cmd = data.get("cmd", "").upper()
+                    if cmd == "START":
+                        mapper.start_mapping()
+                        # Send acknowledgment
+                        await ws.send(json.dumps({
+                            "type": "mapping_status",
+                            "active": True,
+                            "message": "Mapping started - GPU processing active"
+                        }))
+                    elif cmd == "STOP":
+                        mapper.stop_mapping()
+                        await ws.send(json.dumps({
+                            "type": "mapping_status",
+                            "active": False,
+                            "message": "Mapping stopped"
+                        }))
+                    elif cmd == "PAUSE":
+                        mapper.pause_for_override()
+                    elif cmd == "RESUME":
+                        mapper.resume_from_override()
+
+                # Manual override notification from server
+                if data.get("type") == "manual_override":
+                    if data.get("active"):
+                        mapper.pause_for_override()
+                    else:
+                        mapper.resume_from_override()
+
+                # Skip heavy processing if mapping not active
+                if not mapper.mapping_active:
+                    continue
+
+                # Periodically compute stereo depth (only when mapping active)
                 if CV2_AVAILABLE and time.time() % 2 < 0.1:  # Every ~2 seconds
                     mapper.compute_stereo_depth()
 
@@ -1648,6 +2064,21 @@ async def handle_hybrid_connection():
         print(f"     - Monocular Depth: {'YES' if DEPTH_AVAILABLE else 'NO'}", flush=True)
         print(f"     - Stereo Depth: {'YES' if CV2_AVAILABLE else 'NO'}", flush=True)
         print(f"     - Surface Reconstruction: {'YES' if O3D_AVAILABLE else 'NO (missing open3d)'}", flush=True)
+        print(f"     - Continuous PTZ Scan: {'YES' if CONTINUOUS_PTZ_SCAN else 'NO'}", flush=True)
+
+        # Start continuous PTZ scanning in background
+        if CONTINUOUS_PTZ_SCAN:
+            asyncio.create_task(mapper.continuous_ptz_scan(ws))
+            print("[PTZ] Continuous scan task started - cameras will sweep constantly during mapping")
+
+        # AUTO-START after 10 seconds for testing (will be triggered automatically)
+        async def auto_start_test():
+            print("[TEST] Auto-start in 10 seconds...", flush=True)
+            await asyncio.sleep(10)
+            print("[TEST] AUTO-STARTING MAPPING NOW!", flush=True)
+            mapper.start_mapping()
+        asyncio.create_task(auto_start_test())
+        print("[INIT] Mapper ready - auto-start in 10 seconds for testing...", flush=True)
 
         async for message in ws:
             try:
@@ -1664,11 +2095,22 @@ async def handle_hybrid_connection():
 
                 data = json.loads(message)
 
+                # DEBUG: Log all message types (except high-frequency ones)
+                msg_type = data.get("type", "unknown")
+                if msg_type not in ["lidar", "DETECTIONS", "compass", "dead_reckoning", "ptz_status", "status"]:
+                    print(f"[WS-MSG] Received: {msg_type}", flush=True)
+
                 # LIDAR from VPS (ESP32 → VPS → Mac)
                 if data.get("type") == "lidar":
                     points = [(p[0], p[1]) for p in data.get("points", [])]
                     if points:
                         mapper.add_lidar_scan(points)
+
+                # DETECTIONS from Jetson - filter dynamic objects from map
+                elif data.get("type") == "DETECTIONS":
+                    cam_id = data.get("camera", 1)
+                    detections = data.get("detections", [])
+                    mapper.update_detections(cam_id, detections)
 
                 # PTZ status - update camera angles
                 elif data.get("type") == "ptz_status":
@@ -1683,11 +2125,62 @@ async def handle_hybrid_connection():
                         data.get("odomHeading", 0)
                     )
 
+                # COMPASS heading - critical for accurate turns!
+                elif data.get("type") == "compass":
+                    compass_heading = data.get("heading", 0)
+                    mapper.robot_pose.heading = math.radians(compass_heading)
+                    mapper.current_heading = compass_heading
+
                 # Clear map command
                 elif data.get("type") == "clear_3d_map":
                     print("[MAP] Clearing accumulated points...")
                     mapper.accumulated_points.clear()
                     mapper.stats = {"lidar_points": 0, "mono_points": 0, "stereo_points": 0, "total_points": 0, "depth_scale": mapper.depth_scale}
+
+                # MAPPING CONTROL - start/stop from UI MAP button
+                elif data.get("type") == "mapping_control":
+                    print(f"[DEBUG] Received mapping_control: {data}", flush=True)
+                    cmd = data.get("cmd", "").upper()
+                    if cmd == "START":
+                        print("[DEBUG] Starting mapping from mapping_control START", flush=True)
+                        mapper.start_mapping()
+                        await ws.send(json.dumps({
+                            "type": "mapping_status",
+                            "active": True,
+                            "message": "Mapping started - GPU processing active"
+                        }))
+                    elif cmd == "STOP":
+                        mapper.stop_mapping()
+                        await ws.send(json.dumps({
+                            "type": "mapping_status",
+                            "active": False,
+                            "message": "Mapping stopped"
+                        }))
+                    elif cmd == "PAUSE":
+                        mapper.pause_for_override()
+                    elif cmd == "RESUME":
+                        mapper.resume_from_override()
+
+                # Manual override notification from server
+                elif data.get("type") == "manual_override":
+                    if data.get("active"):
+                        mapper.pause_for_override()
+                    else:
+                        mapper.resume_from_override()
+
+                # RELOCALIZATION - browser detected position via fingerprint
+                elif data.get("type") == "relocalization":
+                    new_x = data.get("x", 0)
+                    new_y = data.get("y", 0)
+                    confidence = data.get("confidence", 0)
+                    source = data.get("source", "unknown")
+                    print(f"[RELOCALIZE] Position correction from {source}: ({new_x:.0f}, {new_y:.0f}) confidence={confidence*100:.0f}%")
+
+                    # Update mapper's robot pose to match
+                    # Convert from mm to meters for internal use
+                    mapper.robot_pose.x = new_x / 1000.0
+                    mapper.robot_pose.y = new_y / 1000.0
+                    print(f"[RELOCALIZE] Mapper pose updated to ({mapper.robot_pose.x:.2f}m, {mapper.robot_pose.y:.2f}m)")
 
                 # ========== PTZ SCAN TRIGGER ==========
                 # Robot stopped during mapping - time to sweep the cameras!
@@ -1729,6 +2222,13 @@ async def handle_hybrid_connection():
                 pass
             except Exception as e:
                 print(f"[WS] Error: {e}", flush=True)
+
+            # CRITICAL: Yield to allow other async tasks (PTZ scan, robot turn) to run
+            # Use a small delay when mapping sequence is active to give PTZ/robot commands time
+            if mapper.mapping_sequence_active:
+                await asyncio.sleep(0.05)  # 50ms yield during active mapping
+            else:
+                await asyncio.sleep(0)
 
     # Cancel Jetson task on disconnect
     jetson_task.cancel()

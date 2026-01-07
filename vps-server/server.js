@@ -25,11 +25,38 @@ state.setWss(wss);
 // When manual input detected, block autonomous commands for 10 seconds
 global.manualOverrideUntil = 0;  // Timestamp when manual override expires
 global.emergencyStopActive = false;  // Sticky E-stop flag - requires explicit clear
-const MANUAL_OVERRIDE_DURATION = 10000;  // Block autonomous for 10 seconds after manual input
+const MANUAL_OVERRIDE_DURATION = 5000;  // Block autonomous for 5 seconds after manual input
+
+// ============ MAPPING STATE ============
+global.mappingActive = false;  // Is autonomous mapping mode active?
+global.mappingWasPaused = false;  // Was mapping paused by manual override?
+global.autoResumeTimeout = null;  // Timeout for auto-resume after override
 
 function setManualOverride() {
+  const wasActive = isManualOverrideActive();
   global.manualOverrideUntil = Date.now() + MANUAL_OVERRIDE_DURATION;
   console.log(`[OVERRIDE] Manual control active for ${MANUAL_OVERRIDE_DURATION/1000}s`);
+
+  // Notify Mac mapper of manual override (pause mapping)
+  if (global.mappingActive && !wasActive) {
+    global.mappingWasPaused = true;
+    broadcastToProcessors({ type: "manual_override", active: true });
+    console.log(`[MAPPING] Paused for manual override`);
+  }
+
+  // Set up auto-resume when override expires
+  if (global.mappingActive) {
+    if (global.autoResumeTimeout) clearTimeout(global.autoResumeTimeout);
+    global.autoResumeTimeout = setTimeout(() => {
+      if (global.mappingActive && global.mappingWasPaused && !global.emergencyStopActive) {
+        global.mappingWasPaused = false;
+        broadcastToProcessors({ type: "manual_override", active: false });
+        console.log(`[MAPPING] Auto-resumed after manual override`);
+        // Resume autonomous driving too
+        resumeAutonomousDriving();
+      }
+    }, MANUAL_OVERRIDE_DURATION + 500);  // 500ms grace period
+  }
 }
 
 function isManualOverrideActive() {
@@ -49,6 +76,54 @@ function clearEmergencyStop() {
   console.log(`[E-STOP] Emergency stop CLEARED - autonomous allowed`);
 }
 
+// Broadcast to all Mac processor clients
+function broadcastToProcessors(msg) {
+  const msgStr = JSON.stringify(msg);
+  let count = 0;
+  let totalClients = 0;
+  wss.clients.forEach(client => {
+    totalClients++;
+    if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+      client.send(msgStr);
+      count++;
+    }
+  });
+  console.log(`[PROCESSOR] Broadcast ${msg.type}: sent to ${count}/${totalClients} clients (processors)`);
+}
+
+// Resume autonomous driving after manual override
+function resumeAutonomousDriving() {
+  if (!global.mappingActive) return;
+
+  const rs = state.getRobotSocket();
+  if (rs && rs.readyState === WebSocket.OPEN) {
+    // Restart the auto-drive interval if it was stopped
+    if (!global.autoInterval) {
+      console.log(`[AUTONOMOUS] Resuming auto-drive after override`);
+      global.autoDirection = "FWD";
+      global.autoCmdCount = 0;
+      global.autoInterval = setInterval(() => {
+        if (isManualOverrideActive()) {
+          return;  // Skip this tick silently
+        }
+        const robotSock = state.getRobotSocket();
+        if (robotSock && robotSock.readyState === WebSocket.OPEN) {
+          const cmd = `AUTO_${global.autoDirection},25`;
+          robotSock.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
+          global.autoCmdCount++;
+          if (global.autoCmdCount % 10 === 0) {
+            console.log(`[AUTO-DRIVE] Resumed: sent ${global.autoCmdCount} cmds, current: ${cmd}`);
+          }
+        }
+      }, 300);
+
+      // BROADCAST to update UI - no longer paused!
+      state.broadcast({ type: "autonomous_status", running: true, paused: false, mode: "direct" });
+      console.log(`[AUTONOMOUS] Broadcast: resumed from pause`);
+    }
+  }
+}
+
 // ============ BASIC AUTH ============
 let authConfig = null;
 try {
@@ -60,6 +135,11 @@ try {
 
 if (authConfig) {
   app.use((req, res, next) => {
+    // Allow localhost to access /spin without auth
+    const ip = req.ip || req.connection.remoteAddress;
+    if ((ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') && req.path.startsWith('/spin')) {
+      return next();
+    }
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Basic ')) {
       res.setHeader('WWW-Authenticate', 'Basic realm="Cemani Robot v2"');
@@ -91,6 +171,25 @@ app.use(express.static(path.join(__dirname, "public"), {
   lastModified: false,
   maxAge: 0
 }));
+
+// HTTP endpoint to spin robot - bypass websocket issues
+app.get('/spin/:direction/:degrees', (req, res) => {
+  const direction = req.params.direction.toUpperCase();
+  const degrees = parseInt(req.params.degrees) || 120;
+
+  console.log(`[HTTP-SPIN] Request: ${direction} ${degrees}°`);
+
+  const rs = state.getRobotSocket();
+  if (rs && rs.readyState === 1) { // WebSocket.OPEN = 1
+    const cmd = direction === 'RIGHT' ? `MOVE,${degrees},0` : `MOVE,-${degrees},0`;
+    rs.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
+    console.log(`[HTTP-SPIN] Sent to robot: ${cmd}`);
+    res.json({ success: true, command: cmd });
+  } else {
+    console.log(`[HTTP-SPIN] Robot socket not available!`);
+    res.status(503).json({ error: 'Robot not connected' });
+  }
+});
 
 // GPU Renderer - receives frames via WebSocket from Mac processor
 let gpuRendererConnected = false;
@@ -246,6 +345,8 @@ wss.on("connection", (ws, req) => {
 
   ws.connectedAt = Date.now();
   ws.frameCount = 0;
+  ws.clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  console.log(`[WS] Client connected from ${ws.clientIP}`);
   ws.send(JSON.stringify({ type: "status", ...state.robotStatus, camera: state.cameraStatus }));
   ws.isAlive = true;
   ws.missedPings = 0;
@@ -255,6 +356,13 @@ wss.on("connection", (ws, req) => {
   ws.on("message", (msg, isBinary) => {
     ws.isAlive = true;
     ws.missedPings = 0;
+
+    // DEBUG: Log ALL messages from new clients (first 5 messages)
+    ws.msgCount = (ws.msgCount || 0) + 1;
+    if (ws.msgCount <= 5) {
+      const preview = isBinary ? `binary ${msg.length} bytes` : msg.toString().substring(0, 100);
+      console.log(`[DEBUG-MSG] Client ${ws.clientIP} msg #${ws.msgCount}: ${preview}`);
+    }
 
     // Handle binary talkback audio from browser
     if (isBinary && ws.isBrowser) {
@@ -395,12 +503,14 @@ function handleMessage(ws, data) {
     // Set manual override - blocks ALL autonomous commands
     setManualOverride();
 
-    // Stop autonomous if running - manual control takes priority
+    // PAUSE autonomous if running - manual control takes priority
+    // But DON'T change running status - AUTO mode stays active, just paused
     if (global.autoInterval) {
       clearInterval(global.autoInterval);
       global.autoInterval = null;
-      console.log("[OVERRIDE] Joystick input - stopping autonomous mode");
-      state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+      console.log("[OVERRIDE] Joystick input - PAUSING autonomous (will auto-resume)");
+      // Broadcast paused state but keep running=true so button stays AUTO
+      state.broadcast({ type: "autonomous_status", running: true, paused: true, reason: "manual_override" });
     }
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
@@ -427,12 +537,12 @@ function handleMessage(ws, data) {
     // Set manual override - human is navigating
     setManualOverride();
 
-    // Stop autonomous if running
+    // PAUSE autonomous if running - will auto-resume after navigation
     if (global.autoInterval) {
       clearInterval(global.autoInterval);
       global.autoInterval = null;
-      console.log("[OVERRIDE] Click-to-navigate - stopping autonomous mode");
-      state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+      console.log("[OVERRIDE] Click-to-navigate - PAUSING autonomous (will auto-resume)");
+      state.broadcast({ type: "autonomous_status", running: true, paused: true, reason: "manual_override" });
     }
 
     const rs = state.getRobotSocket();
@@ -488,8 +598,8 @@ function handleMessage(ws, data) {
       if (global.autoInterval) {
         clearInterval(global.autoInterval);
         global.autoInterval = null;
-        console.log("[OVERRIDE] Manual drive command - stopping autonomous mode:", data.cmd);
-        state.broadcast({ type: "autonomous_status", running: false, reason: "manual_override" });
+        console.log("[OVERRIDE] Manual drive command - PAUSING autonomous:", data.cmd);
+        state.broadcast({ type: "autonomous_status", running: true, paused: true, reason: "manual_override" });
       }
     }
 
@@ -499,6 +609,27 @@ function handleMessage(ws, data) {
       console.log("[SERIAL_CMD]", data.cmd);
     } else {
       console.log("[SERIAL_CMD] ❌ Robot socket not available for:", data.cmd);
+    }
+  }
+
+  // Direct mapping_control from browser (MAP 1 button) - forward to Mac processors
+  if (data.type === "mapping_control") {
+    console.log("[MAP1] Received mapping_control from browser:", data.cmd);
+    broadcastToProcessors({ type: "mapping_control", cmd: data.cmd });
+    console.log("[MAP1] Forwarded to Mac processors");
+  }
+
+  // Robot spin command from Mac mapper - forward to robot
+  if (data.type === "robot_spin") {
+    console.log("[SPIN] Received spin command:", data.direction, data.degrees);
+    const rs = state.getRobotSocket();
+    if (rs && rs.readyState === WebSocket.OPEN) {
+      const dir = data.direction === "RIGHT" ? "AUTO_RIGHT" : "AUTO_LEFT";
+      const cmd = `${dir},${data.degrees}`;
+      rs.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
+      console.log("[SPIN] Sent to robot:", cmd);
+    } else {
+      console.log("[SPIN] Robot socket not available!");
     }
   }
 
@@ -687,15 +818,34 @@ function handleMessage(ws, data) {
         state.broadcast({ type: "emergency_stop_active", active: false });
       }
 
+      // Set mapping state ACTIVE
+      global.mappingActive = true;
+      global.mappingWasPaused = false;
+
       console.log(`[AUTONOMOUS] START received - robotSocket: ${rs ? 'exists' : 'null'}, state: ${rs ? rs.readyState : 'N/A'}`);
+
+      // ====== START MAC GPU MAPPER ======
+      // Tell all Mac processors to start mapping (GPU processing)
+      broadcastToProcessors({ type: "mapping_control", cmd: "START" });
+      console.log(`[MAPPING] ✓ Sent START to Mac GPU mapper(s)`);
+
       // Switch robot to mapping mode
       if (rs && rs.readyState === WebSocket.OPEN) {
         rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
         console.log(`[AUTONOMOUS] ✓ Sent MODE_MAPPING to robot`);
 
-        // If no autonomous.py, start direct control loop
-        if (autoCount === 0) {
-          console.log(`[AUTONOMOUS] No Jetson navigator - starting direct control loop`);
+        // Count Mac processors
+        let processorCount = 0;
+        wss.clients.forEach(client => {
+          if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+            processorCount++;
+          }
+        });
+
+        // If no autonomous.py AND no Mac processors, start direct control loop
+        // Mac processors handle their own robot movement via move_command
+        if (autoCount === 0 && processorCount === 0) {
+          console.log(`[AUTONOMOUS] No Jetson navigator or Mac processor - starting direct control loop`);
 
           // Clear any existing interval
           if (global.autoInterval) clearInterval(global.autoInterval);
@@ -706,7 +856,7 @@ function handleMessage(ws, data) {
           global.autoInterval = setInterval(() => {
             // Check manual override - Xbox/joystick ALWAYS wins
             if (isManualOverrideActive()) {
-              console.log(`[AUTO-DRIVE] Paused - manual override active`);
+              // Don't spam logs - just skip
               return;  // Skip this tick, don't send command
             }
 
@@ -730,6 +880,9 @@ function handleMessage(ws, data) {
           // Send first command immediately at 25 RPM
           rs.send(JSON.stringify({ type: "serial_cmd", cmd: "AUTO_FWD,25" }));
           state.broadcast({ type: "autonomous_status", running: true, mode: "direct" });
+        } else if (processorCount > 0) {
+          console.log(`[AUTONOMOUS] ${processorCount} Mac processor(s) connected - they will handle robot movement`);
+          state.broadcast({ type: "autonomous_status", running: true, mode: "mac_processor" });
         }
       } else {
         console.log(`[AUTONOMOUS] ⚠️  Robot not connected!`);
@@ -744,13 +897,29 @@ function handleMessage(ws, data) {
         }
       });
 
+      // ALWAYS broadcast status to browsers so UI updates
+      state.broadcast({ type: "autonomous_status", running: true, mode: "direct" });
+      console.log(`[AUTONOMOUS] Broadcast: running=true`);
+
     } else if (data.cmd === "STOP" || data.cmd === "PAUSE") {
+      // Set mapping state INACTIVE
+      global.mappingActive = false;
+      global.mappingWasPaused = false;
+      if (global.autoResumeTimeout) {
+        clearTimeout(global.autoResumeTimeout);
+        global.autoResumeTimeout = null;
+      }
+
       // Stop the auto command loop
       if (global.autoInterval) {
         clearInterval(global.autoInterval);
         global.autoInterval = null;
         console.log(`[AUTONOMOUS] Stopped auto command loop`);
       }
+
+      // ====== STOP MAC GPU MAPPER ======
+      broadcastToProcessors({ type: "mapping_control", cmd: "STOP" });
+      console.log(`[MAPPING] ✓ Sent STOP to Mac GPU mapper(s)`);
 
       // Stop robot
       if (rs && rs.readyState === WebSocket.OPEN) {
@@ -933,6 +1102,17 @@ function handleMessage(ws, data) {
     console.log("[3D MAP] Clear command sent to processor");
   }
 
+  // Mapping status from Mac processor -> broadcast to browsers
+  if (data.type === "mapping_status" && ws.isProcessor) {
+    console.log(`[MAPPING] Mac mapper status: active=${data.active}, msg=${data.message}`);
+    state.broadcast({
+      type: "mapping_status",
+      active: data.active,
+      message: data.message,
+      processor: ws.processorName
+    });
+  }
+
   // Frame history from Mac Mini - broadcast to browsers
   if (data.type === "frame_history" && ws.isProcessor) {
     state.broadcast({
@@ -1020,6 +1200,40 @@ function handleMessage(ws, data) {
   // Odometry reset
   if (data.type === "reset_odometry") {
     odometry.resetOdometry();
+  }
+
+  // AUTO-RELOCALIZATION: Browser detected position via fingerprint match
+  if (data.type === "relocalize") {
+    const newX = data.x || 0;
+    const newY = data.y || 0;
+    const confidence = data.confidence || 0;
+    const source = data.source || "unknown";
+    const areaName = data.areaName || "unknown";
+
+    console.log(`[RELOCALIZE] Position correction from ${source}: (${newX.toFixed(0)}, ${newY.toFixed(0)}) confidence=${(confidence*100).toFixed(0)}% area=${areaName}`);
+
+    // Update server's odometry state
+    odometry.setPosition(newX, newY);
+
+    // Broadcast to all clients so everyone syncs
+    state.broadcast({
+      type: "relocalization",
+      x: newX,
+      y: newY,
+      confidence: confidence,
+      source: source,
+      areaName: areaName,
+      timestamp: Date.now()
+    });
+
+    // Also notify Mac mapper to align its map
+    broadcastToProcessors({
+      type: "relocalization",
+      x: newX,
+      y: newY,
+      confidence: confidence,
+      source: source
+    });
   }
 
   // Camera relay messages
@@ -1363,6 +1577,10 @@ function handleDisconnect(ws) {
 // ============ KEEPALIVE ============
 setInterval(() => {
   wss.clients.forEach((ws) => {
+    // Skip ping check for processor clients - GPU processing blocks their event loop
+    if (ws.isProcessor) {
+      return;
+    }
     if (ws.isAlive === false) {
       ws.missedPings = (ws.missedPings || 0) + 1;
       if (ws.missedPings >= 3) {
