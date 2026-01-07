@@ -1,43 +1,64 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                    CEMANI HOMESTEAD ROBOT                                     ║
-║                    Full 4D Mapping System                                     ║
-║                                                                               ║
-║  Hardware: Mac Mini Pro M4 (64GB) + Jetson Orin + Custom Robot Platform      ║
-║  Sensors: 2x PTZ Cameras, 360° LIDAR, 4x Ultrasonic, Compass, Encoders       ║
-║  Processing: Depth Anything V2 Large, Semantic Segmentation, SLAM            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-This launcher orchestrates all mapping subsystems:
-
-  1. DEPTH ENGINE - Monocular depth estimation using Depth Anything V2 Large
-                    Running on Apple Silicon GPU (MPS) with 64GB unified memory
-                    Processes both PTZ camera feeds at 2 FPS for dense point clouds
-
-  2. SEMANTIC MAPPER - RANSAC plane detection for walls/floor/ceiling
-                       Projects Jetson 2D detections into 3D world coordinates
-                       Builds room layout with furniture zones and doorways
-
-  3. 3D RECONSTRUCTION - Open3D point cloud fusion with voxel grid downsampling
-                         ICP alignment for multi-view registration
-                         Textured mesh generation with vertex colors
-
-  4. PTZ COORDINATOR - Automated camera sweep patterns for full room coverage
-                       3x120° robot rotation with synchronized camera pans
-                       Optimal viewpoint selection for maximum map coverage
-
-  5. LIDAR FUSION - 360° 2D LIDAR integrated with depth-based 3D points
-                    Fingerprint-based relocalization for loop closure
-                    Dead reckoning with encoder odometry correction
-
-Output: Real-time 4D visualization (3D + time) in browser at robot.marijuanaunion.com
-        Persistent map storage with semantic labels and object tracking
-
-Usage:
-    python3 launch_full_mapping.py
-
-Press MAP 1 in the UI to start the full room scan sequence.
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                      ║
+║   ██████╗███████╗███╗   ███╗ █████╗ ███╗   ██╗██╗    ██╗  ██╗ ██████╗ ███╗   ███╗██████╗ ║
+║  ██╔════╝██╔════╝████╗ ████║██╔══██╗████╗  ██║██║    ██║  ██║██╔═══██╗████╗ ████║██╔══██╗║
+║  ██║     █████╗  ██╔████╔██║███████║██╔██╗ ██║██║    ███████║██║   ██║██╔████╔██║█████╔╝ ║
+║  ██║     ██╔══╝  ██║╚██╔╝██║██╔══██║██║╚██╗██║██║    ██╔══██║██║   ██║██║╚██╔╝██║██╔══██╗║
+║  ╚██████╗███████╗██║ ╚═╝ ██║██║  ██║██║ ╚████║██║    ██║  ██║╚██████╔╝██║ ╚═╝ ██║██████╔╝║
+║   ╚═════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝    ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═════╝ ║
+║                                                                                      ║
+║                        HOMESTEAD ROBOT - 4D MAPPING SYSTEM v2.0                      ║
+║                                                                                      ║
+╠══════════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                      ║
+║  STATE-OF-THE-ART 2025 AI PIPELINE                                                   ║
+║  ─────────────────────────────────                                                   ║
+║                                                                                      ║
+║  ┌──────────────────────────────────────────────────────────────────────────────┐    ║
+║  │  🧠 DEPTH ANYTHING V2 LARGE (arXiv:2406.09414)                               │    ║
+║  │     • Zero-shot monocular depth estimation                                   │    ║
+║  │     • Running on Apple Silicon M4 GPU (MPS) with 64GB unified memory         │    ║
+║  │     • Real-time inference at 2 FPS for dense metric depth                    │    ║
+║  │     • State-of-the-art generalization - no fine-tuning needed                │    ║
+║  └──────────────────────────────────────────────────────────────────────────────┘    ║
+║                                                                                      ║
+║  ┌──────────────────────────────────────────────────────────────────────────────┐    ║
+║  │  🔬 MULTI-MODAL SENSOR FUSION                                                │    ║
+║  │     • YDLidar X2L: 360° 2D LIDAR for accurate geometry                       │    ║
+║  │     • 2x Sricam PTZ: RGB color projection onto LIDAR points                  │    ║
+║  │     • Jetson YOLO: Dynamic object filtering (people, pets excluded)          │    ║
+║  │     • Depth calibration: LIDAR-camera correlation for metric scale           │    ║
+║  └──────────────────────────────────────────────────────────────────────────────┘    ║
+║                                                                                      ║
+║  ┌──────────────────────────────────────────────────────────────────────────────┐    ║
+║  │  🗺️ SEMANTIC SLAM                                                            │    ║
+║  │     • RANSAC plane detection: walls, floor, ceiling segmentation             │    ║
+║  │     • Doorway detection via wall gap analysis                                │    ║
+║  │     • Object tracking: 2D→3D projection with class labels                    │    ║
+║  │     • Room layout estimation with semantic boundaries                        │    ║
+║  └──────────────────────────────────────────────────────────────────────────────┘    ║
+║                                                                                      ║
+║  ┌──────────────────────────────────────────────────────────────────────────────┐    ║
+║  │  ⏱️ 4D TEMPORAL MAPPING                                                      │    ║
+║  │     • Point persistence: observations over time → confidence                 │    ║
+║  │     • Motion scoring: dynamic vs static classification                       │    ║
+║  │     • Fingerprint-based loop closure for consistent SLAM                     │    ║
+║  │     • Real-time updates at 10Hz with voxel downsampling                      │    ║
+║  └──────────────────────────────────────────────────────────────────────────────┘    ║
+║                                                                                      ║
+║  HARDWARE CONFIGURATION:                                                             ║
+║    • Mac Mini Pro M4 (64GB) - GPU depth estimation + 3D fusion                       ║
+║    • NVIDIA Jetson Orin Nano (8GB) - Real-time YOLO object detection                 ║
+║    • 2x Sricam SP017 PTZ Cameras - Full pan/tilt RGB capture                         ║
+║    • YDLidar X2L - 360° LIDAR @ 5Hz for geometry and fingerprinting                  ║
+║    • Teensy 4.1 - Motor control, encoders, compass, ultrasonics                      ║
+║                                                                                      ║
+║  OUTPUT: Real-time 4D visualization at robot.marijuanaunion.com                      ║
+║          Press MAP 1 in the web UI to start autonomous room scanning                 ║
+║                                                                                      ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
 """
 
 import asyncio
