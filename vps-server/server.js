@@ -135,9 +135,9 @@ try {
 
 if (authConfig) {
   app.use((req, res, next) => {
-    // Allow localhost to access /spin without auth
-    const ip = req.ip || req.connection.remoteAddress;
-    if ((ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') && req.path.startsWith('/spin')) {
+    // Allow /spin endpoint without auth (used by Mac mapper for robot control)
+    // This is safe because /spin only controls robot movement, not sensitive data
+    if (req.path.startsWith('/spin')) {
       return next();
     }
     const auth = req.headers.authorization;
