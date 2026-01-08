@@ -1670,7 +1670,7 @@ class Hybrid3DMapper:
     async def spin_robot_to_heading(self, ws, target_heading: float):
         """
         Spin robot to exact compass heading using compass feedback.
-        Uses serial_cmd with AUTO_LEFT/AUTO_RIGHT,<degrees>
+        Uses HTTP /spin endpoint for reliability (WebSocket can drop during long operations).
         """
         print(f"[ROBOT] Target heading: {target_heading:.1f}°, current: {self.current_heading:.1f}°", flush=True)
 
@@ -1683,17 +1683,35 @@ class Hybrid3DMapper:
             diff += 360
 
         turn_degrees = int(abs(diff))
+        if turn_degrees < 5:
+            print(f"[ROBOT] Already at target (within 5°), skipping turn", flush=True)
+            return
+
         direction = 'RIGHT' if diff > 0 else 'LEFT'
         print(f"[ROBOT] Turning {direction} {turn_degrees}°...", flush=True)
 
-        # Send turn command using robot_spin message (server will forward to robot)
-        spin_cmd = {
-            "type": "robot_spin",
-            "direction": direction,
-            "degrees": turn_degrees
-        }
-        print(f"[ROBOT] Sending: {spin_cmd}", flush=True)
-        await ws.send(json.dumps(spin_cmd))
+        # Use HTTP endpoint instead of WebSocket (more reliable for commands)
+        import urllib.request
+        import urllib.error
+
+        spin_url = f"http://72.60.124.34:3001/spin/{direction}/{turn_degrees}"
+        print(f"[ROBOT] HTTP request: {spin_url}", flush=True)
+
+        try:
+            req = urllib.request.Request(spin_url)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                result = response.read().decode('utf-8')
+                print(f"[ROBOT] Spin response: {result}", flush=True)
+        except urllib.error.URLError as e:
+            print(f"[ROBOT] HTTP error (trying WebSocket fallback): {e}", flush=True)
+            # Fallback to WebSocket if HTTP fails
+            try:
+                spin_cmd = {"type": "robot_spin", "direction": direction, "degrees": turn_degrees}
+                await ws.send(json.dumps(spin_cmd))
+            except Exception as ws_err:
+                print(f"[ROBOT] WebSocket fallback also failed: {ws_err}", flush=True)
+        except Exception as e:
+            print(f"[ROBOT] Spin error: {e}", flush=True)
 
         # Wait for turn to complete (~10 seconds for 120°)
         wait_time = max(8, turn_degrees // 12)  # ~12 degrees per second
@@ -1701,6 +1719,15 @@ class Hybrid3DMapper:
         await asyncio.sleep(wait_time)
 
         print(f"[ROBOT] Turn complete, heading: {self.current_heading:.1f}° (target was {target_heading:.1f}°)", flush=True)
+
+    async def safe_ws_send(self, ws, data: dict):
+        """Safely send data via WebSocket with error handling"""
+        try:
+            await ws.send(json.dumps(data))
+            return True
+        except Exception as e:
+            print(f"[WS] Send failed: {e}", flush=True)
+            return False
 
     async def scan_both_cameras(self, ws):
         """
@@ -1723,18 +1750,18 @@ class Hybrid3DMapper:
 
             # Move both cameras simultaneously using main ws connection
             for cam_id in [1, 2]:
-                await ws.send(json.dumps({
+                await self.safe_ws_send(ws, {
                     'type': 'cam_ptz', 'camera': cam_id, 'action': 'move',
                     'pan': pan, 'tilt': tilt, 'zoom': 0
-                }))
+                })
 
             await asyncio.sleep(MOVE_TIME)
 
             # Stop both cameras
             for cam_id in [1, 2]:
-                await ws.send(json.dumps({
+                await self.safe_ws_send(ws, {
                     'type': 'cam_ptz', 'camera': cam_id, 'action': 'stop'
-                }))
+                })
 
             await asyncio.sleep(SETTLE_TIME)
 
@@ -1779,10 +1806,7 @@ class Hybrid3DMapper:
         }
         if details:
             status["details"] = details
-        try:
-            await ws.send(json.dumps(status))
-        except:
-            pass
+        await self.safe_ws_send(ws, status)
 
     async def full_mapping_sequence(self, ws):
         """
