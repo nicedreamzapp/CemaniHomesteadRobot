@@ -20,9 +20,30 @@ const wss = new WebSocket.Server({ server });
 // Share WSS with state module
 state.setWss(wss);
 
-// ============ MANUAL OVERRIDE SAFETY ============
-// Xbox/joystick/drive system is KING - always overrides autonomous
-// When manual input detected, block autonomous commands for 10 seconds
+// ╔═══════════════════════════════════════════════════════════════════════════════╗
+// ║                    CRITICAL SAFETY SYSTEM - DO NOT MODIFY                     ║
+// ║═══════════════════════════════════════════════════════════════════════════════║
+// ║                                                                               ║
+// ║  XBOX CONTROLLER + MANUAL DRIVE CONTROLS = ALWAYS OVERRIDE                   ║
+// ║                                                                               ║
+// ║  This robot is large and dangerous. Manual control MUST always work.          ║
+// ║  ANY input from Xbox controller or UI drive buttons IMMEDIATELY:              ║
+// ║    1. Blocks ALL autonomous movement commands                                 ║
+// ║    2. Takes full control of the robot                                         ║
+// ║    3. Stays in control for minimum 5 seconds after last manual input          ║
+// ║                                                                               ║
+// ║  Functions that MUST be called for any manual input:                          ║
+// ║    - setManualOverride()     Called when Xbox/joystick/UI drive detected      ║
+// ║    - isManualOverrideActive() ALL autonomous commands MUST check this first   ║
+// ║    - setEmergencyStop()      Sticky stop - blocks until explicitly cleared    ║
+// ║                                                                               ║
+// ║  ALL autonomous endpoints (/spin, /drive, etc) check isManualOverrideActive() ║
+// ║  before sending ANY movement command to the robot.                            ║
+// ║                                                                               ║
+// ║  TO VERIFY: Run /safety/status endpoint to see current override state         ║
+// ║                                                                               ║
+// ╚═══════════════════════════════════════════════════════════════════════════════╝
+
 global.manualOverrideUntil = 0;  // Timestamp when manual override expires
 global.emergencyStopActive = false;  // Sticky E-stop flag - requires explicit clear
 const MANUAL_OVERRIDE_DURATION = 5000;  // Block autonomous for 5 seconds after manual input
@@ -135,9 +156,9 @@ try {
 
 if (authConfig) {
   app.use((req, res, next) => {
-    // Allow /spin endpoint without auth (used by Mac mapper for robot control)
-    // This is safe because /spin only controls robot movement, not sensitive data
-    if (req.path.startsWith('/spin')) {
+    // Allow /spin, /map, /drive, and /safety endpoints without auth
+    // /safety endpoints are for verifying the manual override system works
+    if (req.path.startsWith('/spin') || req.path.startsWith('/map') || req.path.startsWith('/drive') || req.path.startsWith('/safety')) {
       return next();
     }
     const auth = req.headers.authorization;
@@ -173,22 +194,230 @@ app.use(express.static(path.join(__dirname, "public"), {
 }));
 
 // HTTP endpoint to spin robot - bypass websocket issues
+// SAFETY: Xbox controller and manual controls ALWAYS override this
 app.get('/spin/:direction/:degrees', (req, res) => {
   const direction = req.params.direction.toUpperCase();
   const degrees = parseInt(req.params.degrees) || 120;
+  const timestamp = Date.now();
 
-  console.log(`[HTTP-SPIN] Request: ${direction} ${degrees}°`);
+  console.log(`[HTTP-SPIN] ===== SPIN REQUEST =====`);
+  console.log(`[HTTP-SPIN] Direction: ${direction}, Degrees: ${degrees}, Time: ${timestamp}`);
+
+  // CRITICAL SAFETY CHECK: Xbox/manual control ALWAYS overrides autonomous mapping
+  if (isManualOverrideActive()) {
+    console.log(`[HTTP-SPIN] BLOCKED - Manual override active (Xbox/drive controls have priority)`);
+    res.status(409).json({
+      error: 'Manual override active',
+      message: 'Xbox controller or drive controls have priority',
+      timestamp: timestamp
+    });
+    return;
+  }
 
   const rs = state.getRobotSocket();
+  console.log(`[HTTP-SPIN] Robot socket: ${rs ? 'EXISTS' : 'NULL'}, readyState: ${rs ? rs.readyState : 'N/A'}`);
+
   if (rs && rs.readyState === 1) { // WebSocket.OPEN = 1
-    const cmd = direction === 'RIGHT' ? `MOVE,${degrees},0` : `MOVE,-${degrees},0`;
-    rs.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
-    console.log(`[HTTP-SPIN] Sent to robot: ${cmd}`);
-    res.json({ success: true, command: cmd });
+    // First enable motors by sending MODE_MAPPING
+    console.log(`[HTTP-SPIN] Step 1: Enabling motors with MODE_MAPPING`);
+    rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
+
+    // Then send MOVE command after brief delay for motor init
+    setTimeout(() => {
+      // Re-check manual override before sending movement command
+      if (isManualOverrideActive()) {
+        console.log(`[HTTP-SPIN] BLOCKED before MOVE - Manual override became active`);
+        return;
+      }
+      const cmd = direction === 'RIGHT' ? `MOVE,${degrees},0` : `MOVE,-${degrees},0`;
+      const payload = JSON.stringify({ type: "serial_cmd", cmd: cmd });
+      console.log(`[HTTP-SPIN] Step 2: Sending MOVE command: ${payload}`);
+      rs.send(payload);
+      console.log(`[HTTP-SPIN] SENT SUCCESSFULLY!`);
+    }, 500);
+
+    res.json({ success: true, command: `MOVE,${degrees},0`, timestamp: timestamp });
   } else {
     console.log(`[HTTP-SPIN] Robot socket not available!`);
-    res.status(503).json({ error: 'Robot not connected' });
+    res.status(503).json({ error: 'Robot not connected', timestamp: timestamp });
   }
+});
+
+// HTTP endpoint to trigger MAP sequence - reliable alternative to WebSocket
+app.get('/map/start', (req, res) => {
+  console.log('[MAP-HTTP] ===== MAP START REQUEST =====');
+
+  // Broadcast mapping_control to all processors
+  broadcastToProcessors({ type: 'mapping_control', cmd: 'START' });
+  console.log('[MAP-HTTP] Sent mapping_control START to processors');
+
+  res.json({ success: true, message: 'Mapping started' });
+});
+
+app.get('/map/stop', (req, res) => {
+  console.log('[MAP-HTTP] ===== MAP STOP REQUEST =====');
+  broadcastToProcessors({ type: 'mapping_control', cmd: 'STOP' });
+  res.json({ success: true, message: 'Mapping stopped' });
+});
+
+// HTTP endpoint to drive robot forward/backward - for mapping traversal
+// SAFETY: Xbox controller and manual controls ALWAYS override this
+app.get('/drive/:direction/:distance', (req, res) => {
+  const direction = req.params.direction.toUpperCase();
+  const distance = parseInt(req.params.distance) || 50; // cm
+  const timestamp = Date.now();
+
+  console.log(`[HTTP-DRIVE] ===== DRIVE REQUEST =====`);
+  console.log(`[HTTP-DRIVE] Direction: ${direction}, Distance: ${distance}cm`);
+
+  // CRITICAL SAFETY CHECK: Xbox/manual control ALWAYS overrides autonomous
+  if (isManualOverrideActive()) {
+    console.log(`[HTTP-DRIVE] BLOCKED - Manual override active (Xbox/drive controls have priority)`);
+    res.status(409).json({
+      error: 'Manual override active',
+      message: 'Xbox controller or drive controls have priority',
+      timestamp: timestamp
+    });
+    return;
+  }
+
+  const rs = state.getRobotSocket();
+  if (rs && rs.readyState === 1) {
+    // Enable motors first
+    console.log(`[HTTP-DRIVE] Enabling motors with MODE_MAPPING`);
+    rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
+
+    setTimeout(() => {
+      // Re-check manual override before sending movement command
+      if (isManualOverrideActive()) {
+        console.log(`[HTTP-DRIVE] BLOCKED before move - Manual override became active`);
+        return;
+      }
+      // MOVEDIR command: F=forward, B=backward, L=left, R=right
+      const dir = direction === 'FORWARD' || direction === 'FWD' ? 'F' :
+                  direction === 'BACKWARD' || direction === 'BACK' ? 'B' : direction.charAt(0);
+      const cmd = `MOVEDIR,${dir},${distance}`;
+      console.log(`[HTTP-DRIVE] Sending: ${cmd}`);
+      rs.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
+    }, 300);
+
+    res.json({ success: true, direction, distance, timestamp });
+  } else {
+    res.status(503).json({ error: 'Robot not connected', timestamp });
+  }
+});
+
+// ============ SAFETY VERIFICATION ENDPOINTS ============
+// These endpoints allow verification that the safety system is working
+
+// GET /safety/status - Check current safety override status
+app.get('/safety/status', (req, res) => {
+  const now = Date.now();
+  const overrideActive = isManualOverrideActive();
+  const timeRemaining = Math.max(0, global.manualOverrideUntil - now);
+
+  res.json({
+    safety_system: 'ACTIVE',
+    manual_override_active: overrideActive,
+    emergency_stop_active: global.emergencyStopActive,
+    override_expires_in_ms: timeRemaining,
+    mapping_active: global.mappingActive,
+    mapping_paused: global.mappingWasPaused,
+    message: overrideActive
+      ? 'Xbox/manual controls have priority - autonomous commands BLOCKED'
+      : 'No manual override - autonomous commands allowed',
+    timestamp: now
+  });
+});
+
+// POST /safety/test - Test that manual override blocks autonomous commands
+app.post('/safety/test', (req, res) => {
+  console.log('[SAFETY-TEST] Testing manual override system...');
+
+  // Trigger manual override
+  setManualOverride();
+
+  // Verify it's active
+  const isBlocking = isManualOverrideActive();
+
+  res.json({
+    test: 'manual_override',
+    result: isBlocking ? 'PASS' : 'FAIL',
+    override_active: isBlocking,
+    message: isBlocking
+      ? 'SUCCESS: Manual override is blocking autonomous commands'
+      : 'FAILURE: Manual override not working!',
+    autonomous_blocked: isBlocking,
+    timestamp: Date.now()
+  });
+});
+
+// POST /safety/emergency-stop - Trigger emergency stop
+app.post('/safety/emergency-stop', (req, res) => {
+  console.log('[E-STOP] Emergency stop triggered via API');
+  setEmergencyStop();
+
+  // Also send STOP command to robot immediately
+  const rs = state.getRobotSocket();
+  if (rs && rs.readyState === 1) {
+    rs.send(JSON.stringify({ type: "serial_cmd", cmd: "STOP" }));
+    console.log('[E-STOP] Sent STOP command to robot');
+  }
+
+  res.json({
+    emergency_stop: 'ACTIVATED',
+    all_autonomous_blocked: true,
+    message: 'Emergency stop active - ALL autonomous movement blocked until cleared',
+    timestamp: Date.now()
+  });
+});
+
+// POST /safety/clear-emergency - Clear emergency stop
+app.post('/safety/clear-emergency', (req, res) => {
+  console.log('[E-STOP] Emergency stop cleared via API');
+  clearEmergencyStop();
+
+  res.json({
+    emergency_stop: 'CLEARED',
+    message: 'Emergency stop cleared - autonomous movement allowed again',
+    timestamp: Date.now()
+  });
+});
+
+// HTTP endpoint to control Jetson services (start LIDAR, etc)
+app.get('/jetson/:action/:service', (req, res) => {
+  const action = req.params.action; // start, stop, restart
+  const service = req.params.service; // robot-lidar, robot-detection, robot-camera
+  const allowed = ['robot-lidar', 'robot-detection', 'robot-camera'];
+  const allowedActions = ['start', 'stop', 'restart', 'status'];
+
+  if (!allowed.includes(service) || !allowedActions.includes(action)) {
+    return res.status(400).json({ error: 'Invalid service or action' });
+  }
+
+  console.log(`[JETSON-HTTP] Service command: ${action} ${service}`);
+
+  // Find Jetson relay socket
+  let jetsonSocket = null;
+  wss.clients.forEach(client => {
+    if (client.isJetsonRelay && client.readyState === 1) {
+      jetsonSocket = client;
+    }
+  });
+
+  if (!jetsonSocket) {
+    console.log('[JETSON-HTTP] No Jetson relay connected!');
+    return res.status(503).json({ error: 'Jetson relay not connected' });
+  }
+
+  jetsonSocket.send(JSON.stringify({
+    type: 'jetson_service',
+    service: service,
+    action: action
+  }));
+
+  console.log(`[JETSON-HTTP] Sent ${action} ${service} to Jetson`);
+  res.json({ success: true, action: action, service: service, message: 'Command sent to Jetson' });
 });
 
 // GPU Renderer - receives frames via WebSocket from Mac processor
@@ -396,6 +625,10 @@ wss.on("connection", (ws, req) => {
       if (msgStr.includes('ptz') || msgStr.includes('PTZ')) {
         console.log("[RAW PTZ]", msgStr.substring(0, 150));
       }
+      // DEBUG: Explicitly log serial_cmd for spin debugging
+      if (msgStr.includes('serial_cmd')) {
+        console.log("[RAW SERIAL_CMD]", msgStr.substring(0, 200));
+      }
       const data = JSON.parse(msg);
 
       // Log ALL messages for debugging (skip high-frequency lidar/serial)
@@ -484,7 +717,12 @@ function handleMessage(ws, data) {
       state.setRobotSocket(ws);
       ws.isRobot = true;
       ws.isBrowser = false;
-      console.log("[ROBOT] ESP32 connected via serial data");
+      console.log("[ROBOT] ★★★ ESP32 CONNECTED via serial data ★★★");
+    }
+    // Log robot socket status periodically
+    if (Math.random() < 0.01) {  // 1% of messages
+      const rs = state.getRobotSocket();
+      console.log(`[ROBOT-DEBUG] Robot socket: ${rs ? 'EXISTS' : 'NULL'}, ws.isRobot: ${ws.isRobot}`);
     }
     handleSerialData(data, ws);
   }
@@ -584,12 +822,18 @@ function handleMessage(ws, data) {
 
   // Serial command to Teensy (via ESP32) - OVERRIDES autonomous mode for movement commands
   if (data.type === "serial_cmd") {
-    // Movement commands override autonomous mode (FWD, BACK, LEFT, RIGHT, STOP, etc.)
+    console.log("[SERIAL_CMD] ===== RECEIVED serial_cmd =====");
+    console.log("[SERIAL_CMD] Command:", data.cmd);
+
+    // Movement commands override autonomous mode (FWD, BACK, LEFT, RIGHT, STOP, MOVE, etc.)
     // NOTE: AUTO_ commands are from autonomous system, not manual - don't override for those
-    const manualMovementCmds = ["FWD", "BACK", "LEFT", "RIGHT", "STOP", "TURN"];
+    const manualMovementCmds = ["FWD", "BACK", "LEFT", "RIGHT", "STOP", "TURN", "MOVE"];
     const isManualMovementCmd = manualMovementCmds.some(cmd =>
       data.cmd && data.cmd.includes(cmd) && !data.cmd.startsWith("AUTO_")
     );
+
+    // MOVE commands need motors enabled first - auto-send MODE_MAPPING
+    const isMoveCmd = data.cmd && data.cmd.startsWith("MOVE,");
 
     if (isManualMovementCmd) {
       // Set manual override - blocks ALL autonomous commands
@@ -604,9 +848,27 @@ function handleMessage(ws, data) {
     }
 
     const rs = state.getRobotSocket();
+    console.log("[SERIAL_CMD] Robot socket:", rs ? "EXISTS" : "NULL", "readyState:", rs ? rs.readyState : "N/A");
     if (rs && rs.readyState === WebSocket.OPEN) {
-      rs.send(JSON.stringify({ type: "serial_cmd", cmd: data.cmd }));
-      console.log("[SERIAL_CMD]", data.cmd);
+      // For MOVE commands, first enable motors with MODE_MAPPING
+      if (isMoveCmd) {
+        console.log("[SERIAL_CMD] MOVE detected - sending MODE_MAPPING first to enable motors");
+        rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
+        // Mark robot as moving for motion detection (MAP 1 uses this)
+        odometry.markMoving();
+        // Send MOVE command after brief delay for motor init
+        setTimeout(() => {
+          const payload = JSON.stringify({ type: "serial_cmd", cmd: data.cmd });
+          console.log("[SERIAL_CMD] Sending MOVE to ESP32:", payload);
+          rs.send(payload);
+          console.log("[SERIAL_CMD] ✓ SENT to robot:", data.cmd);
+        }, 500);
+      } else {
+        const payload = JSON.stringify({ type: "serial_cmd", cmd: data.cmd });
+        console.log("[SERIAL_CMD] Sending to ESP32:", payload);
+        rs.send(payload);
+        console.log("[SERIAL_CMD] ✓ SENT to robot:", data.cmd);
+      }
     } else {
       console.log("[SERIAL_CMD] ❌ Robot socket not available for:", data.cmd);
     }
@@ -617,6 +879,17 @@ function handleMessage(ws, data) {
     console.log("[MAP1] Received mapping_control from browser:", data.cmd);
     broadcastToProcessors({ type: "mapping_control", cmd: data.cmd });
     console.log("[MAP1] Forwarded to Mac processors");
+  }
+
+  // LIDAR capture request from MAP 1 - signal to Mac processor to capture current LIDAR
+  if (data.type === "lidar_capture") {
+    console.log("[LIDAR] Capture requested at position:", data.position);
+    broadcastToProcessors({
+      type: "lidar_capture",
+      position: data.position,
+      timestamp: Date.now(),
+      odometry: odometry.getOdometry()
+    });
   }
 
   // Robot spin command from Mac mapper - forward to robot
@@ -678,14 +951,19 @@ function handleMessage(ws, data) {
   // Jetson lidar
   if (data.type === "identify" && data.device === "jetson-lidar") {
     ws.isJetsonLidar = true;
-    console.log("[JETSON] Lidar relay connected");
+    console.log("[JETSON-LIDAR] ★★★ Lidar relay connected! ★★★");
   }
-  if (data.type === "lidar" && ws.isJetsonLidar) {
-    state.broadcast({ type: "lidar", points: data.points, count: data.count }, ws);
+  if (data.type === "lidar") {
+    console.log(`[LIDAR-DEBUG] Received lidar data: isJetsonLidar=${ws.isJetsonLidar}, points=${data.count}`);
+    if (ws.isJetsonLidar) {
+      state.broadcast({ type: "lidar", points: data.points, count: data.count }, ws);
+      // Also forward to Mac processors for 3D fusion
+      broadcastToProcessors({ type: "lidar", points: data.points, count: data.count });
+      console.log(`[LIDAR] Broadcasting ${data.count} points to clients + processors`);
 
-    // LIDAR SAFETY: Check for obstacles in MAP mode
-    // Only active when robot is in mapping mode
-    if (state.robotStatus.mode === "mapping") {
+      // LIDAR SAFETY: Check for obstacles in MAP mode
+      // Only active when robot is in mapping mode
+      if (state.robotStatus.mode === "mapping") {
       const LIDAR_STOP_CM = 40;  // 16 inches = stop distance
       const points = data.points || [];
 
@@ -720,6 +998,7 @@ function handleMessage(ws, data) {
           console.log(`[LIDAR SAFETY] STOP! ${direction} obstacle at ${minDist.toFixed(0)}cm`);
         }
       }
+    }
     }
   }
 
