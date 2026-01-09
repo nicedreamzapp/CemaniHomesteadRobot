@@ -36,7 +36,7 @@ let lidar3dUltrasonicCones = { FL: null, FR: null, RL: null, RR: null };
 const SLAM_MAX_POINTS = 50000;
 const SLAM_POINT_SPACING = 0.03;
 let lastLidarUpdate = 0;
-const LIDAR_UPDATE_INTERVAL = 33;  // ~30fps for smooth real-time display
+const LIDAR_UPDATE_INTERVAL = 200;  // 5fps - reduces flashing and jitter from scan noise
 let animFrameCount = 0;
 
 // Occupancy grid visualization
@@ -85,7 +85,7 @@ window.clearLidarSlamMap = function() {
 
   if (lidar3dRobot) {
     lidar3dRobot.position.set(0, 0, 0);
-    lidar3dRobot.rotation.y = 0;
+    lidar3dRobot.rotation.y = Math.PI;  // Front faces up screen
   }
 
   lidar3dWalls.forEach(m => {
@@ -138,9 +138,13 @@ function initLidar3D() {
   lidar3dCamera.position.set(3, 4, 3);
   lidar3dCamera.lookAt(0, 0, 0);
 
-  lidar3dRenderer = new THREE.WebGLRenderer({ antialias: true });
+  lidar3dRenderer = new THREE.WebGLRenderer({
+    antialias: true,
+    logarithmicDepthBuffer: true  // Better depth precision - prevents z-fighting
+  });
   lidar3dRenderer.setSize(w, h);
   lidar3dRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  lidar3dRenderer.sortObjects = true;  // Enable automatic depth sorting
   container.insertBefore(lidar3dRenderer.domElement, container.firstChild);
 
   lidar3dControls = new THREE.OrbitControls(lidar3dCamera, lidar3dRenderer.domElement);
@@ -177,17 +181,15 @@ function initLidar3D() {
     transparent: true,
     opacity: 0.9
   });
-  navTargetMarker = new THREE.Mesh(navMarkerGeom, navMarkerMat);
-  navTargetMarker.rotation.x = -Math.PI / 2;
-  navTargetMarker.position.y = 0.02;
-  navTargetMarker.visible = false;
-  lidar3dWorldContainer.add(navTargetMarker);
+  // Navigation marker - DISABLED to reduce clutter
+  navTargetMarker = null;
 
   // Click-to-navigate handler
   container.addEventListener('click', onMapClick);
   container.addEventListener('dblclick', onMapDoubleClick);
 
   lidar3dRobot = createRobot3D();
+  lidar3dRobot.rotation.y = Math.PI;  // Rotate 180° so front faces forward (up the screen)
   lidar3dScene.add(lidar3dRobot);
 
   // Trail line - DISABLED (was cluttering the view)
@@ -666,17 +668,17 @@ function updateLidar3D(points) {
     }
   }
 
-  // Clear old walls
+  // Clear old walls and point cloud (from world container)
   lidar3dWalls.forEach(m => {
     if (m.geometry) m.geometry.dispose();
     if (m.material) m.material.dispose();
-    lidar3dScene.remove(m);
+    if (lidar3dWorldContainer) lidar3dWorldContainer.remove(m);
   });
   lidar3dWalls = [];
   if (lidar3dPointCloud) {
     if (lidar3dPointCloud.geometry) lidar3dPointCloud.geometry.dispose();
     if (lidar3dPointCloud.material) lidar3dPointCloud.material.dispose();
-    lidar3dScene.remove(lidar3dPointCloud);
+    if (lidar3dWorldContainer) lidar3dWorldContainer.remove(lidar3dPointCloud);
   }
 
   points.sort((a, b) => a[0] - b[0]);
@@ -750,15 +752,19 @@ function updateLidar3D(points) {
     lidar3dSlamCloud.geometry = new THREE.BufferGeometry();
   }
 
-  // Current scan point cloud - DISABLED (grey arcs are meaningless, only show colored camera points)
-  // const pointGeom = new THREE.BufferGeometry();
-  // pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  // pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  // lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({ size: 0.08, vertexColors: true }));
-  // lidar3dScene.add(lidar3dPointCloud);
+  // Current scan point cloud - LIVE LIDAR with distance colors
+  const pointGeom = new THREE.BufferGeometry();
+  pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({
+    size: 0.12,
+    vertexColors: true,
+    sizeAttenuation: true
+  }));
+  lidar3dWorldContainer.add(lidar3dPointCloud);  // Add to world container so it moves with robot
 
-  // Real-time walls around robot - DISABLED (clutters the colored point cloud)
-  const showRealtimeWalls = false;
+  // Real-time walls around robot - ENABLED for live visualization
+  const showRealtimeWalls = true;
   if (showRealtimeWalls)
   for (let i = 0; i < points.length - 1; i++) {
     const [a1, d1] = points[i], [a2, d2] = points[i + 1];
@@ -769,7 +775,7 @@ function updateLidar3D(points) {
     const x1 = (d1 / 1000) * Math.cos(r1), z1 = (d1 / 1000) * Math.sin(r1);
     const x2 = (d2 / 1000) * Math.cos(r2), z2 = (d2 / 1000) * Math.sin(r2);
 
-    const wallH = 1.2;  // Taller walls - more visible
+    const wallH = 0.5;  // Shorter walls - less cluttered
     const wallGeom = new THREE.BufferGeometry();
     wallGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
       x1, 0, z1, x2, 0, z2, x2, wallH, z2, x1, 0, z1, x2, wallH, z2, x1, wallH, z1
@@ -777,16 +783,16 @@ function updateLidar3D(points) {
     wallGeom.computeVertexNormals();
 
     const wallMat = new THREE.MeshBasicMaterial({
-      color: getDistanceColor3D((d1 + d2) / 2), transparent: true, opacity: 0.6, side: THREE.DoubleSide  // More opaque
+      color: getDistanceColor3D((d1 + d2) / 2), transparent: true, opacity: 0.7, side: THREE.DoubleSide
     });
     const wall = new THREE.Mesh(wallGeom, wallMat);
-    lidar3dScene.add(wall);
+    lidar3dWorldContainer.add(wall);  // Add to world container
     lidar3dWalls.push(wall);
 
     const edgeGeom = new THREE.BufferGeometry();
     edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
     const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: getDistanceColor3D((d1 + d2) / 2) }));
-    lidar3dScene.add(edge);
+    lidar3dWorldContainer.add(edge);  // Add to world container
     lidar3dWalls.push(edge);
 
     // ACCUMULATED WALLS - Build persistent map as robot drives
@@ -867,18 +873,27 @@ function animateLidar3D() {
   if (!window.odomState) window.odomState = { x: 0, y: 0, heading: 0, totalDistance: 0 };
 
   // ROBOT-CENTRIC: Grid slides under robot
+  // Map points use: (world_x, height, -world_y) for Three.js coords
+  // To center robot at origin, we offset container by inverse of robot position
+  // Container X = -robotX (negated because map points use +x for +x)
+  // Container Z = +robotY (positive because map points use -y for +z, so we need +y to cancel)
   if (lidar3dWorldContainer && window.odomState) {
-    const gridZ = -window.odomState.y / 1000;
-    const gridX = window.odomState.x / 1000;
-    lidar3dWorldContainer.position.z = gridZ;
+    const gridX = -window.odomState.x / 1000;  // Robot moves right, map slides left
+    const gridZ = window.odomState.y / 1000;   // Robot moves forward (-y in Three.js), map slides back (+z)
     lidar3dWorldContainer.position.x = gridX;
+    lidar3dWorldContainer.position.z = gridZ;
+    // Rotate world with robot heading (compass has 2° noise filter now)
     lidar3dWorldContainer.rotation.y = -window.odomState.heading;
   }
 
-  // Robot stays at origin
+  // Robot stays at origin - smooth rotation from compass (with 2° noise filter)
   if (lidar3dRobot) {
     lidar3dRobot.position.set(0, 0, 0);
-    lidar3dRobot.rotation.y = (window.odomState && window.odomState.heading) || 0;
+    // Smooth interpolation to target heading
+    const targetHeading = (window.odomState && window.odomState.heading) || Math.PI;
+    const currentHeading = lidar3dRobot.rotation.y;
+    // Lerp 30% toward target each frame for smooth rotation
+    lidar3dRobot.rotation.y = currentHeading + (targetHeading - currentHeading) * 0.3;
   }
 
   lidar3dControls.update();
@@ -1426,15 +1441,25 @@ function toggleLidar3DFullscreen() {
 }
 
 // ============ COMPASS UPDATE ============
+// Track last stable heading to filter noise
+let lastStableCompassHeading = 0;
+
 function updateCompass(heading, x, y, z) {
   window.compassState = { heading, x, y, z };
 
-  // USE COMPASS HEADING FOR ROBOT ORIENTATION
-  // Convert degrees to radians and update odomState so 3D model rotates correctly
-  // Compass: 0°=North, 90°=East. Three.js: 0=facing +Z (screen), rotation is around Y axis
-  // We want North=up on screen, so subtract 90° to align
-  if (window.odomState) {
-    window.odomState.heading = (heading - 90) * Math.PI / 180;
+  // 2-DEGREE NOISE FILTER: Only update robot rotation if compass changed by more than 2°
+  // This filters out small noise while still responding to real turns
+  const headingDiff = Math.abs(heading - lastStableCompassHeading);
+  const wrappedDiff = Math.min(headingDiff, 360 - headingDiff);  // Handle 359→1 wraparound
+
+  if (wrappedDiff > 2) {
+    // Real movement detected - update robot orientation
+    lastStableCompassHeading = heading;
+
+    // Apply to robot rotation (180 - heading to fix orientation)
+    if (window.odomState) {
+      window.odomState.heading = (180 - heading) * Math.PI / 180;
+    }
   }
 
   // Update compass display in UI
@@ -1467,11 +1492,17 @@ let accumulatedMapVisible = true;  // ON - show textured 3D room map
 let showPhotoMarkers = false;  // DISABLED - ugly floating photos on map
 let mapRenderMode = 'splats';  // 'points', 'splats', 'surface'
 
-// Point quality filters - DISABLED (compact format has no obs/conf fields)
-let mapMinObservations = 1;    // Allow all (compact format defaults to 1)
-let mapMinConfidence = 0.0;    // Allow all
-let mapMinZ = -1.0;            // Well below floor
-let mapMaxZ = 5.0;             // High ceiling
+// ============ RANSAC ROOM PLANES ============
+// Solid wall/floor/ceiling surfaces detected from point cloud
+let roomPlaneMeshes = [];
+let roomPlanesVisible = true;  // Show solid room surfaces
+
+// Point quality filters - tuned for realistic map output
+let mapMinObservations = 2;    // Require 2+ observations for stability
+let mapMinConfidence = 0.0;    // Allow all confidence levels
+let mapMinZ = -0.5;            // Just below floor level
+let mapMaxZ = 3.5;             // Typical room ceiling height
+let mapMaxMotion = 40;         // Filter out dynamic objects (motion score > 40%)
 
 // Custom shader for photorealistic splats (circular points with soft edges)
 const splatVertexShader = `
@@ -1483,8 +1514,9 @@ const splatVertexShader = `
     vColor = customColor;
     vSize = size;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = size * (300.0 / -mvPosition.z);
-    gl_PointSize = clamp(gl_PointSize, 2.0, 50.0);
+    // Smaller dots need higher multiplier - 800 for 0.02 size = ~16px at 1m
+    gl_PointSize = size * (800.0 / -mvPosition.z);
+    gl_PointSize = clamp(gl_PointSize, 1.5, 20.0);  // Smaller min/max for dense look
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
@@ -1493,38 +1525,56 @@ const splatFragmentShader = `
   varying vec3 vColor;
   varying float vSize;
   void main() {
-    // Create circular point with soft edge
+    // Create circular point
     vec2 center = gl_PointCoord - vec2(0.5);
     float dist = length(center);
 
-    // Discard pixels outside circle
-    if (dist > 0.5) discard;
-
-    // Soft edge for anti-aliasing
-    float alpha = 1.0 - smoothstep(0.35, 0.5, dist);
+    // Discard pixels outside circle - sharp edge for proper occlusion
+    if (dist > 0.45) discard;
 
     // Add slight shading for 3D effect
-    float shade = 1.0 - dist * 0.4;
+    float shade = 1.0 - dist * 0.3;
 
-    gl_FragColor = vec4(vColor * shade, alpha);
+    // OPAQUE - alpha = 1.0 for proper depth occlusion
+    gl_FragColor = vec4(vColor * shade, 1.0);
   }
 `;
 
-function updateAccumulatedMap(data) {
+// Control whether map updates automatically or only on request
+let mapAutoUpdate = true;  // ON - show map data, with 30s rate limit to prevent flashing
+let pendingMapData = null;  // Store latest data for manual refresh
+let mapFirstUpdate = true;  // Force first update immediately
+
+function updateAccumulatedMap(data, forceUpdate = false) {
   if (!lidar3dScene || !lidar3dWorldContainer) return;
   if (!accumulatedMapVisible) return;
 
   const points = data.points || [];
   if (points.length === 0) return;
 
-  // Rate limit to reduce flashing - only update every 500ms
+  // Store latest data
+  pendingMapData = data;
+
+  // Only update if forced OR auto-update is enabled with rate limit
+  if (!forceUpdate && !mapAutoUpdate) {
+    // Silent - just store data, don't update display
+    return;
+  }
+
+  // Force first update immediately so something is visible
   const now = Date.now();
-  if (window._lastMapUpdate && (now - window._lastMapUpdate) < 500) return;
+  if (mapFirstUpdate) {
+    mapFirstUpdate = false;
+    console.log('[3D MAP] First update - showing data immediately');
+  } else if (!forceUpdate && window._lastMapUpdate && (now - window._lastMapUpdate) < 30000) {
+    // Rate limit subsequent updates - 30 seconds minimum to prevent flashing
+    return;
+  }
   window._lastMapUpdate = now;
 
-  console.log(`[3D MAP] Rendering ${points.length} textured points (mode: ${mapRenderMode})`);
+  console.log(`[3D MAP] Rendering ${points.length} points`);
 
-  // Remove old cloud/mesh (only when we're actually updating)
+  // Remove old cloud/mesh
   if (accumulatedMapCloud) {
     if (accumulatedMapCloud.geometry) accumulatedMapCloud.geometry.dispose();
     if (accumulatedMapCloud.material) accumulatedMapCloud.material.dispose();
@@ -1587,60 +1637,62 @@ function updateAccumulatedMap(data) {
       continue;
     }
 
-    filteredCount++;
+    // Track dynamic objects and filter high-motion points
+    const motionScore = pmotion / 100;  // Normalize to 0-1 (0=static, 1=dynamic)
+    if (pmotion > mapMaxMotion) {
+      dynamicCount++;
+      continue;  // Skip dynamic objects above threshold
+    }
 
-    // Track dynamic objects
-    const motionScore = pmotion / 100;  // Normalize to 0-1
-    if (motionScore > 0.4) dynamicCount++;
+    filteredCount++;
 
     // Convert to Three.js coordinates
     // px, py are world coords in meters, pz is height
     positions.push(px, pz || 0.15, -py);
 
-    // Use actual RGB colors from camera imagery (0-255 -> 0-1)
-    // NEW: Apply color tinting based on motion score
+    // DISTANCE-BASED RAINBOW COLORING (like LIDAR visualization)
+    // Green=close, Yellow=mid, Magenta=far, Cyan=very far
     let r, g, b, alpha;
-    if (pr !== undefined && pg !== undefined && pb !== undefined) {
-      // Boost brightness for better visibility
-      const boost = 1.15;
-      r = Math.min((pr / 255) * boost, 1);
-      g = Math.min((pg / 255) * boost, 1);
-      b = Math.min((pb / 255) * boost, 1);
 
-      // Apply dynamic object tinting based on motion score
-      if (motionScore < 0.2) {
-        // STATIC: Use actual color, full opacity
-        alpha = 1.0;
-      } else if (motionScore < 0.5) {
-        // UNCERTAIN: Slight yellow tint, slightly reduced opacity
-        const tintAmount = (motionScore - 0.2) / 0.3;  // 0-1 within this range
-        r = r * (1 - tintAmount * 0.2) + tintAmount * 0.2;  // Blend toward yellow
-        g = g * (1 - tintAmount * 0.2) + tintAmount * 0.2;
-        b = b * (1 - tintAmount * 0.3);  // Reduce blue
-        alpha = 0.9 - tintAmount * 0.1;  // 0.9 to 0.8
-      } else {
-        // DYNAMIC: Orange/red tint, pulsing opacity
-        const tintAmount = (motionScore - 0.5) / 0.5;  // 0-1 within this range
-        r = r * (1 - tintAmount * 0.4) + tintAmount * 0.4;  // Strong orange
-        g = g * (1 - tintAmount * 0.3);  // Reduce green
-        b = b * (1 - tintAmount * 0.5);  // Reduce blue more
-        // Pulsing effect based on time (will update on next render)
-        alpha = 0.5 + 0.3 * Math.sin(Date.now() / 200 + px * 10);
-      }
+    // Calculate distance from robot (origin)
+    const dist = Math.sqrt(px * px + py * py);
+    const maxDist = 6.0;  // 6 meters max range
+    const t = Math.min(dist / maxDist, 1.0);  // Normalized 0-1
+
+    // Rainbow gradient: Green -> Yellow -> Magenta -> Cyan
+    if (t < 0.25) {
+      // Green to Yellow (0.0 - 0.25)
+      const s = t / 0.25;
+      r = s;           // 0 -> 1
+      g = 1.0;         // 1
+      b = 0;           // 0
+    } else if (t < 0.5) {
+      // Yellow to Orange/Red (0.25 - 0.5)
+      const s = (t - 0.25) / 0.25;
+      r = 1.0;         // 1
+      g = 1.0 - s * 0.5;  // 1 -> 0.5
+      b = 0;           // 0
+    } else if (t < 0.75) {
+      // Orange to Magenta (0.5 - 0.75)
+      const s = (t - 0.5) / 0.25;
+      r = 1.0;         // 1
+      g = 0.5 - s * 0.5;  // 0.5 -> 0
+      b = s;           // 0 -> 1
     } else {
-      // Fallback color
-      r = 0.5; g = 0.8; b = 0.9;
-      alpha = 1.0;
+      // Magenta to Cyan (0.75 - 1.0)
+      const s = (t - 0.75) / 0.25;
+      r = 1.0 - s;     // 1 -> 0
+      g = s;           // 0 -> 1
+      b = 1.0;         // 1
     }
+
+    alpha = 1.0;
     colors.push(r, g, b);
     alphas.push(alpha);
 
-    // Size based on observation count - more observed = larger/more confident
-    // Dynamic objects rendered slightly smaller
-    const baseSize = mapRenderMode === 'splats' ? 0.10 : 0.06;
-    const obsBonus = Math.min(pobs / 20, 1) * 0.04;  // Up to +0.04 for high obs
-    const dynamicPenalty = motionScore > 0.4 ? 0.02 : 0;  // Slightly smaller for dynamic
-    sizes.push(baseSize + obsBonus - dynamicPenalty);
+    // VERY SMALL DOTS for dense surface appearance (like reference image)
+    const baseSize = 0.02;  // Tiny dots for dense surface look
+    sizes.push(baseSize);
   }
 
   // Log dynamic object stats
@@ -1663,14 +1715,56 @@ function updateAccumulatedMap(data) {
 
   if (mapRenderMode === 'splats') {
     // Use custom shader for photorealistic splats
+    // FULLY OPAQUE - no dots behind dots
     const material = new THREE.ShaderMaterial({
       vertexShader: splatVertexShader,
       fragmentShader: splatFragmentShader,
-      transparent: true,
+      transparent: false,
+      depthTest: true,
       depthWrite: true,
-      blending: THREE.NormalBlending
+      blending: THREE.NoBlending  // Completely disable alpha blending
     });
+
+    // Sort points by depth (back-to-front) so closer points render last and occlude
+    // This ensures proper painter's algorithm even with depth buffer
+    const posArray = geometry.getAttribute('position').array;
+    const colorArray = geometry.getAttribute('customColor').array;
+    const sizeArray = geometry.getAttribute('size').array;
+    const numPoints = posArray.length / 3;
+
+    // Create index array for sorting
+    const indices = new Array(numPoints);
+    for (let i = 0; i < numPoints; i++) indices[i] = i;
+
+    // Sort by Y (depth in Three.js) - back to front
+    indices.sort((a, b) => {
+      const ay = posArray[a * 3 + 2];  // Z in world = depth
+      const by = posArray[b * 3 + 2];
+      return ay - by;  // Back to front
+    });
+
+    // Reorder all attributes
+    const sortedPos = new Float32Array(posArray.length);
+    const sortedColor = new Float32Array(colorArray.length);
+    const sortedSize = new Float32Array(sizeArray.length);
+
+    for (let i = 0; i < numPoints; i++) {
+      const srcIdx = indices[i];
+      sortedPos[i * 3] = posArray[srcIdx * 3];
+      sortedPos[i * 3 + 1] = posArray[srcIdx * 3 + 1];
+      sortedPos[i * 3 + 2] = posArray[srcIdx * 3 + 2];
+      sortedColor[i * 3] = colorArray[srcIdx * 3];
+      sortedColor[i * 3 + 1] = colorArray[srcIdx * 3 + 1];
+      sortedColor[i * 3 + 2] = colorArray[srcIdx * 3 + 2];
+      sortedSize[i] = sizeArray[srcIdx];
+    }
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(sortedPos, 3));
+    geometry.setAttribute('customColor', new THREE.Float32BufferAttribute(sortedColor, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sortedSize, 1));
+
     accumulatedMapCloud = new THREE.Points(geometry, material);
+    accumulatedMapCloud.renderOrder = 0;  // Render with scene
   } else if (mapRenderMode === 'surface') {
     // Simple approach: render as larger overlapping quads
     // For true surface reconstruction, would need Delaunay/Poisson on server
@@ -1709,8 +1803,8 @@ function updateAccumulatedMap(data) {
 
 // Create surface approximation using billboarded quads
 function createSurfaceApproximation(points) {
-  // For each point, create a small quad facing the camera
-  const quadSize = 0.04;  // 4cm quads
+  // For each point, create a quad facing the camera - larger = more solid walls
+  const quadSize = 0.15;  // 15cm quads for solid-looking surfaces
   const positions = [];
   const colors = [];
   const uvs = [];
@@ -1765,6 +1859,131 @@ function createSurfaceApproximation(points) {
 function setMapRenderMode(mode) {
   mapRenderMode = mode;
   console.log(`[3D MAP] Render mode set to: ${mode}`);
+}
+
+// ============ RANSAC ROOM PLANES RENDERING ============
+// Creates solid wall/floor/ceiling surfaces from detected planes
+function updateRoomPlanes(data) {
+  if (!lidar3dScene || !lidar3dWorldContainer) return;
+  if (!roomPlanesVisible) return;
+
+  const planes = data.planes || [];
+  if (planes.length === 0) return;
+
+  // Remove old plane meshes
+  for (const mesh of roomPlaneMeshes) {
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) mesh.material.dispose();
+    lidar3dWorldContainer.remove(mesh);
+  }
+  roomPlaneMeshes = [];
+
+  // Create mesh for each detected plane
+  for (const plane of planes) {
+    const { type, normal, center, bounds, color } = plane;
+
+    // Calculate plane dimensions from bounds
+    const minX = bounds.min[0], maxX = bounds.max[0];
+    const minY = bounds.min[1], maxY = bounds.max[1];
+    const minZ = bounds.min[2], maxZ = bounds.max[2];
+
+    let width, height, mesh;
+    const normalVec = new THREE.Vector3(normal[0], normal[1], normal[2]);
+
+    // Color from average RGB
+    const planeColor = new THREE.Color(color[0]/255, color[1]/255, color[2]/255);
+
+    // Create plane geometry based on orientation
+    if (type === 'floor' || type === 'ceiling') {
+      // Horizontal plane - lies on X-Y plane (floor/ceiling)
+      width = maxX - minX;
+      height = maxY - minY;
+      const geometry = new THREE.PlaneGeometry(width, height);
+      const material = new THREE.MeshLambertMaterial({
+        color: planeColor,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85
+      });
+      mesh = new THREE.Mesh(geometry, material);
+
+      // Position and rotate for horizontal
+      // Convert: px, py -> world X, -Z; pz -> Y
+      mesh.position.set(
+        (minX + maxX) / 2,
+        center[2],  // Z becomes Y (height)
+        -(minY + maxY) / 2
+      );
+      mesh.rotation.x = -Math.PI / 2;  // Rotate to horizontal
+
+    } else {
+      // Vertical plane (wall)
+      // Determine if wall faces X or Y direction based on normal
+      const nx = Math.abs(normal[0]);
+      const ny = Math.abs(normal[1]);
+
+      if (nx > ny) {
+        // Wall faces X direction (perpendicular to X axis)
+        width = maxY - minY;
+        height = maxZ - minZ;
+        const geometry = new THREE.PlaneGeometry(width, height);
+        const material = new THREE.MeshLambertMaterial({
+          color: planeColor,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85
+        });
+        mesh = new THREE.Mesh(geometry, material);
+
+        // Position: center of wall bounds
+        mesh.position.set(
+          center[0],
+          (minZ + maxZ) / 2,
+          -(minY + maxY) / 2
+        );
+        mesh.rotation.y = Math.PI / 2;  // Face along X
+
+      } else {
+        // Wall faces Y direction (perpendicular to Y axis)
+        width = maxX - minX;
+        height = maxZ - minZ;
+        const geometry = new THREE.PlaneGeometry(width, height);
+        const material = new THREE.MeshLambertMaterial({
+          color: planeColor,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85
+        });
+        mesh = new THREE.Mesh(geometry, material);
+
+        // Position: center of wall bounds
+        mesh.position.set(
+          (minX + maxX) / 2,
+          (minZ + maxZ) / 2,
+          -center[1]
+        );
+        // Default rotation faces along Y
+      }
+    }
+
+    if (mesh) {
+      mesh.userData = { planeType: type, pointCount: plane.point_count };
+      lidar3dWorldContainer.add(mesh);
+      roomPlaneMeshes.push(mesh);
+    }
+  }
+
+  console.log(`[PLANES] Rendered ${roomPlaneMeshes.length} solid surfaces`);
+}
+
+// Toggle room planes visibility
+function toggleRoomPlanesVisible(visible) {
+  roomPlanesVisible = visible !== undefined ? visible : !roomPlanesVisible;
+  for (const mesh of roomPlaneMeshes) {
+    mesh.visible = roomPlanesVisible;
+  }
+  console.log(`[PLANES] Visibility: ${roomPlanesVisible}`);
+  return roomPlanesVisible;
 }
 
 function updateFrameHistory(data) {
@@ -2160,11 +2379,56 @@ function setMapFilters(options) {
     mapMaxZ = options.maxZ;
     console.log(`[MAP] Max Z set to: ${mapMaxZ}`);
   }
-  return { mapMinObservations, mapMinConfidence, mapMinZ, mapMaxZ };
+  if (options.maxMotion !== undefined) {
+    mapMaxMotion = options.maxMotion;
+    console.log(`[MAP] Max motion (dynamic filter) set to: ${mapMaxMotion}`);
+  }
+  return { mapMinObservations, mapMinConfidence, mapMinZ, mapMaxZ, mapMaxMotion };
 }
 
 function getMapFilters() {
-  return { mapMinObservations, mapMinConfidence, mapMinZ, mapMaxZ };
+  return { mapMinObservations, mapMinConfidence, mapMinZ, mapMaxZ, mapMaxMotion };
+}
+
+// Preset filter configurations
+function setMapFilterPreset(preset) {
+  switch (preset) {
+    case 'strict':
+      // High quality - only well-observed static points
+      setMapFilters({ minObservations: 3, maxMotion: 30, minZ: -0.3, maxZ: 3.0 });
+      break;
+    case 'balanced':
+      // Default - good quality with reasonable coverage
+      setMapFilters({ minObservations: 2, maxMotion: 40, minZ: -0.5, maxZ: 3.5 });
+      break;
+    case 'permissive':
+      // Show more points including uncertain ones
+      setMapFilters({ minObservations: 1, maxMotion: 60, minZ: -1.0, maxZ: 5.0 });
+      break;
+    case 'all':
+      // Show everything (debugging)
+      setMapFilters({ minObservations: 1, maxMotion: 100, minZ: -10, maxZ: 10 });
+      break;
+    default:
+      console.log(`[MAP] Unknown preset: ${preset}`);
+  }
+  console.log(`[MAP] Filter preset applied: ${preset}`);
+}
+
+// Manual map refresh - call this when MAP 1 completes
+function refreshMap() {
+  if (pendingMapData) {
+    console.log('[3D MAP] Manual refresh triggered');
+    updateAccumulatedMap(pendingMapData, true);  // Force update
+  } else {
+    console.log('[3D MAP] No pending data to refresh');
+  }
+}
+
+// Toggle auto-update mode
+function setMapAutoUpdate(enabled) {
+  mapAutoUpdate = enabled;
+  console.log(`[3D MAP] Auto-update: ${enabled}`);
 }
 
 // Initialize on load
@@ -2195,6 +2459,11 @@ window.lidar3dModule = {
   updateFrameHistory,
   toggleAccumulatedMapVisible,
   setMapRenderMode,  // Switch between 'points', 'splats', 'surface'
+  refreshMap,        // Manual refresh - no flashing
+  setMapAutoUpdate,  // Enable/disable auto-updates
+  // RANSAC room planes (solid wall/floor/ceiling surfaces)
+  updateRoomPlanes,
+  toggleRoomPlanesVisible,
   // 3D room model
   loadRoomModel,
   toggleRoomModelVisible,
@@ -2204,6 +2473,7 @@ window.lidar3dModule = {
   // Map quality filters
   setMapFilters,
   getMapFilters,
+  setMapFilterPreset,
   // Fingerprint & persistent map storage
   handleSavedFingerprints,
   handleLoaded3DMap

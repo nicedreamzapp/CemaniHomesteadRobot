@@ -103,60 +103,117 @@ ws.onmessage = function(e) {
     console.log(`[3D MAP] Not found on server: ${d.name}`);
   }
 
-  // Autonomous mapping errors (only show if robot not connected)
+  // Autonomous mapping errors - just show error, don't reset button
   if (d.type === 'autonomous_error') {
-    console.error('[AUTONOMOUS] Error:', d.error);
-    alert('MAP MODE ERROR: ' + d.error);
-    // Reset the MAP button UI
-    if (typeof mapModeActive !== 'undefined') {
-      mapModeActive = false;
-      const btn = document.getElementById('mapModeBtn');
-      if (btn) {
-        btn.style.background = 'rgba(20,40,60,0.8)';
-        btn.style.color = '#5af';
-        btn.innerHTML = '🗺️ MAP';
-      }
+    console.error('[AUTONOMOUS] Error received:', d.error);
+    // Only show error in status text - don't reset button (autonomous_status handles that)
+    const statusText = document.getElementById('mapStatusText');
+    const status = document.getElementById('mapModeStatus');
+    if (statusText) {
+      statusText.textContent = d.error || 'Error';
+      statusText.style.color = '#f44';
     }
+    if (status) status.style.display = 'block';
   }
 
   // Autonomous status updates
   if (d.type === 'autonomous_status') {
-    console.log('[AUTONOMOUS] Status:', d);
+    console.log('[AUTONOMOUS] Status received:', d, 'running:', d.running, 'paused:', d.paused);
     const btn = document.getElementById('mapModeBtn');
     const status = document.getElementById('mapModeStatus');
     const statusText = document.getElementById('mapStatusText');
-    const slamStats = document.getElementById('slamMapStats');
 
-    if (d.running !== undefined) {
-      // Update the global mapModeActive variable
-      if (typeof mapModeActive !== 'undefined') {
-        mapModeActive = d.running;
-      }
+    // Determine if autonomous is running (default to current state if undefined)
+    const isRunning = d.running === true || (d.running === undefined && typeof mapModeActive !== 'undefined' && mapModeActive);
 
-      // Update MAP button appearance
-      if (btn) {
-        if (d.running) {
-          btn.style.background = 'rgba(90,170,255,0.9)';
+    // Update the global mapModeActive variable
+    if (typeof mapModeActive !== 'undefined' && d.running !== undefined) {
+      mapModeActive = d.running;
+    }
+
+    // ALWAYS update MAP button appearance based on running state
+    if (btn) {
+      if (isRunning) {
+        if (d.paused) {
+          // PAUSED - show yellow/orange to indicate paused state
+          btn.style.background = '#ffaa00';
           btn.style.color = '#000';
-          btn.style.borderColor = '#5af';
-          btn.innerHTML = '🗺️ AUTO';
+          btn.style.borderColor = '#fa0';
+          btn.textContent = 'PAUSED';
+          console.log('[AUTONOMOUS] Button set to PAUSED (yellow)');
         } else {
-          btn.style.background = 'rgba(20,40,60,0.8)';
-          btn.style.color = '#5af';
-          btn.style.borderColor = 'rgba(90,170,255,0.5)';
-          btn.innerHTML = '🗺️ MAP';
+          btn.style.background = '#00ff00';  // Bright green - active
+          btn.style.color = '#000';
+          btn.style.borderColor = '#0f0';
+          btn.textContent = 'AUTO';
+          console.log('[AUTONOMOUS] Button set to AUTO (green)');
         }
+      } else if (d.running === false) {
+        btn.style.background = 'rgba(20,40,60,0.8)';
+        btn.style.color = '#5af';
+        btn.style.borderColor = 'rgba(90,170,255,0.5)';
+        btn.textContent = 'MAP';
+        console.log('[AUTONOMOUS] Button set to MAP');
       }
+    }
 
-      // Update status text
-      if (status && statusText) {
-        status.style.display = d.running ? 'block' : 'none';
-        if (d.running) {
-          statusText.textContent = d.mode === 'direct' ? 'Mapping (direct)' : 'Mapping';
-          statusText.style.color = d.mode === 'direct' ? '#fc0' : '#5af';
+    // Update status text
+    if (status && statusText) {
+      status.style.display = isRunning ? 'block' : 'none';
+      if (isRunning) {
+        if (d.paused) {
+          statusText.textContent = 'Paused - will auto-resume';
+          statusText.style.color = '#fa0';
+        } else {
+          statusText.textContent = d.mode === 'direct' ? 'Autonomous (direct)' : 'Autonomous';
+          statusText.style.color = d.mode === 'direct' ? '#fc0' : '#0f0';
         }
       }
     }
+  }
+
+  // Mac GPU mapper status updates
+  if (d.type === 'mapping_status') {
+    console.log('[MAPPING] Mac mapper status:', d);
+    const statusText = document.getElementById('mapStatusText');
+    if (statusText && d.active !== undefined) {
+      if (d.active) {
+        statusText.textContent = 'GPU Mapping Active';
+        statusText.style.color = '#0f0';
+      }
+    }
+    // Store for other components
+    window.macMapperStatus = d;
+  }
+
+  // RELOCALIZATION broadcast from server - update local position
+  if (d.type === 'relocalization') {
+    console.log(`[RELOCALIZE] Received: (${d.x}, ${d.y}) from ${d.source} area=${d.areaName}`);
+
+    // Update local odometry state
+    if (window.odomState) {
+      window.odomState.x = d.x;
+      window.odomState.y = d.y;
+      // Add to trail
+      if (window.odomState.trail) {
+        window.odomState.trail.push({ x: d.x, y: d.y });
+        if (window.odomState.trail.length > 1000) {
+          window.odomState.trail = window.odomState.trail.slice(-500);
+        }
+      }
+    }
+
+    // Show notification
+    let notice = document.getElementById('relocalizationNotice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'relocalizationNotice';
+      notice.style.cssText = 'position:fixed;top:100px;left:50%;transform:translateX(-50%);background:#f90;color:#000;padding:10px 20px;border-radius:8px;z-index:9999;font-weight:bold;';
+      document.body.appendChild(notice);
+    }
+    notice.textContent = `🎯 RELOCALIZED to ${d.areaName || 'known position'}`;
+    notice.style.display = 'block';
+    setTimeout(() => { notice.style.display = 'none'; }, 3000);
   }
 
   // Indoor SLAM map status updates
@@ -308,10 +365,29 @@ ws.onmessage = function(e) {
     if (window.lidar3dModule && window.lidar3dModule.updateAccumulatedMap) {
       window.lidar3dModule.updateAccumulatedMap(d);
     }
+    // Track point count for MAP 1 live feedback
+    const pts = d.total || (d.points ? d.points.length : 0);
+    window.map1PointCount = pts;
+    // Update MAP 1 status display if active
+    if (window.updateMap1PointCount) {
+      window.updateMap1PointCount(pts);
+    }
     // Log occasionally
     if (Math.random() < 0.05) {
-      const pts = d.total || (d.points ? d.points.length : 0);
       console.log(`[3D MAP] Received ${pts} textured points from Mac processor`);
+    }
+  }
+
+  // Room planes from RANSAC detection (solid wall/floor/ceiling surfaces)
+  if (d.type === 'room_planes') {
+    if (window.lidar3dModule && window.lidar3dModule.updateRoomPlanes) {
+      window.lidar3dModule.updateRoomPlanes(d);
+    }
+    if (d.planes && d.planes.length > 0) {
+      const walls = d.planes.filter(p => p.type === 'wall').length;
+      const floors = d.planes.filter(p => p.type === 'floor').length;
+      const ceilings = d.planes.filter(p => p.type === 'ceiling').length;
+      console.log(`[PLANES] Received ${d.planes.length} planes: ${walls} walls, ${floors} floor, ${ceilings} ceiling`);
     }
   }
 
@@ -336,6 +412,14 @@ ws.onmessage = function(e) {
   // Dead reckoning (encoder-based position)
   if (d.type === 'dead_reckoning') {
     handleDeadReckoning(d);
+  }
+
+  // Motion settled (robot stopped moving - used by MAP 1)
+  if (d.type === 'motion_settled') {
+    console.log('[MOTION] Robot motion settled at heading=' + d.odomHeadingDeg + '°');
+    if (window.onMotionSettled) {
+      window.onMotionSettled(d);
+    }
   }
 
   // Status updates
