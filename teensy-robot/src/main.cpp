@@ -2,6 +2,14 @@
 // Teensy 4.1 + 2x ZLAC8015D Motor Drivers
 // V3.68 - Safety system (obstacle avoidance + tilt detection)
 // =====================================================
+//
+// ╔═══════════════════════════════════════════════════════════════════════════════╗
+// ║  SAFETY RULES:                                                                ║
+// ║  1. Xbox controller ALWAYS has priority over autonomous commands              ║
+// ║  2. Claude Code is NEVER allowed to initiate robot movement                   ║
+// ║  3. Only the USER can start MAP 1 or movement via the web UI                  ║
+// ║  4. Watchdog stops motors if no commands received for 2 seconds               ║
+// ╚═══════════════════════════════════════════════════════════════════════════════╝
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -35,7 +43,10 @@ float lastValidLat = 0, lastValidLon = 0;
 
 // Compass data
 float compassHeading = 0;
+float compassHeadingFiltered = 0;  // Smoothed heading to reduce jitter
+bool compassFilterInitialized = false;
 int16_t compassX = 0, compassY = 0, compassZ = 0;
+#define COMPASS_FILTER_ALPHA 0.15f  // Lower = more smoothing (0.1-0.3 typical)
 
 // Compass AUTO-calibration - runs continuously while driving!
 int16_t compassOffsetX = 0;
@@ -435,13 +446,34 @@ void readCompass() {
 
   // Calculate magnetic heading (0-360 degrees)
   // Negate both X and Y to correct orientation for IST8310 mounting
-  compassHeading = atan2((float)-compassY, (float)-compassX) * 180.0 / PI;
-  if (compassHeading < 0) compassHeading += 360;
+  float rawHeading = atan2((float)-compassY, (float)-compassX) * 180.0 / PI;
+  if (rawHeading < 0) rawHeading += 360;
 
   // Apply mounting offset (arrow on GPS/compass points to BACK of robot)
   // Then apply magnetic declination to get TRUE north heading
   // Result: 0°=True North, 90°=East, 180°=South, 270°=West
-  compassHeading = fmod(compassHeading + COMPASS_MOUNTING_OFFSET + MAGNETIC_DECLINATION + 360.0f, 360.0f);
+  rawHeading = fmod(rawHeading + COMPASS_MOUNTING_OFFSET + MAGNETIC_DECLINATION + 360.0f, 360.0f);
+
+  // Apply low-pass filter to reduce jitter (handle 0°/360° wraparound)
+  if (!compassFilterInitialized) {
+    compassHeadingFiltered = rawHeading;
+    compassFilterInitialized = true;
+  } else {
+    // Calculate shortest angular difference (handles wraparound)
+    float diff = rawHeading - compassHeadingFiltered;
+    if (diff > 180.0f) diff -= 360.0f;
+    if (diff < -180.0f) diff += 360.0f;
+
+    // Apply exponential moving average filter
+    compassHeadingFiltered += COMPASS_FILTER_ALPHA * diff;
+
+    // Keep in 0-360 range
+    if (compassHeadingFiltered < 0) compassHeadingFiltered += 360.0f;
+    if (compassHeadingFiltered >= 360.0f) compassHeadingFiltered -= 360.0f;
+  }
+
+  // Use filtered value for output (raw still available in compassHeading)
+  compassHeading = compassHeadingFiltered;
 }
 
 // ===== MAIN LOOP =====
@@ -594,6 +626,12 @@ void loop() {
         emergencyStop = false;
         safetyReset();  // Clear any safety override
         Serial1.println("RESUMED");
+      }
+      // Motor reset command - full driver reset without power cycle
+      else if (strcmp(buf, "MOTOR_RESET") == 0) {
+        Serial.println("[CMD] MOTOR_RESET received - doing full reset");
+        fullReset();
+        Serial1.println("MOTORS_RESET");
       }
       // Mode switching: MANUAL (Xbox) vs MAPPING (slow autonomous)
       else if (strcmp(buf, "MODE_MANUAL") == 0) {
@@ -751,7 +789,18 @@ void loop() {
     }
   }
   // ===== JOYSTICK MOTOR CONTROL =====
-  else if (controllerConnected && !emergencyStop && motorsEnabled && !discreteMoveActive && !autonomousActive) {
+  // XBOX IS KING - joystick ALWAYS overrides autonomous/mapping mode
+  // Check for any joystick input first and cancel autonomous if detected
+  if (controllerConnected && (abs(currentLX) > 50 || abs(currentLY) > 50)) {
+    if (autonomousActive) {
+      Serial.println("[XBOX] Joystick override - CANCELING autonomous mode");
+      autonomousActive = false;
+      autoLeftSpeed = 0;
+      autoRightSpeed = 0;
+    }
+  }
+
+  if (controllerConnected && !emergencyStop && motorsEnabled && !discreteMoveActive) {
     if (now - lastMotorUpdate >= MOTOR_UPDATE_INTERVAL) {
       lastMotorUpdate = now;
 
@@ -867,10 +916,12 @@ void loop() {
     }
   }
 
-  // Reset watchdog flag when we receive new data
+  // Reset watchdog flag AND re-enable motors when communication is restored
   if (timeSinceComm < 500 && watchdogTriggered) {
     watchdogTriggered = false;
-    Serial.println("[WATCHDOG] Communication restored");
+    Serial.println("[WATCHDOG] Communication restored - doing full reset!");
+    fullReset();  // Actually re-enable motors!
+    Serial1.println("WATCHDOG,RECOVERED");
   }
 
   // ===== TELEMETRY UPDATE =====

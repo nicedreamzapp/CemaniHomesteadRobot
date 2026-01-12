@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "3.89"  // Compass mounting offset (arrow points to back)
+#define TEENSY_VERSION "3.90"  // Added compass low-pass filter to reduce jitter
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true

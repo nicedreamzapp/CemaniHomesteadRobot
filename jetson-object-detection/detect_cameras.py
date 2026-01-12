@@ -22,12 +22,12 @@ DEFAULT_CONFIG = {
         {
             "id": 1,
             "name": "Front",
-            "rtsp_url": "rtsp://admin:kookster1@192.168.1.191:554/onvif1"
+            "rtsp_url": "rtsp://admin:kookster1@192.168.1.79:554/onvif1"
         },
         {
             "id": 2,
             "name": "Rear",
-            "rtsp_url": "rtsp://admin:kookster1@192.168.1.27:554/onvif1"
+            "rtsp_url": "rtsp://admin:kookster1@192.168.1.34:554/onvif1"
         }
     ],
     "vps_ws_url": "ws://72.60.124.34:3001",

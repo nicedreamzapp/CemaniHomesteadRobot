@@ -117,7 +117,7 @@ VPS_WS = "wss://robot.marijuanaunion.com"
 # LIDAR data: Still from VPS (ESP32 → VPS → Mac)
 # NOTE: Run local_streamer.py on Jetson first
 JETSON_DIRECT_ENABLED = True  # ENABLED - uses Jetson for cameras, VPS for LIDAR
-JETSON_WS = "ws://192.168.1.228:8765"  # Jetson local WebSocket
+JETSON_WS = "ws://192.168.1.31:8765"  # Jetson local WebSocket (correct IP)
 
 # DIRECT RTSP - disabled for now, using VPS relay
 DIRECT_RTSP_ENABLED = False  # VPS relay is more reliable
@@ -385,8 +385,13 @@ class Hybrid3DMapper:
         self.recent_camera_frames = {1: None, 2: None}
         self.camera_ptz = {1: (0, 0), 2: (0, 0)}  # (pan, tilt) degrees
 
-        # MAPPING CONTROL - can be started/stopped remotely from UI
-        self.mapping_active = False  # Start inactive, wait for UI command
+        # LIDAR BOUNDARY - prevents depth points from going beyond walls
+        # Maps angle bins (0-359) to max distance in meters
+        self.lidar_boundary = {}  # angle_deg -> distance_m
+        self.lidar_boundary_tolerance = 0.3  # Allow 30cm beyond LIDAR (for noise)
+
+        # MAPPING CONTROL - IDLE until user presses MAP 1 button
+        self.mapping_active = False  # IDLE - waits for MAP 1 button press
         self.mapping_paused_by_override = False  # Paused due to manual override
 
         # Depth calibration state
@@ -784,6 +789,17 @@ class Hybrid3DMapper:
         """Add a LIDAR scan (angle_deg, distance_mm pairs)"""
         scan = LidarScan(points=points, timestamp=time.time())
         self.recent_lidar_scans.append(scan)
+
+        # UPDATE LIDAR BOUNDARY - store wall distances for each angle
+        # This prevents depth points from going beyond actual walls
+        for angle_deg, distance_mm in points:
+            distance_m = distance_mm / 1000.0
+            # Use 5-degree bins for smoother boundary
+            angle_bin = int(angle_deg / 5) * 5
+            # Keep the closest wall at each angle (more conservative)
+            if angle_bin not in self.lidar_boundary or distance_m < self.lidar_boundary[angle_bin]:
+                self.lidar_boundary[angle_bin] = distance_m
+
         self._process_lidar_scan(scan)
 
     def add_camera_frame(self, camera_id: int, image_bytes: bytes):
@@ -1175,6 +1191,22 @@ class Hybrid3DMapper:
         point_dist = math.sqrt((point.x - robot_x)**2 + (point.y - robot_y)**2)
         if point_dist > MAX_DEPTH_DISTANCE:
             return
+
+        # LIDAR BOUNDARY CHECK: Reject depth points beyond LIDAR walls
+        # This prevents the "impossible" scattered dots outside walls
+        if point.source == "mono" and self.lidar_boundary:
+            # Calculate angle from robot to this point
+            dx = point.x - robot_x
+            dy = point.y - robot_y
+            angle_rad = math.atan2(dy, dx) - self.robot_pose.heading
+            angle_deg = math.degrees(angle_rad) % 360
+            # Find nearest angle bin
+            angle_bin = int(angle_deg / 5) * 5
+            if angle_bin in self.lidar_boundary:
+                lidar_dist = self.lidar_boundary[angle_bin]
+                # Reject if depth point is beyond LIDAR wall + tolerance
+                if point_dist > lidar_dist + self.lidar_boundary_tolerance:
+                    return  # Point is beyond wall - impossible!
 
         # Grid key for deduplication
         gx = int(point.x / GRID_SIZE)
@@ -1718,7 +1750,12 @@ class Hybrid3DMapper:
         print(f"[ROBOT] Waiting {wait_time}s for turn...", flush=True)
         await asyncio.sleep(wait_time)
 
-        print(f"[ROBOT] Turn complete, heading: {self.current_heading:.1f}° (target was {target_heading:.1f}°)", flush=True)
+        # MANUALLY UPDATE HEADING - compass data not reliably received during mapping
+        # This ensures new camera frames project to NEW coordinates (not duplicates)
+        old_heading = self.current_heading
+        self.current_heading = target_heading
+        self.robot_pose.heading = math.radians(target_heading)
+        print(f"[ROBOT] Turn complete! Heading updated: {old_heading:.1f}° → {target_heading:.1f}°", flush=True)
 
     async def safe_ws_send(self, ws, data: dict):
         """Safely send data via WebSocket with error handling"""
@@ -2353,14 +2390,9 @@ async def handle_hybrid_connection():
             asyncio.create_task(mapper.continuous_ptz_scan(ws))
             print("[PTZ] Continuous scan task started - cameras will sweep constantly during mapping")
 
-        # AUTO-START after 10 seconds for testing (will be triggered automatically)
-        async def auto_start_test():
-            print("[TEST] Auto-start in 10 seconds...", flush=True)
-            await asyncio.sleep(10)
-            print("[TEST] AUTO-STARTING MAPPING NOW!", flush=True)
-            mapper.start_mapping()
-        asyncio.create_task(auto_start_test())
-        print("[INIT] Mapper ready - auto-start in 10 seconds for testing...", flush=True)
+        # AUTO-START DISABLED - User must press MAP 1 button in UI to start mapping
+        # This is a safety requirement - only the user can initiate robot movement
+        print("[INIT] Mapper ready - waiting for MAP 1 button press in UI...", flush=True)
 
         async for message in ws:
             try:
