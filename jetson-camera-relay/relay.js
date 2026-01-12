@@ -8,6 +8,13 @@
  * - FFmpeg uses system path (not homebrew)
  * - Can use Jetson hardware acceleration (NVENC/NVDEC)
  * - Cameras are local to robot network
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════════╗
+ * ║  SAFETY RULES - HARDCODED:                                                    ║
+ * ║  1. Xbox controller ALWAYS has priority over autonomous commands              ║
+ * ║  2. Claude Code is NEVER allowed to initiate robot movement or MAP 1          ║
+ * ║  3. Only the USER can start mapping by clicking buttons in the web UI         ║
+ * ╚═══════════════════════════════════════════════════════════════════════════════╝
  */
 
 const WebSocket = require('ws');
@@ -290,6 +297,39 @@ function connectToVPS() {
 
       if (msg.type === 'v380_talk_stop') {
         handleV380Talk('stop');
+      }
+
+      // Remote service control (start/restart LIDAR, etc)
+      if (msg.type === 'jetson_service') {
+        const service = msg.service;
+        const action = msg.action || 'restart';
+        const allowed = ['robot-lidar', 'robot-detection', 'robot-camera'];
+        if (allowed.includes(service)) {
+          console.log(`[JETSON] Service command: ${action} ${service}`);
+          try {
+            execSync(`sudo systemctl ${action} ${service}`, { timeout: 10000 });
+            console.log(`[JETSON] ${service} ${action} SUCCESS`);
+            if (vpsSocket && vpsSocket.readyState === 1) {
+              vpsSocket.send(JSON.stringify({
+                type: 'jetson_service_result',
+                service: service,
+                action: action,
+                success: true
+              }));
+            }
+          } catch (err) {
+            console.error(`[JETSON] ${service} ${action} FAILED:`, err.message);
+            if (vpsSocket && vpsSocket.readyState === 1) {
+              vpsSocket.send(JSON.stringify({
+                type: 'jetson_service_result',
+                service: service,
+                action: action,
+                success: false,
+                error: err.message
+              }));
+            }
+          }
+        }
       }
     } catch (err) {}
   });

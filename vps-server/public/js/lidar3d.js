@@ -16,7 +16,7 @@ let accumulatedWalls = [];
 const MAX_ACCUMULATED_WALLS = 2000;
 const WALL_GRID_SIZE = 0.25;  // 25cm grid - less cluttered map
 let wallGrid = new Map();  // Grid-based deduplication
-let showAccumulatedWalls = false;  // DISABLED - blue panels clutter the view
+let showAccumulatedWalls = false;  // DISABLED - only show realtime LIDAR panels
 
 // LIDAR fingerprinting for area recognition
 let currentFingerprint = null;
@@ -668,17 +668,17 @@ function updateLidar3D(points) {
     }
   }
 
-  // Clear old walls and point cloud (from world container)
+  // Clear old walls and point cloud (realtime walls are in scene, not worldContainer)
   lidar3dWalls.forEach(m => {
     if (m.geometry) m.geometry.dispose();
     if (m.material) m.material.dispose();
-    if (lidar3dWorldContainer) lidar3dWorldContainer.remove(m);
+    if (lidar3dScene) lidar3dScene.remove(m);
   });
   lidar3dWalls = [];
   if (lidar3dPointCloud) {
     if (lidar3dPointCloud.geometry) lidar3dPointCloud.geometry.dispose();
     if (lidar3dPointCloud.material) lidar3dPointCloud.material.dispose();
-    if (lidar3dWorldContainer) lidar3dWorldContainer.remove(lidar3dPointCloud);
+    if (lidar3dScene) lidar3dScene.remove(lidar3dPointCloud);
   }
 
   points.sort((a, b) => a[0] - b[0]);
@@ -752,7 +752,7 @@ function updateLidar3D(points) {
     lidar3dSlamCloud.geometry = new THREE.BufferGeometry();
   }
 
-  // Current scan point cloud - LIVE LIDAR with distance colors
+  // Current scan point cloud - LIVE LIDAR with distance colors (stays around robot at origin)
   const pointGeom = new THREE.BufferGeometry();
   pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -761,7 +761,7 @@ function updateLidar3D(points) {
     vertexColors: true,
     sizeAttenuation: true
   }));
-  lidar3dWorldContainer.add(lidar3dPointCloud);  // Add to world container so it moves with robot
+  lidar3dScene.add(lidar3dPointCloud);  // Add to scene (not worldContainer) so it stays around robot
 
   // Real-time walls around robot - ENABLED for live visualization
   const showRealtimeWalls = true;
@@ -783,57 +783,20 @@ function updateLidar3D(points) {
     wallGeom.computeVertexNormals();
 
     const wallMat = new THREE.MeshBasicMaterial({
-      color: getDistanceColor3D((d1 + d2) / 2), transparent: true, opacity: 0.7, side: THREE.DoubleSide
+      color: getDistanceColor3D((d1 + d2) / 2), transparent: false, side: THREE.DoubleSide, depthWrite: true
     });
     const wall = new THREE.Mesh(wallGeom, wallMat);
-    lidar3dWorldContainer.add(wall);  // Add to world container
+    lidar3dScene.add(wall);  // Add to SCENE (stays around robot at origin)
     lidar3dWalls.push(wall);
 
     const edgeGeom = new THREE.BufferGeometry();
     edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([x1, wallH, z1, x2, wallH, z2]), 3));
     const edge = new THREE.Line(edgeGeom, new THREE.LineBasicMaterial({ color: getDistanceColor3D((d1 + d2) / 2) }));
-    lidar3dWorldContainer.add(edge);  // Add to world container
+    lidar3dScene.add(edge);  // Add to SCENE (stays around robot at origin)
     lidar3dWalls.push(edge);
 
-    // ACCUMULATED WALLS - Build persistent map as robot drives
-    if (showAccumulatedWalls && d1 > 300 && d1 < 5000 && d2 > 300 && d2 < 5000) {
-      // Transform local wall endpoints to world coordinates
-      const wx1 = robotX + x1 * Math.cos(robotHeading) - z1 * Math.sin(robotHeading);
-      const wz1 = -robotZ + x1 * Math.sin(robotHeading) + z1 * Math.cos(robotHeading);
-      const wx2 = robotX + x2 * Math.cos(robotHeading) - z2 * Math.sin(robotHeading);
-      const wz2 = -robotZ + x2 * Math.sin(robotHeading) + z2 * Math.cos(robotHeading);
-
-      // Grid-based deduplication - check if wall midpoint is new
-      const midX = Math.round((wx1 + wx2) / 2 / WALL_GRID_SIZE);
-      const midZ = Math.round((wz1 + wz2) / 2 / WALL_GRID_SIZE);
-      const gridKey = `${midX},${midZ}`;
-
-      if (!wallGrid.has(gridKey)) {
-        wallGrid.set(gridKey, true);
-
-        // Create persistent wall in world coordinates
-        const accWallGeom = new THREE.BufferGeometry();
-        accWallGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-          wx1, 0, wz1, wx2, 0, wz2, wx2, wallH, wz2, wx1, 0, wz1, wx2, wallH, wz2, wx1, wallH, wz1
-        ]), 3));
-        accWallGeom.computeVertexNormals();
-
-        const accWallMat = new THREE.MeshBasicMaterial({
-          color: 0x3388aa, transparent: true, opacity: 0.7, side: THREE.DoubleSide  // Blue-cyan, more visible
-        });
-        const accWall = new THREE.Mesh(accWallGeom, accWallMat);
-        lidar3dWorldContainer.add(accWall);
-        accumulatedWalls.push(accWall);
-
-        // Limit total walls
-        if (accumulatedWalls.length > MAX_ACCUMULATED_WALLS) {
-          const oldWall = accumulatedWalls.shift();
-          if (oldWall.geometry) oldWall.geometry.dispose();
-          if (oldWall.material) oldWall.material.dispose();
-          lidar3dWorldContainer.remove(oldWall);
-        }
-      }
-    }
+    // ACCUMULATED WALLS - COMPLETELY DISABLED
+    // Only realtime LIDAR panels are shown - nothing persists behind walls
   }
 }
 
@@ -896,6 +859,8 @@ function animateLidar3D() {
     lidar3dRobot.rotation.y = currentHeading + (targetHeading - currentHeading) * 0.3;
   }
 
+  // Keep OrbitControls centered on robot (at origin)
+  lidar3dControls.target.set(0, 0, 0);
   lidar3dControls.update();
 
   // Update occupancy grid visualization
@@ -911,7 +876,7 @@ function animateLidar3D() {
 // ============ JETSON SLAM MAP VISUALIZATION ============
 // Receives map cells from Jetson and renders them on the 3D view
 let slamMapMesh = null;
-let slamMapVisible = true;  // Show by default when data arrives
+let slamMapVisible = false;  // DISABLED - clutter
 
 function updateMapCells(data) {
   if (!lidar3dScene || !lidar3dWorldContainer) return;
@@ -1488,14 +1453,14 @@ function updateCompass(heading, x, y, z) {
 let accumulatedMapCloud = null;
 let accumulatedMapMesh = null;  // For surface rendering
 let accumulatedFrameMarkers = [];
-let accumulatedMapVisible = true;  // ON - show textured 3D room map
+let accumulatedMapVisible = false;  // DISABLED - only realtime LIDAR
 let showPhotoMarkers = false;  // DISABLED - ugly floating photos on map
 let mapRenderMode = 'splats';  // 'points', 'splats', 'surface'
 
 // ============ RANSAC ROOM PLANES ============
 // Solid wall/floor/ceiling surfaces detected from point cloud
 let roomPlaneMeshes = [];
-let roomPlanesVisible = true;  // Show solid room surfaces
+let roomPlanesVisible = false;  // DISABLED - only realtime LIDAR
 
 // Point quality filters - tuned for realistic map output
 let mapMinObservations = 2;    // Require 2+ observations for stability

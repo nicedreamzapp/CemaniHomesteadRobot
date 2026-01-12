@@ -3,6 +3,13 @@
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket + WIRELESS OTA
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * ╔═══════════════════════════════════════════════════════════════════════════════╗
+ * ║  SAFETY RULES - HARDCODED:                                                    ║
+ * ║  1. Xbox controller ALWAYS has priority over autonomous commands              ║
+ * ║  2. Claude Code is NEVER allowed to initiate robot movement                   ║
+ * ║  3. Only the USER can start mapping by clicking buttons in the web UI         ║
+ * ╚═══════════════════════════════════════════════════════════════════════════════╝
+ *
  * v3.13.0 - SERIAL FORWARDING THROTTLE - only forward ONE message per loop
  *         - Prevents "message too big" (1009) errors from buffer overflow
  * v3.12.0 - Increased loop delay to 10ms for WebSocket stability

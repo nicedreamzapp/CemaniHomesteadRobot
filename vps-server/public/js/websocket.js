@@ -10,6 +10,38 @@ ws.binaryType = 'arraybuffer';
 window.ws = ws;
 console.log('[WS] window.ws set:', window.ws);
 
+// ============ POSITION JUMP FILTER ============
+// Prevents the map from suddenly teleporting away from the robot
+// Robot can't move more than 500mm in a single frame update
+const MAX_POSITION_JUMP_MM = 500;  // 0.5 meters max jump
+
+function updateOdomStateWithFilter(newX, newY, newHeading, source) {
+  if (!window.odomState) {
+    window.odomState = { x: 0, y: 0, heading: 0, totalDistance: 0, trail: [{ x: 0, y: 0 }] };
+  }
+
+  const oldX = window.odomState.x || 0;
+  const oldY = window.odomState.y || 0;
+  const dx = newX - oldX;
+  const dy = newY - oldY;
+  const jumpDist = Math.sqrt(dx * dx + dy * dy);
+
+  // Allow jump if this is first update (odom was at 0,0) or jump is reasonable
+  const isFirstUpdate = (oldX === 0 && oldY === 0 && (newX !== 0 || newY !== 0));
+
+  if (isFirstUpdate || jumpDist <= MAX_POSITION_JUMP_MM) {
+    window.odomState.x = newX;
+    window.odomState.y = newY;
+    if (newHeading !== undefined) {
+      window.odomState.heading = newHeading;
+    }
+    return true;
+  } else {
+    console.warn(`[ODOM] BLOCKED jump of ${jumpDist.toFixed(0)}mm from ${source} - too far!`);
+    return false;
+  }
+}
+
 // ============ MESSAGE HANDLER ============
 ws.onopen = () => {
   // IMPORTANT: Identify as browser so server knows to send us broadcasts
@@ -365,12 +397,42 @@ ws.onmessage = function(e) {
     if (window.lidar3dModule && window.lidar3dModule.updateAccumulatedMap) {
       window.lidar3dModule.updateAccumulatedMap(d);
     }
-    // Track point count for MAP 1 live feedback
-    const pts = d.total || (d.points ? d.points.length : 0);
+    // Track point count - use stats.total_points for REAL accumulated total
+    const pts = (d.stats && d.stats.total_points) || d.total || (d.points ? d.points.length : 0);
     window.map1PointCount = pts;
     // Update MAP 1 status display if active
     if (window.updateMap1PointCount) {
       window.updateMap1PointCount(pts);
+    }
+    // Update Mac GPU indicator with percentage toward GS readiness
+    const macDot = document.getElementById('macGpuDot');
+    const macPercent = document.getElementById('macGpuPercent');
+    const macStatus = document.getElementById('macGpuStatus');
+
+    // Target: 50K deduplicated points = 100% ready for Gaussian Splatting
+    // (Points are grid-deduplicated, so 50K unique points = good room coverage)
+    const TARGET_POINTS = 50000;
+    const percent = Math.min(100, Math.round((pts / TARGET_POINTS) * 100));
+
+    if (macDot) {
+      macDot.style.background = percent >= 100 ? '#0f8' : '#fa0';  // Green=ready, Orange=processing
+      macDot.style.boxShadow = '0 0 8px ' + (percent >= 100 ? '#0f8' : '#fa0');
+    }
+    if (macPercent) {
+      macPercent.textContent = percent + '%';
+      macPercent.style.color = percent >= 100 ? '#0f8' : '#fa0';
+    }
+    if (macStatus) {
+      if (percent >= 100) {
+        macStatus.textContent = 'READY for GS export';
+        macStatus.style.color = '#0f8';
+      } else {
+        // Format points nicely
+        let ptsStr = pts >= 1000000 ? (pts/1000000).toFixed(1) + 'M' :
+                     pts >= 1000 ? Math.round(pts/1000) + 'K' : pts.toString();
+        macStatus.textContent = ptsStr + ' / 50K pts';
+        macStatus.style.color = '#888';
+      }
     }
     // Log occasionally
     if (Math.random() < 0.05) {
@@ -457,16 +519,24 @@ ws.onmessage = function(e) {
     }
   }
 
-  // Ultrasonic sensor data - update UI badges
+  // Ultrasonic sensor data - update UI badges AND 3D cones
   if (d.type === 'ultrasonic') {
+    // Update corner badges with feet
     const flBadge = document.getElementById('usBadgeFL');
     const frBadge = document.getElementById('usBadgeFR');
     const rlBadge = document.getElementById('usBadgeRL');
     const rrBadge = document.getElementById('usBadgeRR');
-    if (flBadge) flBadge.textContent = d.fl > 0 ? `FL: ${Math.round(d.fl)}cm` : 'FL: --';
-    if (frBadge) frBadge.textContent = d.fr > 0 ? `FR: ${Math.round(d.fr)}cm` : 'FR: --';
-    if (rlBadge) rlBadge.textContent = d.rl > 0 ? `RL: ${Math.round(d.rl)}cm` : 'RL: --';
-    if (rrBadge) rrBadge.textContent = d.rr > 0 ? `RR: ${Math.round(d.rr)}cm` : 'RR: --';
+    if (flBadge) flBadge.textContent = d.fl > 0 ? `FL: ${(d.fl / 30.48).toFixed(1)}ft` : 'FL: --';
+    if (frBadge) frBadge.textContent = d.fr > 0 ? `FR: ${(d.fr / 30.48).toFixed(1)}ft` : 'FR: --';
+    if (rlBadge) rlBadge.textContent = d.rl > 0 ? `RL: ${(d.rl / 30.48).toFixed(1)}ft` : 'RL: --';
+    if (rrBadge) rrBadge.textContent = d.rr > 0 ? `RR: ${(d.rr / 30.48).toFixed(1)}ft` : 'RR: --';
+    // Update 3D ultrasonic cones
+    if (window.lidar3dModule) {
+      window.lidar3dModule.updateUltrasonic3D('FL', d.fl);
+      window.lidar3dModule.updateUltrasonic3D('FR', d.fr);
+      window.lidar3dModule.updateUltrasonic3D('RL', d.rl);
+      window.lidar3dModule.updateUltrasonic3D('RR', d.rr);
+    }
     // Store for autonomous use
     window.ultrasonicState = { fl: d.fl, fr: d.fr, rl: d.rl, rr: d.rr, timestamp: d.timestamp };
   }
@@ -477,13 +547,14 @@ ws.onmessage = function(e) {
       updateDriverTelemetry(d);
     }
 
-    // Sync odomState with server telemetry
-    if (d.odomX !== undefined && d.odomY !== undefined && window.odomState) {
-      window.odomState.x = d.odomX;
-      window.odomState.y = d.odomY;
-      window.odomState.heading = d.odomHeading;
-      window.odomState.totalDistance = d.odomDistance || window.odomState.totalDistance;
-      if (d.odomTrail) window.odomState.trail = d.odomTrail;
+    // Sync odomState with server telemetry (with jump filter)
+    if (d.odomX !== undefined && d.odomY !== undefined) {
+      if (updateOdomStateWithFilter(d.odomX, d.odomY, d.odomHeading, 'telemetry')) {
+        if (window.odomState) {
+          window.odomState.totalDistance = d.odomDistance || window.odomState.totalDistance;
+          if (d.odomTrail) window.odomState.trail = d.odomTrail;
+        }
+      }
     }
   }
 };
@@ -607,12 +678,12 @@ function handleSerialData(d) {
 function handleDeadReckoning(d) {
   console.warn('[GRID MOVE] x=' + d.odomX + 'mm, y=' + d.odomY + 'mm');
 
-  if (window.odomState) {
-    window.odomState.x = d.odomX;
-    window.odomState.y = d.odomY;
-    window.odomState.heading = d.odomHeading;
-    window.odomState.totalDistance = d.odomDistance || 0;
-    if (d.odomTrail) window.odomState.trail = d.odomTrail;
+  // Use jump filter to prevent map from teleporting away from robot
+  if (updateOdomStateWithFilter(d.odomX, d.odomY, d.odomHeading, 'dead_reckoning')) {
+    if (window.odomState) {
+      window.odomState.totalDistance = d.odomDistance || 0;
+      if (d.odomTrail) window.odomState.trail = d.odomTrail;
+    }
 
     // Update position display
     const xFt = (d.odomX / 304.8).toFixed(1);

@@ -8,10 +8,11 @@ const WebSocket = require("ws");
 const state = require('./server-state');
 
 // Compile setup paths
-const TEMP_DIR = "/opt/robot-server/temp-sketch";
+// Compile setup paths
+const TEMP_DIR = path.join(__dirname, "temp-sketch");
 const BUILD_DIR = path.join(TEMP_DIR, "build");
-const ARDUINO_CLI = "/opt/robot-server/public/bin/arduino-cli";
-const PREBUILT_HEX = "/root/vps-server/prebuilt/teensy41.hex";
+const ARDUINO_CLI = path.join(__dirname, "public/bin/arduino-cli");
+const PREBUILT_HEX = path.join(__dirname, "prebuilt/teensy41.hex");
 
 // Ensure directories exist
 function ensureDirectories() {
