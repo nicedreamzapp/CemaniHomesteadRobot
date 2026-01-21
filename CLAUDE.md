@@ -94,3 +94,54 @@ nohup python3 lidar_relay.py > /tmp/lidar.log 2>&1 &
 - **No LIDAR in UI**: Check if relay is running on Jetson
 - **Device not found**: Verify `/dev/ttyUSB0` exists on Jetson
 - **Walls off to side**: Ensure lidar3d.js adds walls to `lidar3dScene` not `lidar3dWorldContainer`
+
+---
+
+# NiceDreamz - Robot's Own WiFi Hotspot
+
+## Purpose
+The robot runs its own WiFi network called "NiceDreamz" using a long-range Alfa adapter. IP cameras connect to this network so they work anywhere the robot goes, regardless of what external WiFi the robot uses for internet.
+
+## Architecture
+```
+[External WiFi] ←→ [Jetson built-in WiFi wlP1p1s0] (internet)
+                         ↓
+                    [Jetson]
+                         ↓
+              [Alfa adapter wlx00c0caab495d]
+                         ↓
+                   [NiceDreamz hotspot]
+                         ↓
+                 [IP Cameras: 10.0.0.x]
+```
+
+## Network Details
+- **SSID**: NiceDreamz
+- **IP Range**: 10.0.0.10 - 10.0.0.50 (DHCP)
+- **Gateway**: 10.0.0.1
+- **Channel**: 6 (2.4GHz)
+- **Internet**: Shared from Jetson's main WiFi via NAT
+
+## Services (auto-start on boot)
+- `camera-relay.service` - Streams cameras to VPS
+- `lidar-relay.service` - Streams LIDAR to VPS
+- `hostapd.service` - NiceDreamz hotspot
+- `dnsmasq.service` - DHCP for cameras
+
+## Key Files on Jetson
+- `/etc/hostapd/hostapd.conf` - Hotspot config
+- `/etc/dnsmasq.d/hotspot.conf` - DHCP config
+- `/etc/NetworkManager/conf.d/unmanaged-alfa.conf` - Prevents NM from managing Alfa
+- `~/jetson-camera-relay/config.json` - Camera IPs/credentials
+
+## Adding a New Camera to NiceDreamz
+1. Connect camera to NiceDreamz WiFi (password in hostapd.conf)
+2. Camera gets IP via DHCP (10.0.0.x)
+3. Update `~/jetson-camera-relay/config.json` with camera IP
+4. Restart relay: `sudo systemctl restart camera-relay`
+
+## Troubleshooting
+- **Hotspot not broadcasting**: `sudo systemctl restart hostapd`
+- **Camera can't connect**: Check `nmcli device set wlx00c0caab495d managed no`
+- **No internet for cameras**: Verify NAT: `sudo iptables -t nat -L POSTROUTING`
+- **Camera relay not starting**: Check logs: `journalctl -u camera-relay -f`
