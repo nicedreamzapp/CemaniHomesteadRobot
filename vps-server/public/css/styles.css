@@ -3432,6 +3432,159 @@ input[type="text"] {
   border-color: #00ff88;
   box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
 }
+
+/* WiFi Popup */
+.wifi-popup {
+  width: 320px;
+  height: 360px;
+  left: 150px;
+  top: 80px;
+}
+.wifi-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 8px;
+  overflow: hidden;
+}
+.wifi-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+#wifiCurrentStatus {
+  font-size: 11px;
+  color: #ccc;
+}
+.wifi-label {
+  color: #888;
+  margin-right: 4px;
+}
+#wifiCurrentNetwork {
+  color: #5af;
+  font-weight: bold;
+}
+.wifi-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.wifi-btn.scan {
+  background: linear-gradient(135deg, #5af, #38f);
+  color: #fff;
+}
+.wifi-btn.scan:hover {
+  background: linear-gradient(135deg, #6bf, #49f);
+}
+.wifi-btn.connect {
+  background: linear-gradient(135deg, #0f8, #0a6);
+  color: #000;
+}
+.wifi-btn.connect:hover {
+  background: linear-gradient(135deg, #1f9, #0b7);
+}
+.wifi-btn.cancel {
+  background: rgba(255, 100, 100, 0.3);
+  color: #f88;
+  border: 1px solid rgba(255, 100, 100, 0.5);
+}
+.wifi-btn.cancel:hover {
+  background: rgba(255, 100, 100, 0.5);
+}
+.wifi-network-list {
+  flex: 1;
+  overflow-y: auto;
+  background: #0a0a0a;
+  border-radius: 6px;
+  padding: 6px;
+}
+.wifi-scanning, .wifi-no-relay {
+  text-align: center;
+  padding: 20px;
+  color: #888;
+  font-size: 11px;
+}
+.wifi-no-relay {
+  color: #f66;
+}
+.wifi-network-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: rgba(40, 60, 80, 0.4);
+  border-radius: 4px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.wifi-network-item:hover {
+  background: rgba(60, 100, 140, 0.5);
+}
+.wifi-network-item.connected {
+  border: 1px solid #0f8;
+  background: rgba(0, 100, 60, 0.3);
+}
+.wifi-network-info {
+  display: flex;
+  flex-direction: column;
+}
+.wifi-ssid {
+  font-size: 12px;
+  color: #fff;
+  font-weight: bold;
+}
+.wifi-details {
+  font-size: 9px;
+  color: #888;
+}
+.wifi-signal {
+  font-size: 14px;
+}
+.wifi-connect-form {
+  margin-top: 8px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  border: 1px solid rgba(90, 170, 255, 0.4);
+}
+.wifi-selected-network {
+  font-size: 11px;
+  color: #aaa;
+  margin-bottom: 8px;
+}
+.wifi-selected-network strong {
+  color: #5af;
+}
+#wifiPassword {
+  width: 100%;
+  padding: 8px;
+  background: #0a0a0a;
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  border-radius: 4px;
+  color: #0f8;
+  font-size: 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+#wifiPassword:focus {
+  outline: none;
+  border-color: #0f8;
+}
+.wifi-form-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .coming-soon-cams .section-header {
   margin-bottom: 0;
   font-size: 9px;

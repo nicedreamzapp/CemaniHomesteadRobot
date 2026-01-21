@@ -610,6 +610,9 @@
         <div class="serial-trigger" onclick="toggleCodePopup()">
           <span class="emoji">&#128221;</span> CODE
         </div>
+        <div class="serial-trigger" id="wifiTrigger" onclick="toggleWifiPopup()">
+          <span class="emoji">&#128246;</span> WIFI <span id="wifiRelayStatus" style="font-size:8px;color:#f44;">OFF</span>
+        </div>
         <div class="battery-trigger">
           <span class="emoji">&#128267;</span> Battery
           <div class="batt-bar-mini"><div class="batt-fill-mini" id="headerBatteryFill"></div></div>
@@ -955,6 +958,39 @@
     <div class="code-popup-buttons">
       <div class="btn" id="compileBtn">COMPILE + UPLOAD</div>
       <div class="btn" id="flashPrebuiltBtn" style="background:linear-gradient(135deg,#74c0fc,#4da3f0);">FLASH PREBUILT</div>
+    </div>
+  </div>
+</div>
+
+<!-- WiFi Manager Popup -->
+<div class="serial-popup wifi-popup" id="wifiPopup">
+  <div class="serial-popup-header" id="wifiPopupHeader">
+    <span class="emoji">&#128246;</span> WIFI MANAGER
+    <span class="serial-popup-close" onclick="toggleWifiPopup()">&times;</span>
+  </div>
+  <div class="wifi-content">
+    <div class="wifi-status-bar">
+      <div id="wifiCurrentStatus">
+        <span class="wifi-label">Current:</span>
+        <span id="wifiCurrentNetwork">--</span>
+        <span id="wifiSignalStrength" style="color:#0f8;margin-left:8px;">--</span>
+      </div>
+      <button id="wifiScanBtn" onclick="scanWifi()" class="wifi-btn scan">Scan</button>
+    </div>
+    <div class="wifi-network-list" id="wifiNetworkList">
+      <div class="wifi-scanning" id="wifiScanning" style="display:none;">Scanning networks...</div>
+      <div class="wifi-no-relay" id="wifiNoRelay">WiFi relay not connected</div>
+    </div>
+    <div class="wifi-connect-form" id="wifiConnectForm" style="display:none;">
+      <div class="wifi-selected-network">
+        <span>Connect to:</span>
+        <strong id="wifiSelectedSSID">--</strong>
+      </div>
+      <input type="password" id="wifiPassword" placeholder="Enter password...">
+      <div class="wifi-form-btns">
+        <button onclick="cancelWifiConnect()" class="wifi-btn cancel">Cancel</button>
+        <button onclick="connectWifi()" class="wifi-btn connect">Connect</button>
+      </div>
     </div>
   </div>
 </div>

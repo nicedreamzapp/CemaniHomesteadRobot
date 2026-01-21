@@ -654,6 +654,11 @@ wss.on("connection", (ws, req) => {
         console.log("[DEBUG REGISTER]", JSON.stringify(data));
       }
 
+      // Debug for WiFi relay messages
+      if (data.type && data.type.includes("wifi")) {
+        console.log("[DEBUG WIFI]", JSON.stringify(data));
+      }
+
       handleMessage(ws, data);
 
     } catch (err) {
@@ -1538,6 +1543,43 @@ function handleMessage(ws, data) {
     state.broadcast({ type: "cam_snapshot_data", camera: data.camera, data: data.data }, ws);
   }
 
+  // ============ WiFi Relay Messages ============
+  if (data.type === "wifi_relay_hello") {
+    ws.isWifiRelay = true;
+    ws.isBrowser = false;
+    state.wifiRelaySocket = ws;
+    console.log("[WIFI] ★★★ WiFi relay connected! Capabilities:", data.capabilities);
+    state.broadcast({ type: "wifi_relay_status", connected: true });
+  }
+
+  // Forward WiFi scan results to browsers
+  if (data.type === "wifi_scan_result" && ws.isWifiRelay) {
+    console.log(`[WIFI] Scan complete: ${data.networks?.length || 0} networks found`);
+    state.broadcast({ type: "wifi_scan_result", networks: data.networks || [], error: data.error }, ws);
+  }
+
+  // Forward WiFi connect results to browsers
+  if (data.type === "wifi_connect_result" && ws.isWifiRelay) {
+    console.log(`[WIFI] Connect result for ${data.ssid}: ${data.success ? 'SUCCESS' : 'FAILED'}`);
+    state.broadcast({ type: "wifi_connect_result", ssid: data.ssid, success: data.success, message: data.message }, ws);
+  }
+
+  // Forward WiFi status to browsers
+  if (data.type === "wifi_status_result" && ws.isWifiRelay) {
+    state.broadcast({ type: "wifi_status_result", status: data.status }, ws);
+  }
+
+  // Handle WiFi commands from browsers - forward to relay
+  if ((data.type === "wifi_scan" || data.type === "wifi_connect" || data.type === "wifi_status") && ws.isBrowser) {
+    const wifiRelay = state.wifiRelaySocket;
+    if (wifiRelay && wifiRelay.readyState === WebSocket.OPEN) {
+      wifiRelay.send(JSON.stringify(data));
+      console.log(`[WIFI] Forwarding ${data.type} to relay`);
+    } else {
+      ws.send(JSON.stringify({ type: data.type + "_result", error: "WiFi relay not connected" }));
+    }
+  }
+
   // PTZ commands
   handlePtzCommand(data, ws);
 
@@ -1850,6 +1892,12 @@ function handleDisconnect(ws) {
     state.cameraStatus.streaming = false;
     state.broadcast({ type: "camera_status", ...state.cameraStatus });
     console.log("[CAMERA] Relay disconnected");
+  }
+
+  if (ws.isWifiRelay && ws === state.wifiRelaySocket) {
+    state.wifiRelaySocket = null;
+    state.broadcast({ type: "wifi_relay_status", connected: false });
+    console.log("[WIFI] Relay disconnected");
   }
 }
 

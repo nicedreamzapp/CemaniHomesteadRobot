@@ -541,6 +541,40 @@ ws.onmessage = function(e) {
     window.ultrasonicState = { fl: d.fl, fr: d.fr, rl: d.rl, rr: d.rr, timestamp: d.timestamp };
   }
 
+  // ==================== WIFI RELAY STATUS ====================
+  // WiFi relay connected/disconnected
+  if (d.type === 'wifi_relay_status') {
+    console.log('[WIFI] Relay status:', d.connected);
+    if (window.controlsModule && window.controlsModule.updateWifiRelayStatus) {
+      window.controlsModule.updateWifiRelayStatus(d.connected);
+    }
+  }
+
+  // WiFi scan results
+  if (d.type === 'wifi_scan_result') {
+    console.log('[WIFI] Scan result:', d.networks?.length || 0, 'networks');
+    if (window.controlsModule && window.controlsModule.displayWifiNetworks) {
+      window.controlsModule.displayWifiNetworks(d.networks);
+    }
+    if (d.error) {
+      console.error('[WIFI] Scan error:', d.error);
+    }
+  }
+
+  // WiFi connect result
+  if (d.type === 'wifi_connect_result') {
+    console.log('[WIFI] Connect result:', d.ssid, d.success ? 'SUCCESS' : 'FAILED', d.message);
+    if (d.success && window.controlsModule && window.controlsModule.updateWifiStatus) {
+      window.controlsModule.updateWifiStatus({ ssid: d.ssid });
+    }
+    // Show alert for result
+    if (d.success) {
+      alert('Connected to ' + d.ssid + '!');
+    } else {
+      alert('Failed to connect to ' + d.ssid + ': ' + (d.message || 'Unknown error'));
+    }
+  }
+
   // Driver telemetry
   if (d.type === 'telemetry' || d.type === 'driver_status' || d.type === 'teensy_telemetry') {
     if (typeof updateDriverTelemetry === 'function') {
