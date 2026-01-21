@@ -308,6 +308,7 @@ function makeDraggable(popupId, headerId) {
 // Initialize draggable popups
 makeDraggable('codePopup', 'codePopupHeader');
 makeDraggable('serialPopup', 'serialPopupHeader');
+makeDraggable('wifiPopup', 'wifiPopupHeader');
 
 function clearQueue() {
   currentDir = null;
@@ -423,6 +424,156 @@ if (flashBtn) {
   };
 }
 
+// ============ WIFI MANAGER ============
+let wifiRelayConnected = false;
+let selectedWifiSSID = '';
+
+function toggleWifiPopup() {
+  const popup = document.getElementById('wifiPopup');
+  if (popup) popup.classList.toggle('open');
+}
+
+function updateWifiRelayStatus(connected) {
+  wifiRelayConnected = connected;
+  const statusEl = document.getElementById('wifiRelayStatus');
+  const noRelayEl = document.getElementById('wifiNoRelay');
+  const scanBtn = document.getElementById('wifiScanBtn');
+
+  if (statusEl) {
+    statusEl.textContent = connected ? 'ON' : 'OFF';
+    statusEl.style.color = connected ? '#0f8' : '#f44';
+  }
+  if (noRelayEl) {
+    noRelayEl.style.display = connected ? 'none' : 'block';
+  }
+  if (scanBtn) {
+    scanBtn.disabled = !connected;
+    scanBtn.style.opacity = connected ? '1' : '0.5';
+  }
+}
+
+function scanWifi() {
+  if (!wifiRelayConnected) return;
+
+  const scanningEl = document.getElementById('wifiScanning');
+  const networkList = document.getElementById('wifiNetworkList');
+
+  // Show scanning message
+  if (scanningEl) scanningEl.style.display = 'block';
+
+  // Clear existing networks (except scanning message and no-relay message)
+  const items = networkList.querySelectorAll('.wifi-network-item');
+  items.forEach(item => item.remove());
+
+  // Send scan request
+  if (window.ws && window.ws.readyState === WebSocket.OPEN) {
+    window.ws.send(JSON.stringify({ type: 'wifi_scan' }));
+  }
+}
+
+function displayWifiNetworks(networks) {
+  const scanningEl = document.getElementById('wifiScanning');
+  const networkList = document.getElementById('wifiNetworkList');
+
+  if (scanningEl) scanningEl.style.display = 'none';
+
+  // Clear existing network items
+  const items = networkList.querySelectorAll('.wifi-network-item');
+  items.forEach(item => item.remove());
+
+  if (!networks || networks.length === 0) {
+    const noNetworks = document.createElement('div');
+    noNetworks.className = 'wifi-scanning';
+    noNetworks.textContent = 'No networks found';
+    networkList.appendChild(noNetworks);
+    return;
+  }
+
+  // Sort by signal strength
+  networks.sort((a, b) => (b.signal || 0) - (a.signal || 0));
+
+  networks.forEach(network => {
+    const item = document.createElement('div');
+    item.className = 'wifi-network-item';
+    if (network.connected) item.classList.add('connected');
+
+    const signal = network.signal || 0;
+    const signalIcon = signal > -50 ? '&#128246;' : signal > -70 ? '&#128246;' : '&#128246;';
+    const security = network.security || 'Open';
+
+    item.innerHTML = `
+      <div class="wifi-network-info">
+        <span class="wifi-ssid">${escapeHtml(network.ssid)}</span>
+        <span class="wifi-details">${security} | ${signal} dBm${network.connected ? ' | Connected' : ''}</span>
+      </div>
+      <span class="wifi-signal">${signalIcon}</span>
+    `;
+
+    item.onclick = () => selectWifiNetwork(network.ssid, security === 'Open');
+    networkList.appendChild(item);
+  });
+}
+
+function selectWifiNetwork(ssid, isOpen) {
+  selectedWifiSSID = ssid;
+
+  const connectForm = document.getElementById('wifiConnectForm');
+  const selectedSSID = document.getElementById('wifiSelectedSSID');
+  const passwordInput = document.getElementById('wifiPassword');
+
+  if (selectedSSID) selectedSSID.textContent = ssid;
+  if (passwordInput) {
+    passwordInput.value = '';
+    passwordInput.style.display = isOpen ? 'none' : 'block';
+  }
+  if (connectForm) connectForm.style.display = 'block';
+}
+
+function cancelWifiConnect() {
+  const connectForm = document.getElementById('wifiConnectForm');
+  if (connectForm) connectForm.style.display = 'none';
+  selectedWifiSSID = '';
+}
+
+function connectWifi() {
+  if (!selectedWifiSSID) return;
+
+  const passwordInput = document.getElementById('wifiPassword');
+  const password = passwordInput ? passwordInput.value : '';
+
+  if (window.ws && window.ws.readyState === WebSocket.OPEN) {
+    window.ws.send(JSON.stringify({
+      type: 'wifi_connect',
+      ssid: selectedWifiSSID,
+      password: password
+    }));
+  }
+
+  cancelWifiConnect();
+
+  // Show connecting feedback
+  const statusEl = document.getElementById('wifiCurrentNetwork');
+  if (statusEl) statusEl.textContent = 'Connecting...';
+}
+
+function updateWifiStatus(status) {
+  const networkEl = document.getElementById('wifiCurrentNetwork');
+  const signalEl = document.getElementById('wifiSignalStrength');
+
+  if (networkEl) {
+    networkEl.textContent = status.ssid || '--';
+  }
+  if (signalEl && status.signal) {
+    signalEl.textContent = status.signal + ' dBm';
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Export functions needed by other modules
 window.controlsModule = {
   selectDirection,
@@ -434,7 +585,14 @@ window.controlsModule = {
   toggleLight,
   toggleStrobe,
   toggleCodePopup,
-  toggleSerialPopup
+  toggleSerialPopup,
+  toggleWifiPopup,
+  updateWifiRelayStatus,
+  displayWifiNetworks,
+  updateWifiStatus,
+  scanWifi,
+  connectWifi,
+  cancelWifiConnect
 };
 
 // For backwards compatibility, also expose updateXboxStatus from gamepad module

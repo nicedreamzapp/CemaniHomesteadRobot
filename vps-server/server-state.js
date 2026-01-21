@@ -32,6 +32,9 @@ let cameraStatus = {
   streaming: false
 };
 
+// ============ WIFI RELAY STATE ============
+let wifiRelaySocket = null;
+
 // Per-camera streaming status with timeout detection
 const perCameraStatus = {
   1: { streaming: false, lastFrame: 0 },
@@ -128,6 +131,10 @@ module.exports = {
 
   // Map status
   mapStatus,
+
+  // WiFi relay socket (direct access for simplicity)
+  get wifiRelaySocket() { return wifiRelaySocket; },
+  set wifiRelaySocket(socket) { wifiRelaySocket = socket; },
 
   // Broadcast
   broadcast
