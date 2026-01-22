@@ -1479,6 +1479,40 @@ function handleMessage(ws, data) {
     }
   }
 
+  // ==================== MAC LAUNCHER DAEMON ====================
+  // Register Mac launcher daemon (controls GPU mapping start/stop)
+  if (data.type === "register_mac_launcher") {
+    ws.isMacLauncher = true;
+    ws.macLauncherName = data.name || "mac-launcher";
+    state.macLauncherSocket = ws;
+    console.log(`[MAC-LAUNCHER] Connected: ${ws.macLauncherName}`);
+    state.broadcast({ type: "mac_launcher_status", connected: true, name: ws.macLauncherName });
+  }
+
+  // Mac control command from browser -> forward to Mac launcher
+  if (data.type === "mac_control") {
+    const cmd = data.cmd;  // "start" or "stop"
+    console.log(`[MAC-LAUNCHER] Received command from browser: ${cmd}`);
+    if (state.macLauncherSocket && state.macLauncherSocket.readyState === WebSocket.OPEN) {
+      state.macLauncherSocket.send(JSON.stringify({ type: "mac_control", cmd: cmd }));
+      console.log(`[MAC-LAUNCHER] Forwarded ${cmd} to Mac`);
+    } else {
+      console.log(`[MAC-LAUNCHER] ERROR: No Mac launcher connected!`);
+      state.broadcast({ type: "mac_status", status: "error", message: "Mac launcher not connected", gpu_percent: 0 });
+    }
+  }
+
+  // Mac status from launcher daemon -> broadcast to browsers
+  if (data.type === "mac_status" && ws.isMacLauncher) {
+    console.log(`[MAC-LAUNCHER] Status: ${data.status}, GPU: ${data.gpu_percent}%`);
+    state.broadcast({
+      type: "mac_status",
+      status: data.status,  // "idle", "starting", "running", "stopping", "error"
+      gpu_percent: data.gpu_percent || 0,
+      message: data.message || ""
+    });
+  }
+
   // Accumulated map from Mac Mini - broadcast to browsers for visualization
   // New format: points with {x, y, z, r, g, b, c(confidence)} for textured 3D point cloud
   // Accept from ANY connected client sending accumulated_map (auto-register as processor)
@@ -1847,9 +1881,8 @@ function handleSerialData(data, ws) {
       const lat = parseFloat(parts[2]);
       const lon = parseFloat(parts[3]);
       const sats = parseInt(parts[4]);
-      if (valid && lat !== 0 && lon !== 0) {
-        console.log(`[GPS] ${lat.toFixed(6)}, ${lon.toFixed(6)} (${sats} sats)`);
-      }
+      // Always log GPS - even invalid - so we can see if data is arriving
+      console.log(`[GPS] valid=${valid}, lat=${lat.toFixed(6)}, lon=${lon.toFixed(6)}, sats=${sats}`);
       state.broadcast({ type: "gps", valid: valid, lat: lat, lon: lon, sats: sats });
     }
   }
@@ -2061,6 +2094,18 @@ function handleDisconnect(ws) {
     state.wifiRelaySocket = null;
     state.broadcast({ type: "wifi_relay_status", connected: false });
     console.log("[WIFI] Relay disconnected");
+  }
+
+  if (ws.isMacLauncher && ws === state.macLauncherSocket) {
+    state.macLauncherSocket = null;
+    state.broadcast({ type: "mac_launcher_status", connected: false });
+    state.broadcast({ type: "mac_status", status: "disconnected", gpu_percent: 0, message: "daemon offline" });
+    console.log("[MAC-LAUNCHER] Disconnected");
+  }
+
+  if (ws.isProcessor) {
+    state.broadcast({ type: "processor_status", connected: false, name: ws.processorName || "unknown" });
+    console.log(`[PROCESSOR] ${ws.processorName || 'Unknown'} disconnected`);
   }
 }
 

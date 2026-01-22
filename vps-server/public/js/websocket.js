@@ -222,6 +222,30 @@ ws.onmessage = function(e) {
     window.macMapperStatus = d;
   }
 
+  // Mac launcher daemon status (GPU start/stop control)
+  if (d.type === 'mac_status') {
+    console.log('[MAC-GPU] Status:', d.status, 'GPU:', d.gpu_percent + '%');
+    if (typeof updateMacGpuUI === 'function') {
+      updateMacGpuUI(d.status, d.gpu_percent, d.message);
+    }
+  }
+
+  // Mac launcher daemon connection status
+  if (d.type === 'mac_launcher_status') {
+    console.log('[MAC-LAUNCHER] Connected:', d.connected, 'Name:', d.name);
+    if (d.connected) {
+      // Launcher just connected - will send status soon
+      if (typeof updateMacGpuUI === 'function') {
+        updateMacGpuUI('idle', 0, 'ready');
+      }
+    } else {
+      // Launcher disconnected
+      if (typeof updateMacGpuUI === 'function') {
+        updateMacGpuUI('disconnected', 0, 'daemon offline');
+      }
+    }
+  }
+
   // RELOCALIZATION broadcast from server - update local position
   if (d.type === 'relocalization') {
     console.log(`[RELOCALIZE] Received: (${d.x}, ${d.y}) from ${d.source} area=${d.areaName}`);

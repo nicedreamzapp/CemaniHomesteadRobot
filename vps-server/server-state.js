@@ -35,6 +35,9 @@ let cameraStatus = {
 // ============ WIFI RELAY STATE ============
 let wifiRelaySocket = null;
 
+// ============ MAC LAUNCHER STATE ============
+let macLauncherSocket = null;
+
 // Per-camera streaming status with timeout detection
 const perCameraStatus = {
   1: { streaming: false, lastFrame: 0 },
@@ -135,6 +138,10 @@ module.exports = {
   // WiFi relay socket (direct access for simplicity)
   get wifiRelaySocket() { return wifiRelaySocket; },
   set wifiRelaySocket(socket) { wifiRelaySocket = socket; },
+
+  // Mac launcher socket (GPU mapping daemon)
+  get macLauncherSocket() { return macLauncherSocket; },
+  set macLauncherSocket(socket) { macLauncherSocket = socket; },
 
   // Broadcast
   broadcast

@@ -788,16 +788,16 @@
           <button id="map1Btn" onclick="event.stopPropagation(); toggleMap1Mode()" title="Full Room Scan: 3x120° turns with camera sweeps" style="background:rgba(30,50,20,0.8);border:1px solid #0f8;color:#0f8;padding:3px 10px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP 1</button>
           <button id="emergencyStopBtn" onclick="event.stopPropagation(); emergencyStopMapping()" style="display:none;background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
         </div>
-        <!-- Mac GPU Processing Indicator - bottom left -->
-        <div id="macGpuIndicator" style="position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.8);border:1px solid #0af;border-radius:4px;padding:4px 8px;font-size:9px;color:#0af;z-index:20;">
+        <!-- Mac GPU Processing Control - bottom left -->
+        <div id="macGpuIndicator" onclick="event.stopPropagation(); toggleMacGpu()" style="pointer-events:auto;position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.8);border:1px solid #0af;border-radius:4px;padding:4px 8px;font-size:9px;color:#0af;z-index:20;cursor:pointer;">
           <div style="display:flex;align-items:center;gap:6px;">
             <div id="macGpuDot" style="width:8px;height:8px;border-radius:50%;background:#666;"></div>
             <div>
               <div style="display:flex;align-items:center;gap:4px;">
-                <span style="font-weight:bold;">GPU</span>
-                <span id="macGpuPercent" style="color:#0f8;font-weight:bold;">0%</span>
+                <span id="macGpuLabel" style="font-weight:bold;">START GPU</span>
+                <span id="macGpuPercent" style="color:#0f8;font-weight:bold;display:none;">0%</span>
               </div>
-              <div id="macGpuStatus" style="font-size:7px;color:#888;">waiting...</div>
+              <div id="macGpuStatus" style="font-size:7px;color:#888;">click to start</div>
             </div>
           </div>
         </div>
@@ -1523,6 +1523,102 @@ async function toggleMap1Mode() {
 }
 
 window.toggleMap1Mode = toggleMap1Mode;
+
+// ========== MAC GPU CONTROL ==========
+// State tracking for Mac GPU mapper
+let macGpuState = 'disconnected';  // disconnected, idle, starting, running, stopping, error
+
+function updateMacGpuUI(status, gpuPercent, message) {
+  macGpuState = status;
+  const indicator = document.getElementById('macGpuIndicator');
+  const dot = document.getElementById('macGpuDot');
+  const label = document.getElementById('macGpuLabel');
+  const percent = document.getElementById('macGpuPercent');
+  const statusText = document.getElementById('macGpuStatus');
+
+  if (!indicator) return;
+
+  switch(status) {
+    case 'disconnected':
+      dot.style.background = '#666';
+      indicator.style.borderColor = '#666';
+      label.textContent = 'GPU OFFLINE';
+      label.style.color = '#666';
+      percent.style.display = 'none';
+      statusText.textContent = 'daemon not running';
+      statusText.style.color = '#f44';
+      break;
+    case 'idle':
+      dot.style.background = '#0af';
+      indicator.style.borderColor = '#0af';
+      label.textContent = 'START GPU';
+      label.style.color = '#0af';
+      percent.style.display = 'none';
+      statusText.textContent = 'click to start';
+      statusText.style.color = '#888';
+      break;
+    case 'starting':
+      dot.style.background = '#fa0';
+      indicator.style.borderColor = '#fa0';
+      label.textContent = 'GPU';
+      label.style.color = '#fa0';
+      percent.style.display = 'none';
+      statusText.textContent = message || 'starting...';
+      statusText.style.color = '#fa0';
+      break;
+    case 'running':
+      dot.style.background = '#0f8';
+      indicator.style.borderColor = '#0f8';
+      label.textContent = 'GPU';
+      label.style.color = '#0f8';
+      percent.style.display = 'inline';
+      percent.textContent = gpuPercent + '%';
+      statusText.textContent = 'click to stop';
+      statusText.style.color = '#0f8';
+      break;
+    case 'stopping':
+      dot.style.background = '#fa0';
+      indicator.style.borderColor = '#fa0';
+      label.textContent = 'GPU';
+      label.style.color = '#fa0';
+      percent.style.display = 'none';
+      statusText.textContent = 'stopping...';
+      statusText.style.color = '#fa0';
+      break;
+    case 'error':
+      dot.style.background = '#f44';
+      indicator.style.borderColor = '#f44';
+      label.textContent = 'GPU ERROR';
+      label.style.color = '#f44';
+      percent.style.display = 'none';
+      statusText.textContent = message || 'error';
+      statusText.style.color = '#f44';
+      break;
+  }
+}
+
+function toggleMacGpu() {
+  console.log('[MAC-GPU] Toggle clicked, current state:', macGpuState);
+  var socket = window.ws;
+  if (!socket || socket.readyState !== 1) {
+    alert('WebSocket not connected!');
+    return;
+  }
+
+  // Always allow start/stop regardless of state for now
+  if (macGpuState === 'running' || macGpuState === 'starting') {
+    // Stop GPU mapping
+    console.log('[MAC-GPU] Sending stop command');
+    socket.send(JSON.stringify({ type: 'mac_control', cmd: 'stop' }));
+    updateMacGpuUI('stopping', 0, 'stopping...');
+  } else {
+    // Start GPU mapping (idle, disconnected, error, or any other state)
+    console.log('[MAC-GPU] Sending start command');
+    socket.send(JSON.stringify({ type: 'mac_control', cmd: 'start' }));
+    updateMacGpuUI('starting', 0, 'starting...');
+  }
+}
+window.toggleMacGpu = toggleMacGpu;
 
 // ========== SET CAMERA HOME POSITION ==========
 function setCameraHome() {
