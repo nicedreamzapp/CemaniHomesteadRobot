@@ -1453,7 +1453,7 @@ function updateCompass(heading, x, y, z) {
 let accumulatedMapCloud = null;
 let accumulatedMapMesh = null;  // For surface rendering
 let accumulatedFrameMarkers = [];
-let accumulatedMapVisible = false;  // DISABLED - only realtime LIDAR
+let accumulatedMapVisible = true;  // ENABLED - show 4D map from Mac processor
 let showPhotoMarkers = false;  // DISABLED - ugly floating photos on map
 let mapRenderMode = 'splats';  // 'points', 'splats', 'surface'
 
