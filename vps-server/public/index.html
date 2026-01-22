@@ -965,21 +965,22 @@
 <!-- WiFi Manager Popup -->
 <div class="serial-popup wifi-popup" id="wifiPopup">
   <div class="serial-popup-header" id="wifiPopupHeader">
-    <span class="emoji">&#128246;</span> WIFI MANAGER
+    <span class="emoji">&#128246;</span> Wi-Fi
     <span class="serial-popup-close" onclick="toggleWifiPopup()">&times;</span>
   </div>
   <div class="wifi-content">
-    <div class="wifi-status-bar">
-      <div id="wifiCurrentStatus">
-        <span class="wifi-label">Current:</span>
-        <span id="wifiCurrentNetwork">--</span>
-        <span id="wifiSignalStrength" style="color:#0f8;margin-left:8px;">--</span>
+    <div class="wifi-current-connection" id="wifiCurrentConnection">
+      <div class="wifi-current-icon">&#10003;</div>
+      <div class="wifi-current-info">
+        <span id="wifiCurrentNetwork" class="wifi-current-ssid">Not Connected</span>
+        <span id="wifiSignalStrength" class="wifi-current-detail"></span>
       </div>
-      <button id="wifiScanBtn" onclick="scanWifi()" class="wifi-btn scan">Scan</button>
     </div>
-    <div class="wifi-network-list" id="wifiNetworkList">
-      <div class="wifi-scanning" id="wifiScanning" style="display:none;">Scanning networks...</div>
-      <div class="wifi-no-relay" id="wifiNoRelay">WiFi relay not connected</div>
+    <div class="wifi-section-label">Known Networks</div>
+    <div class="wifi-network-list" id="wifiKnownNetworks"></div>
+    <div class="wifi-section-label">Other Networks</div>
+    <div class="wifi-network-list" id="wifiOtherNetworks">
+      <div class="wifi-scanning" id="wifiScanning">Searching...</div>
     </div>
     <div class="wifi-connect-form" id="wifiConnectForm" style="display:none;">
       <div class="wifi-selected-network">

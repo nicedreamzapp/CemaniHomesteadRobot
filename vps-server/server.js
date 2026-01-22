@@ -420,6 +420,62 @@ app.get('/jetson/:action/:service', (req, res) => {
   res.json({ success: true, action: action, service: service, message: 'Command sent to Jetson' });
 });
 
+// WiFi REST API - bypasses WebSocket issues
+const { exec } = require('child_process');
+
+app.get('/wifi/scan', (req, res) => {
+  console.log('[WIFI-HTTP] Scanning WiFi networks via SSH...');
+
+  const sshCmd = `ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no jetson@192.168.1.31 "nmcli device wifi rescan ifname wlx00c0caab495d 2>/dev/null; sleep 2; nmcli -t -f SSID,SIGNAL,SECURITY device wifi list ifname wlx00c0caab495d 2>/dev/null || nmcli -t -f SSID,SIGNAL,SECURITY device wifi list"`;
+
+  exec(sshCmd, { timeout: 15000 }, (error, stdout, stderr) => {
+    if (error) {
+      console.log('[WIFI-HTTP] SSH error:', error.message);
+      return res.status(500).json({ error: 'Failed to scan WiFi', details: error.message });
+    }
+
+    const networks = [];
+    const seen = new Set();
+    stdout.split('\\n').forEach(line => {
+      if (!line.trim()) return;
+      const parts = line.split(':');
+      const ssid = parts[0];
+      if (!ssid || seen.has(ssid)) return;
+      seen.add(ssid);
+      networks.push({
+        ssid: ssid,
+        signal: parseInt(parts[1]) || 0,
+        security: parts[2] || 'Open'
+      });
+    });
+
+    networks.sort((a, b) => b.signal - a.signal);
+    console.log('[WIFI-HTTP] Found', networks.length, 'networks');
+    res.json({ networks: networks });
+  });
+});
+
+app.post('/wifi/connect', (req, res) => {
+  const { ssid, password } = req.body;
+  console.log('[WIFI-HTTP] Connecting to:', ssid);
+
+  let sshCmd;
+  if (password) {
+    sshCmd = `ssh -o ConnectTimeout=5 jetson@192.168.1.31 "nmcli device wifi connect '${ssid}' password '${password}' ifname wlx00c0caab495d"`;
+  } else {
+    sshCmd = `ssh -o ConnectTimeout=5 jetson@192.168.1.31 "nmcli connection up '${ssid}'"`;
+  }
+
+  exec(sshCmd, { timeout: 30000 }, (error, stdout, stderr) => {
+    if (error) {
+      console.log('[WIFI-HTTP] Connect error:', stderr || error.message);
+      return res.status(500).json({ error: 'Failed to connect', details: stderr || error.message });
+    }
+    console.log('[WIFI-HTTP] Connected to', ssid);
+    res.json({ success: true, ssid: ssid });
+  });
+});
+
 // GPU Renderer - receives frames via WebSocket from Mac processor
 let gpuRendererConnected = false;
 let latestGpuFrame = null;  // Buffer containing latest JPEG frame
@@ -593,6 +649,12 @@ wss.on("connection", (ws, req) => {
       console.log(`[DEBUG-MSG] Client ${ws.clientIP} msg #${ws.msgCount}: ${preview}`);
     }
 
+    // DEBUG: Log EVERY message type at the start
+    const firstBytes = Buffer.isBuffer(msg) ? msg.slice(0, 50).toString('utf8') : (typeof msg === 'string' ? msg.substring(0, 50) : 'unknown');
+    if (firstBytes.includes('camera_hello') || firstBytes.includes('wifi')) {
+      console.log('[DEBUG-EARLY] IMPORTANT MSG:', isBinary ? 'BINARY' : 'TEXT', firstBytes);
+    }
+
     // Handle binary talkback audio from browser
     if (isBinary && ws.isBrowser) {
       const data = Buffer.from(msg);
@@ -606,9 +668,57 @@ wss.on("connection", (ws, req) => {
     }
 
     // Handle binary frames from camera relay
-    if (isBinary && ws.isCamera) {
-      handleCameraFrame(ws, msg);
-      return;
+    // Markers: 0x00=cam1 video, 0x01=cam1 audio, 0x02=cam2 video, 0x03=cam2 audio
+    // Note: Also detect binary by content if isBinary flag is wrong
+    const data = Buffer.isBuffer(msg) ? msg : Buffer.from(msg);
+    const firstByte = data[0];
+
+    // Debug: Log messages that look like binary camera data being sent as text
+    if (!isBinary && data.length > 100 && firstByte <= 0x10) {
+      console.log(`[DEBUG-BINARY-MISMATCH] Client ${ws.clientIP}: isBinary=false but firstByte=0x${firstByte?.toString(16)}, len=${data.length}, first10=[${data.slice(0,10).join(',')}]`);
+    }
+
+    // Detect camera frames by marker (0x00-0x03) followed by JPEG magic (FFD8)
+    // Also detect by looking for JPEG marker anywhere in first 5 bytes
+    const hasJpegMagic = (data[1] === 0xFF && data[2] === 0xD8) ||
+                         (data[0] === 0xFF && data[1] === 0xD8) ||
+                         (data.length > 5 && data.slice(0, 5).includes(0xFF) && data.indexOf(0xD8) === data.indexOf(0xFF) + 1);
+    const isLikelyCameraFrame = data.length > 100 && (
+      (firstByte <= 0x03 && hasJpegMagic) ||
+      (firstByte === 0xFF && data[1] === 0xD8)  // Raw JPEG without marker
+    );
+
+    if (isBinary || isLikelyCameraFrame) {
+      if (isLikelyCameraFrame) {
+        // Auto-register as camera if not already
+        if (!ws.isCamera) {
+          console.log('[CAMERA] ★ Auto-registering camera relay from frame (marker:', firstByte, ', size:', data.length, ')');
+          state.setCameraSocket(ws);
+          ws.isCamera = true;
+          ws.isBrowser = false;
+          state.cameraStatus.connected = true;
+          state.broadcast({ type: "camera_status", connected: true });
+        }
+        handleCameraFrame(ws, msg);
+        return;
+      }
+
+      // Handle talkback audio from browser (marker 0x10)
+      if (firstByte === 0x10 && ws.isBrowser) {
+        const cameraSocket = state.getCameraSocket();
+        if (cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
+          cameraSocket.send(msg);
+        }
+        return;
+      }
+
+      // Other binary data - try to detect and handle
+      if (isBinary) {
+        if (firstByte <= 0x03) {
+          handleCameraFrame(ws, msg);
+        }
+        return;
+      }
     }
 
     try {
@@ -663,10 +773,32 @@ wss.on("connection", (ws, req) => {
 
     } catch (err) {
       const rawMsg = typeof msg === 'string' ? msg : msg.toString();
+
+      // Detect camera frames that came in as text (binary data corrupted through string encoding)
+      // FFmpeg JPEG output contains "Lav" marker, or JFIF marker
+      if (rawMsg.includes('Lav') || rawMsg.includes('JFIF') || rawMsg.includes('\xFF\xD8')) {
+        // This is likely a camera frame sent as text instead of binary
+        // Auto-register this socket as camera relay
+        if (!ws.isCamera) {
+          console.log('[CAMERA] ★ Auto-registering camera relay from text-encoded binary frame');
+          state.setCameraSocket(ws);
+          ws.isCamera = true;
+          ws.isBrowser = false;
+          state.cameraStatus.connected = true;
+          state.broadcast({ type: "camera_status", connected: true });
+        }
+        // Pass the raw buffer to frame handler
+        handleCameraFrame(ws, Buffer.isBuffer(msg) ? msg : Buffer.from(msg, 'binary'));
+        return;
+      }
+
       if (rawMsg.includes('ptz') || rawMsg.includes('PTZ') || rawMsg.includes('DPAD')) {
         console.error("[WS] PTZ Parse Error:", err.message, "RAW:", rawMsg.substring(0, 200));
       } else {
-        console.error("[WS] Error:", err.message);
+        // Don't spam logs for binary data errors
+        if (!err.message.includes('not valid JSON')) {
+          console.error("[WS] Error:", err.message);
+        }
       }
     }
   });
@@ -680,6 +812,10 @@ wss.on("connection", (ws, req) => {
 
 // ============ MESSAGE HANDLERS ============
 function handleMessage(ws, data) {
+  // Debug: log camera and wifi related messages
+  if (data.type && (data.type.includes('camera') || data.type.includes('wifi'))) {
+    console.log("[MSG-DEBUG] Type:", data.type, "from", ws.clientIP);
+  }
   const robotSocket = state.getRobotSocket();
   const cameraSocket = state.getCameraSocket();
 
@@ -1569,15 +1705,42 @@ function handleMessage(ws, data) {
     state.broadcast({ type: "wifi_status_result", status: data.status }, ws);
   }
 
-  // Handle WiFi commands from browsers - forward to relay
-  if ((data.type === "wifi_scan" || data.type === "wifi_connect" || data.type === "wifi_status") && ws.isBrowser) {
-    const wifiRelay = state.wifiRelaySocket;
-    if (wifiRelay && wifiRelay.readyState === WebSocket.OPEN) {
-      wifiRelay.send(JSON.stringify(data));
-      console.log(`[WIFI] Forwarding ${data.type} to relay`);
-    } else {
-      ws.send(JSON.stringify({ type: data.type + "_result", error: "WiFi relay not connected" }));
+  // Handle WiFi commands from browsers - forward to camera relay (which has WiFi capability)
+  // Note: Accept from any client that's not the camera/robot itself (they wouldn't send wifi_scan)
+  if ((data.type === "wifi_scan" || data.type === "wifi_connect" || data.type === "wifi_status") && !ws.isCamera && !ws.isRobot) {
+    ws.isBrowser = true;  // Mark as browser since only browsers send wifi commands
+    console.log(`[WIFI] ★★★ Received ${data.type} from browser`);
+
+    // Prefer dedicated WiFi relay, but fall back to camera relay
+    let targetSocket = state.wifiRelaySocket;
+    console.log(`[WIFI] WiFi relay socket: ${targetSocket ? 'exists' : 'null'}, state: ${targetSocket?.readyState}`);
+    if (!targetSocket || targetSocket.readyState !== WebSocket.OPEN) {
+      targetSocket = state.getCameraSocket();
+      console.log(`[WIFI] Camera socket: ${targetSocket ? 'exists' : 'null'}, state: ${targetSocket?.readyState}, isCamera: ${targetSocket?.isCamera}, isJetsonRelay: ${targetSocket?.isJetsonRelay}, IP: ${targetSocket?.clientIP}`);
     }
+
+    if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+      const msgToSend = JSON.stringify(data);
+      console.log(`[WIFI] ✓ Sending to relay: ${msgToSend}`);
+      targetSocket.send(msgToSend);
+
+      // Set a timeout - if no response in 10 seconds, send error to browser
+      if (data.type === 'wifi_scan') {
+        setTimeout(() => {
+          // Check if we got a response (simple check - could be more robust)
+          ws.send(JSON.stringify({ type: 'wifi_scan_timeout', error: 'No response from robot WiFi scanner. The robot may need to be restarted.' }));
+        }, 10000);
+      }
+    } else {
+      console.log(`[WIFI] ✗ No relay connected to forward ${data.type}`);
+      ws.send(JSON.stringify({ type: "wifi_error", error: "No relay connected" }));
+    }
+  }
+
+  // Forward WiFi responses from camera relay to browsers
+  if ((data.type === "wifi_networks" || data.type === "wifi_connected" || data.type === "wifi_error" || data.type === "wifi_status") && ws.isCamera) {
+    console.log(`[WIFI] Broadcasting ${data.type} from camera relay`);
+    state.broadcast(data, ws);
   }
 
   // PTZ commands

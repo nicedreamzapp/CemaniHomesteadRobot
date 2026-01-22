@@ -428,9 +428,24 @@ if (flashBtn) {
 let wifiRelayConnected = false;
 let selectedWifiSSID = '';
 
+let wifiScanInterval = null;
+
 function toggleWifiPopup() {
   const popup = document.getElementById('wifiPopup');
-  if (popup) popup.classList.toggle('open');
+  if (popup) {
+    popup.classList.toggle('open');
+    if (popup.classList.contains('open')) {
+      // Start auto-scanning when popup opens
+      scanWifi();
+      wifiScanInterval = setInterval(scanWifi, 10000); // Refresh every 10 seconds
+    } else {
+      // Stop scanning when popup closes
+      if (wifiScanInterval) {
+        clearInterval(wifiScanInterval);
+        wifiScanInterval = null;
+      }
+    }
+  }
 }
 
 function updateWifiRelayStatus(connected) {
@@ -453,65 +468,91 @@ function updateWifiRelayStatus(connected) {
 }
 
 function scanWifi() {
-  if (!wifiRelayConnected) return;
-
+  // WiFi scan via WebSocket to Jetson camera relay
+  console.log('[WIFI-UI] Scanning via WebSocket...');
   const scanningEl = document.getElementById('wifiScanning');
-  const networkList = document.getElementById('wifiNetworkList');
 
   // Show scanning message
   if (scanningEl) scanningEl.style.display = 'block';
 
-  // Clear existing networks (except scanning message and no-relay message)
-  const items = networkList.querySelectorAll('.wifi-network-item');
-  items.forEach(item => item.remove());
-
-  // Send scan request
   if (window.ws && window.ws.readyState === WebSocket.OPEN) {
     window.ws.send(JSON.stringify({ type: 'wifi_scan' }));
+    // Response handled by websocket.js -> displayWifiNetworks
+    // Set timeout to hide scanning indicator if no response
+    setTimeout(() => {
+      if (scanningEl && scanningEl.style.display === 'block') {
+        scanningEl.style.display = 'none';
+        console.log('[WIFI-UI] Scan timeout - no response');
+      }
+    }, 15000);
+  } else {
+    console.error('[WIFI-UI] WebSocket not connected');
+    if (scanningEl) scanningEl.style.display = 'none';
+    alert('WebSocket not connected');
   }
 }
 
 function displayWifiNetworks(networks) {
   const scanningEl = document.getElementById('wifiScanning');
-  const networkList = document.getElementById('wifiNetworkList');
+  const knownList = document.getElementById('wifiKnownNetworks');
+  const otherList = document.getElementById('wifiOtherNetworks');
+  const currentNetworkEl = document.getElementById('wifiCurrentNetwork');
+  const currentDetailEl = document.getElementById('wifiSignalStrength');
 
   if (scanningEl) scanningEl.style.display = 'none';
 
-  // Clear existing network items
-  const items = networkList.querySelectorAll('.wifi-network-item');
-  items.forEach(item => item.remove());
+  // Clear existing items
+  if (knownList) knownList.innerHTML = '';
+  if (otherList) otherList.innerHTML = '';
 
   if (!networks || networks.length === 0) {
-    const noNetworks = document.createElement('div');
-    noNetworks.className = 'wifi-scanning';
-    noNetworks.textContent = 'No networks found';
-    networkList.appendChild(noNetworks);
+    if (otherList) otherList.innerHTML = '<div class="wifi-scanning">No networks found</div>';
     return;
   }
 
   // Sort by signal strength
   networks.sort((a, b) => (b.signal || 0) - (a.signal || 0));
 
+  // Update current connection display
+  const connected = networks.find(n => n.connected);
+  if (connected && currentNetworkEl) {
+    currentNetworkEl.textContent = connected.ssid;
+    if (currentDetailEl) currentDetailEl.textContent = 'Connected • ' + connected.signal + ' dBm';
+  }
+
   networks.forEach(network => {
+    if (network.connected) return; // Skip connected network (shown at top)
+
     const item = document.createElement('div');
     item.className = 'wifi-network-item';
-    if (network.connected) item.classList.add('connected');
 
     const signal = network.signal || 0;
-    const signalIcon = signal > -50 ? '&#128246;' : signal > -70 ? '&#128246;' : '&#128246;';
+    const bars = signal > 70 ? '▂▄▆█' : signal > 50 ? '▂▄▆_' : signal > 30 ? '▂▄__' : '▂___';
     const security = network.security || 'Open';
+    const lockIcon = security !== 'Open' ? '🔒 ' : '';
 
     item.innerHTML = `
       <div class="wifi-network-info">
-        <span class="wifi-ssid">${escapeHtml(network.ssid)}</span>
-        <span class="wifi-details">${security} | ${signal} dBm${network.connected ? ' | Connected' : ''}</span>
+        <span class="wifi-ssid">${lockIcon}${escapeHtml(network.ssid)}</span>
+        <span class="wifi-details">${signal}%</span>
       </div>
-      <span class="wifi-signal">${signalIcon}</span>
+      <span class="wifi-signal">${bars}</span>
     `;
 
     item.onclick = () => selectWifiNetwork(network.ssid, security === 'Open');
-    networkList.appendChild(item);
+
+    // Put known/saved networks in known list, others in other list
+    if (network.known && knownList) {
+      knownList.appendChild(item);
+    } else if (otherList) {
+      otherList.appendChild(item);
+    }
   });
+
+  // Show message if no other networks
+  if (otherList && otherList.children.length === 0) {
+    otherList.innerHTML = '<div class="wifi-scanning" style="padding:10px;color:#666;">Searching for networks...</div>';
+  }
 }
 
 function selectWifiNetwork(ssid, isOpen) {
