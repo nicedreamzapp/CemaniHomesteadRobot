@@ -92,6 +92,10 @@ ws.onmessage = function(e) {
   if (d.type === 'lidar') {
     if (window.lidar3dModule) window.lidar3dModule.updateLidar3D(d.points);
     if (window.lidar2dModule) window.lidar2dModule.drawLidarPoints(d.points);
+    // Jetson is online if we're receiving LIDAR data
+    if (window.camerasPtzModule && window.camerasPtzModule.updateJetsonStatus) {
+      window.camerasPtzModule.updateJetsonStatus(true);
+    }
   }
 
   // Object detection from Jetson
@@ -497,6 +501,10 @@ ws.onmessage = function(e) {
         window.camerasPtzModule.initCam1();
       }
     }
+    // WiFi works via camera relay - show WiFi ON when camera is connected
+    if (window.controlsModule && window.controlsModule.updateWifiRelayStatus) {
+      window.controlsModule.updateWifiRelayStatus(d.connected);
+    }
   }
 
   // Compass auto-calibration status
@@ -550,8 +558,8 @@ ws.onmessage = function(e) {
     }
   }
 
-  // WiFi scan results
-  if (d.type === 'wifi_scan_result') {
+  // WiFi scan results (from camera relay)
+  if (d.type === 'wifi_scan_result' || d.type === 'wifi_networks') {
     console.log('[WIFI] Scan result:', d.networks?.length || 0, 'networks');
     if (window.controlsModule && window.controlsModule.displayWifiNetworks) {
       window.controlsModule.displayWifiNetworks(d.networks);
@@ -561,17 +569,33 @@ ws.onmessage = function(e) {
     }
   }
 
-  // WiFi connect result
-  if (d.type === 'wifi_connect_result') {
-    console.log('[WIFI] Connect result:', d.ssid, d.success ? 'SUCCESS' : 'FAILED', d.message);
-    if (d.success && window.controlsModule && window.controlsModule.updateWifiStatus) {
-      window.controlsModule.updateWifiStatus({ ssid: d.ssid });
+  // WiFi connect result (from camera relay)
+  if (d.type === 'wifi_connect_result' || d.type === 'wifi_connected') {
+    const ssid = d.ssid;
+    console.log('[WIFI] Connected to:', ssid);
+    if (window.controlsModule && window.controlsModule.updateWifiStatus) {
+      window.controlsModule.updateWifiStatus({ ssid: ssid });
     }
-    // Show alert for result
-    if (d.success) {
-      alert('Connected to ' + d.ssid + '!');
-    } else {
-      alert('Failed to connect to ' + d.ssid + ': ' + (d.message || 'Unknown error'));
+    alert('Connected to ' + ssid + '!');
+    // Refresh network list
+    if (window.controlsModule && window.controlsModule.scanWifi) {
+      window.controlsModule.scanWifi();
+    }
+  }
+
+  // WiFi error
+  if (d.type === 'wifi_error') {
+    console.error('[WIFI] Error:', d.error);
+    alert('WiFi error: ' + d.error);
+    // Hide scanning indicator
+    const scanningEl = document.getElementById('wifiScanning');
+    if (scanningEl) scanningEl.style.display = 'none';
+  }
+
+  // WiFi status response
+  if (d.type === 'wifi_status' && d.ssid !== undefined) {
+    if (window.controlsModule && window.controlsModule.updateWifiStatus) {
+      window.controlsModule.updateWifiStatus({ ssid: d.ssid, connected: d.connected });
     }
   }
 
@@ -792,6 +816,11 @@ function handleStatusUpdate(d) {
 
   if (d.camera && window.camerasPtzModule) {
     window.camerasPtzModule.updateCam1Status(d.camera.connected, d.camera.streaming);
+  }
+
+  // WiFi works via camera relay - update WiFi status based on camera/Jetson connection
+  if (d.camera && window.controlsModule && window.controlsModule.updateWifiRelayStatus) {
+    window.controlsModule.updateWifiRelayStatus(d.camera.connected);
   }
 
   if (d.controller && typeof updateXboxStatus === 'function') {
