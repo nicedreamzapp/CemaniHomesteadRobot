@@ -16,9 +16,39 @@ import json
 import time
 import math
 import threading
+import os
+import sys
+import atexit
 from rplidar import RPLidar
 import websocket
 import ssl
+
+# SINGLETON: Prevent multiple instances
+LOCKFILE = '/tmp/lidar-relay.lock'
+
+def check_singleton():
+    """Ensure only one instance runs"""
+    if os.path.exists(LOCKFILE):
+        try:
+            with open(LOCKFILE, 'r') as f:
+                old_pid = int(f.read().strip())
+            # Check if process is still running
+            os.kill(old_pid, 0)
+            print(f"[ERROR] Another LIDAR relay is running (PID {old_pid}). Exiting.")
+            sys.exit(1)
+        except (ProcessLookupError, ValueError):
+            # Process not running, remove stale lock
+            print("[INFO] Removing stale lock file")
+            os.remove(LOCKFILE)
+
+    # Write our PID
+    with open(LOCKFILE, 'w') as f:
+        f.write(str(os.getpid()))
+
+    # Clean up on exit
+    atexit.register(lambda: os.remove(LOCKFILE) if os.path.exists(LOCKFILE) else None)
+
+check_singleton()
 
 # Configuration
 LIDAR_PORT = '/dev/ttyUSB0'

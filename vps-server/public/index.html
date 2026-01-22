@@ -610,9 +610,6 @@
         <div class="serial-trigger" onclick="toggleCodePopup()">
           <span class="emoji">&#128221;</span> CODE
         </div>
-        <div class="serial-trigger" id="wifiTrigger" onclick="toggleWifiPopup()">
-          <span class="emoji">&#128246;</span> WIFI <span id="wifiRelayStatus" style="font-size:8px;color:#f44;">OFF</span>
-        </div>
         <div class="battery-trigger">
           <span class="emoji">&#128267;</span> Battery
           <div class="batt-bar-mini"><div class="batt-fill-mini" id="headerBatteryFill"></div></div>
@@ -962,39 +959,6 @@
   </div>
 </div>
 
-<!-- WiFi Manager Popup -->
-<div class="serial-popup wifi-popup" id="wifiPopup">
-  <div class="serial-popup-header" id="wifiPopupHeader">
-    <span class="emoji">&#128246;</span> Wi-Fi
-    <span class="serial-popup-close" onclick="toggleWifiPopup()">&times;</span>
-  </div>
-  <div class="wifi-content">
-    <div class="wifi-current-connection" id="wifiCurrentConnection">
-      <div class="wifi-current-icon">&#10003;</div>
-      <div class="wifi-current-info">
-        <span id="wifiCurrentNetwork" class="wifi-current-ssid">Not Connected</span>
-        <span id="wifiSignalStrength" class="wifi-current-detail"></span>
-      </div>
-    </div>
-    <div class="wifi-section-label">Known Networks</div>
-    <div class="wifi-network-list" id="wifiKnownNetworks"></div>
-    <div class="wifi-section-label">Other Networks</div>
-    <div class="wifi-network-list" id="wifiOtherNetworks">
-      <div class="wifi-scanning" id="wifiScanning">Searching...</div>
-    </div>
-    <div class="wifi-connect-form" id="wifiConnectForm" style="display:none;">
-      <div class="wifi-selected-network">
-        <span>Connect to:</span>
-        <strong id="wifiSelectedSSID">--</strong>
-      </div>
-      <input type="password" id="wifiPassword" placeholder="Enter password...">
-      <div class="wifi-form-btns">
-        <button onclick="cancelWifiConnect()" class="wifi-btn cancel">Cancel</button>
-        <button onclick="connectWifi()" class="wifi-btn connect">Connect</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Load JavaScript modules in correct order -->
 <script src="js/telemetry.js?v=7"></script>
