@@ -1,11 +1,44 @@
 # Cemani Robot - Claude Code Instructions
 
+## ╔═══════════════════════════════════════════════════════════════════════════════╗
+## ║                    !!! CRITICAL SAFETY - READ FIRST !!!                       ║
+## ║═══════════════════════════════════════════════════════════════════════════════║
+## ║  INCIDENT: January 25, 2026 - Robot crashed into crowd, people were INJURED  ║
+## ║  ROOT CAUSE: Mapping processes flooded WebSocket, blocking Xbox controller    ║
+## ║  THE XBOX CONTROLLER IS THE PRIMARY SAFETY MECHANISM - IT MUST NEVER FAIL    ║
+## ╚═══════════════════════════════════════════════════════════════════════════════╝
+
+## ABSOLUTE SAFETY RULES - XBOX CONTROLLER IS SACRED
+
+**THE XBOX CONTROLLER MUST ALWAYS WORK. NOTHING CAN OVERRIDE IT.**
+
+### What went wrong (Jan 25, 2026):
+1. 8+ mapping processes flooded WebSocket with 1.5MB/sec of data
+2. ESP32 got blocked processing camera frames, couldn't poll Xbox
+3. Teensy watchdog was kept alive by KEEPALIVE (not Xbox-specific)
+4. Manual override expired after only 5 seconds
+5. Mapping sent robot_spin command that moved robot into crowd
+6. People were injured
+
+### What was fixed:
+1. Xbox is now polled FIRST in ESP32 loop, BEFORE WebSocket
+2. XBOX_ACTIVE heartbeat is separate from KEEPALIVE
+3. Teensy has Xbox-specific watchdog (300ms timeout)
+4. Xbox disconnect sends IMMEDIATE stop to motors
+5. Manual override increased to 30 seconds
+6. robot_spin is BLOCKED when Xbox was recently used
+7. /spin endpoint requires authentication again
+8. Watchdog reduced from 2000ms to 500ms
+
 ## CRITICAL SAFETY RULE - ROBOT MOVEMENT
 
 **Claude Code is NEVER allowed to:**
 1. Start MAP 1 or any mapping sequence
 2. Send movement commands to the robot
 3. Trigger any robot motion whatsoever
+4. Modify Xbox controller handling code without explicit user approval
+5. Reduce watchdog timeouts or safety margins
+6. Remove authentication from any movement endpoint
 
 **Before any robot movement or mapping is needed, Claude MUST:**
 1. STOP and ASK the user: "Are you ready for robot movement? Please ensure the robot is in a safe position."
@@ -15,6 +48,8 @@
 **Only the user can initiate robot movement by clicking buttons in the web UI.**
 
 This rule exists because the robot is a physical machine that can cause damage or injury if moved unexpectedly. The user must always have the opportunity to ensure the robot is in a safe position before any movement occurs.
+
+**NEVER FORGET: PEOPLE WERE INJURED WHEN THESE RULES WERE NOT FOLLOWED.**
 
 ---
 

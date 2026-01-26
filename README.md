@@ -12,6 +12,22 @@
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
 
+---
+
+## CRITICAL SAFETY NOTICE
+
+> **January 25, 2026**: A safety incident occurred when the robot's Xbox controller failsafe was overridden by autonomous mapping processes, resulting in injuries. This has been fixed in **v4.0.0** of the firmware.
+
+### Safety Architecture (v4.0.0)
+- **Xbox controller is SACRED** - processed FIRST every loop, before any WebSocket/network data
+- **Xbox watchdog (300ms)** - motors stop within 300ms if Xbox heartbeat lost
+- **General watchdog (500ms)** - backup motor stop if no communication
+- **Immediate stop on disconnect** - Xbox disconnect sends triple STOP commands
+- **30-second manual override** - autonomous commands blocked for 30s after any Xbox input
+- **robot_spin blocked** - mapping cannot spin robot while Xbox has priority
+
+See `SAFETY_FAILURE_DIAGNOSTIC.md` for full incident analysis and `CLAUDE.md` for safety rules.
+
 [Demo Videos](#demo) | [3D Mapping](#-3d-mapping--sensor-fusion) | [AI Detection](#-ai-object-detection) | [Web Interface](#-web-interface) | [Hardware](#-hardware)
 
 ---
