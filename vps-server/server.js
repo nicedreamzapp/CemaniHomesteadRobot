@@ -46,7 +46,11 @@ state.setWss(wss);
 
 global.manualOverrideUntil = 0;  // Timestamp when manual override expires
 global.emergencyStopActive = false;  // Sticky E-stop flag - requires explicit clear
-const MANUAL_OVERRIDE_DURATION = 5000;  // Block autonomous for 5 seconds after manual input
+// ╔═══════════════════════════════════════════════════════════════════════════════╗
+// ║  MANUAL OVERRIDE DURATION - INCREASED FOR SAFETY                              ║
+// ║  INCIDENT: Jan 25, 2026 - 5 seconds was too short, mapping resumed too fast   ║
+// ╚═══════════════════════════════════════════════════════════════════════════════╝
+const MANUAL_OVERRIDE_DURATION = 30000;  // Block autonomous for 30 SECONDS after manual input (was 5s!)
 
 // ============ MAPPING STATE ============
 global.mappingActive = false;  // Is autonomous mapping mode active?
@@ -156,9 +160,10 @@ try {
 
 if (authConfig) {
   app.use((req, res, next) => {
-    // Allow /spin, /map, /drive, and /safety endpoints without auth
-    // /safety endpoints are for verifying the manual override system works
-    if (req.path.startsWith('/spin') || req.path.startsWith('/map') || req.path.startsWith('/drive') || req.path.startsWith('/safety')) {
+    // SAFETY: Only /safety endpoint is allowed without auth (for status checks)
+    // INCIDENT: Jan 25, 2026 - /spin without auth allowed mapping to move robot
+    // /spin and /drive NOW REQUIRE AUTHENTICATION
+    if (req.path.startsWith('/safety')) {
       return next();
     }
     const auth = req.headers.authorization;
@@ -1033,8 +1038,27 @@ function handleMessage(ws, data) {
     });
   }
 
-  // Robot spin command from Mac mapper - forward to robot
+  // ╔═══════════════════════════════════════════════════════════════════════════════╗
+  // ║  ROBOT SPIN - BLOCKED WHEN XBOX IS ACTIVE                                     ║
+  // ║  INCIDENT: Jan 25, 2026 - Mapping sent spin commands that overrode Xbox       ║
+  // ║  NOW: robot_spin is BLOCKED if manual override is active (Xbox used recently) ║
+  // ╚═══════════════════════════════════════════════════════════════════════════════╝
   if (data.type === "robot_spin") {
+    // SAFETY CHECK: Block if Xbox/manual control was used recently
+    if (isManualOverrideActive()) {
+      console.log("[SPIN] BLOCKED - Xbox controller has priority! Override active for",
+        Math.max(0, global.manualOverrideUntil - Date.now()), "ms more");
+      // Notify the requester that spin was blocked
+      if (ws.send) {
+        ws.send(JSON.stringify({
+          type: "spin_blocked",
+          reason: "Xbox controller has priority",
+          retry_after_ms: Math.max(0, global.manualOverrideUntil - Date.now())
+        }));
+      }
+      return;  // DO NOT SEND SPIN COMMAND
+    }
+
     console.log("[SPIN] Received spin command:", data.direction, data.degrees);
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
@@ -1554,6 +1578,59 @@ function handleMessage(ws, data) {
       }
     });
     console.log("[3D MAP] Clear command sent to processor");
+  }
+
+  // LIDAR wall colors from Mac camera fusion -> broadcast to browsers
+  if (data.type === "lidar_colors") {
+    const colorCount = data.colors ? Object.keys(data.colors).length : 0;
+    if (colorCount > 0) {
+      state.broadcast(data, ws);
+      if (Math.random() < 0.1) {
+        console.log(`[LIDAR-COLORS] Broadcast ${colorCount} angle colors to browsers`);
+      }
+    }
+  }
+
+  // ==================== GAUSSIAN SPLATTING ====================
+  // Trained 3DGS model from Mac GPU processor
+
+  // Gaussian splats data from Mac -> broadcast to browsers
+  if (data.type === "gaussian_splats") {
+    const numSplats = data.num_splats || 0;
+    console.log(`[GSPLAT] Received ${numSplats} splats from Mac processor`);
+    state.broadcast(data, ws);
+  }
+
+  // Apple SHARP splats (photorealistic single-image 3DGS)
+  if (data.type === "sharp_splats") {
+    const numSplats = data.num_splats || 0;
+    console.log(`[SHARP] Received ${numSplats} splats from ${data.num_frames || 0} frames`);
+    state.broadcast(data, ws);
+  }
+
+  // Gaussian splat mapper status -> broadcast to browsers
+  if (data.type === "gsplat_status") {
+    console.log(`[GSPLAT] Status: ${data.num_frames} frames, training=${data.is_training}, model=${data.has_model}`);
+    state.broadcast(data, ws);
+  }
+
+  // Gaussian splat train command from browser -> Mac processor
+  if (data.type === "gsplat_train") {
+    wss.clients.forEach(client => {
+      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "gsplat_train" }));
+      }
+    });
+    console.log("[GSPLAT] Train command sent to processor");
+  }
+
+  // Gaussian splat status request from browser -> Mac processor
+  if (data.type === "gsplat_status_request") {
+    wss.clients.forEach(client => {
+      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "gsplat_status_request" }));
+      }
+    });
   }
 
   // Mapping status from Mac processor -> broadcast to browsers
