@@ -262,7 +262,8 @@ void loop() {
 
   ArduinoOTA.handle();  // Check for wireless OTA updates
 
-  // WiFi monitoring (lower priority than Xbox)
+  // WiFi monitoring - NON-BLOCKING! Xbox must never be delayed by WiFi
+  // Only check every 2 seconds, and NEVER block
   if (now - lastWiFiCheck > WIFI_CHECK_INTERVAL) {
     lastWiFiCheck = now;
     if (WiFi.status() == WL_CONNECTED) {
@@ -273,15 +274,15 @@ void loop() {
       }
     } else {
       wifiDropCount++;
-      Serial.printf("[WiFi] Disconnected! Attempt %d...\n", wifiDropCount);
-
-      // Force WiFi reconnect
-      if (now - lastWiFiConnected > WIFI_RECONNECT_TIMEOUT) {
-        Serial.println("[WiFi] Forcing disconnect/reconnect...");
-        WiFi.disconnect(true);
-        delay(100);
+      Serial.printf("[WiFi] Disconnected! Attempt %d... (non-blocking)\n", wifiDropCount);
+      // DO NOT call wifiMulti.run() here - it BLOCKS for seconds!
+      // WiFi will auto-reconnect in background
+      // Only force disconnect after long timeout
+      if (now - lastWiFiConnected > 30000) {  // 30 seconds without WiFi
+        Serial.println("[WiFi] Long disconnect - triggering reconnect");
+        WiFi.disconnect(false);  // Non-blocking disconnect
+        WiFi.begin();  // Non-blocking reconnect attempt
       }
-      wifiMulti.run();
     }
   }
 
