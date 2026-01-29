@@ -26,8 +26,8 @@
 #define US_RR_ECHO 9
 
 // Timing constants
-#define US_TIMEOUT_US 40000    // 40ms timeout (~6m max range for JSN-SR04T-V3.0)
-#define US_MIN_INTERVAL_MS 100 // Minimum time between readings per sensor (increased to reduce cross-talk)
+#define US_TIMEOUT_US 15000    // 15ms timeout (~2.5m range) - reduced from 40ms to prevent blocking Xbox
+#define US_MIN_INTERVAL_MS 150 // Minimum time between readings per sensor (increased to reduce blocking)
 
 // Distance thresholds (in cm) - JSN-SR04T-V3.0: 21-600cm range
 #define US_MIN_RANGE_CM 30     // Minimum reliable range (raised from 21 to filter noise)

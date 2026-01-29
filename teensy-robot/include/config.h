@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "4.0.0"  // SAFETY CRITICAL: Xbox watchdog, reduced timeouts
+#define TEENSY_VERSION "4.3.0"  // Fixed telemetry blocking delays
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true
@@ -98,16 +98,17 @@
 #define REG_DRIVER_TEMP     0x20B0  // Driver temperature (0.1C)
 
 // Telemetry update interval
-#define TELEMETRY_INTERVAL  150    // Read telemetry every 150ms for fast collision detection
+#define TELEMETRY_INTERVAL  250    // Read telemetry every 250ms (was 150ms - too frequent, blocked Xbox)
 
 // ╔═══════════════════════════════════════════════════════════════════════════════╗
 // ║  SAFETY WATCHDOG - CRITICAL: These values save lives                          ║
 // ║  INCIDENT: Jan 25, 2026 - 2 second timeout was TOO LONG - people were injured ║
+// ║  NOTE: Timeouts must account for blocking operations (Modbus 15ms, I2C, etc)  ║
 // ╚═══════════════════════════════════════════════════════════════════════════════╝
 // Auto-stop motors if no commands received within timeout
-#define WATCHDOG_TIMEOUT_MS     500    // REDUCED: Stop motors if no data for 500ms (was 2000!)
-#define WATCHDOG_STOP_TIMEOUT   1000   // REDUCED: Full E-STOP if no data for 1 second (was 5000!)
-#define XBOX_TIMEOUT_MS         300    // NEW: Stop if no XBOX_ACTIVE for 300ms
+#define WATCHDOG_TIMEOUT_MS     800    // Stop motors if no data for 800ms (was 500 - too tight with blocking ops)
+#define WATCHDOG_STOP_TIMEOUT   1500   // Full E-STOP if no data for 1.5 seconds
+#define XBOX_TIMEOUT_MS         600    // Stop if no XBOX_ACTIVE for 600ms (was 300 - too tight!)
 
 // ===== DISCRETE MOVEMENT CONSTANTS =====
 #define TURN_MS_PER_DEGREE 100     // ms per degree of rotation
