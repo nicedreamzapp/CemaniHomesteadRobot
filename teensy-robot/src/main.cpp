@@ -358,7 +358,7 @@ void readCompass() {
     bus->write(0x01);  // Single measurement mode
     bus->endTransmission();
 
-    delay(10);  // Wait for measurement
+    delayMicroseconds(1000);  // 1ms instead of 10ms - IST8310 is fast enough
 
     // Read data from register 0x03
     bus->beginTransmission(0x0E);
@@ -717,6 +717,7 @@ void loop() {
       else if (strcmp(buf, "KEEPALIVE") == 0) {
         // General keepalive - ESP32 is alive
         // NOTE: This does NOT reset Xbox watchdog - that requires XBOX_ACTIVE
+        lastComm = now;  // Reset general watchdog so motors don't stop when joystick is held steady
       }
       // ╔═══════════════════════════════════════════════════════════════════════════════╗
       // ║  XBOX HEARTBEAT - CRITICAL SAFETY: This is how we know Xbox is responsive    ║
@@ -724,6 +725,7 @@ void loop() {
       else if (strcmp(buf, "XBOX_ACTIVE") == 0) {
         // Xbox controller is connected and being polled - reset Xbox watchdog
         lastXboxActive = now;
+        lastComm = now;  // Also reset general watchdog
         xboxIsActive = true;
         if (xboxWatchdogTriggered) {
           Serial.println("[XBOX] Controller active - recovering from watchdog");

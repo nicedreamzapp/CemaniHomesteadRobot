@@ -35,9 +35,7 @@ void readDriverTelemetry() {
 
   // ALWAYS read velocities first for real-time wheel animation
   // This ensures wheel direction indicators update immediately
-  // Add delay between reads to avoid Modbus bus contention
-
-  delay(10);  // Pre-delay to ensure bus is idle
+  // REDUCED delays to prevent Xbox watchdog timeouts
 
   val = readModbusRegister(2, 0x20AB);  // LEFT velocity (Driver 2)
   if (val >= 0) {
@@ -47,7 +45,7 @@ void readDriverTelemetry() {
     }
   }
 
-  delay(15);  // Longer delay between Modbus reads for bus stability
+  delay(2);  // Minimal delay between Modbus reads
 
   val = readModbusRegister(1, 0x20AB);  // RIGHT velocity (Driver 1)
   if (val >= 0) {
@@ -56,8 +54,6 @@ void readDriverTelemetry() {
       telemetry_velocityR = -telemetry_velocityR;
     }
   }
-
-  delay(10);  // Post-delay before any switch case reads
 
   // Then read one other register per cycle (slower data like temps)
   // Cases 0-6: voltage, motorTemp1, motorTemp2, drvTemp1, drvTemp2, posL, posR
