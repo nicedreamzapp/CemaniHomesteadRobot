@@ -100,7 +100,7 @@ function broadcast(data, skip = null) {
     // Check both the socket reference AND the isRobot/isCamera flags
     if (c === robotSocket || c === cameraSocket || c.isRobot || c.isCamera) return;
     // Send to browsers and processors (Mac Mini needs LIDAR data for accumulation)
-    if (c !== skip && c.readyState === WebSocket.OPEN && (c.isBrowser || c.isProcessor)) {
+    if (c !== skip && c.readyState === WebSocket.OPEN && (c.isBrowser || c.isProcessor || c.isAutonomous)) {
       c.send(msg);
     }
   });
