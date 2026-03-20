@@ -32,12 +32,6 @@ let cameraStatus = {
   streaming: false
 };
 
-// ============ WIFI RELAY STATE ============
-let wifiRelaySocket = null;
-
-// ============ MAC LAUNCHER STATE ============
-let macLauncherSocket = null;
-
 // Per-camera streaming status with timeout detection
 const perCameraStatus = {
   1: { streaming: false, lastFrame: 0 },
@@ -106,7 +100,7 @@ function broadcast(data, skip = null) {
     // Check both the socket reference AND the isRobot/isCamera flags
     if (c === robotSocket || c === cameraSocket || c.isRobot || c.isCamera) return;
     // Send to browsers and processors (Mac Mini needs LIDAR data for accumulation)
-    if (c !== skip && c.readyState === WebSocket.OPEN && (c.isBrowser || c.isProcessor)) {
+    if (c !== skip && c.readyState === WebSocket.OPEN && (c.isBrowser || c.isProcessor || c.isAutonomous)) {
       c.send(msg);
     }
   });
@@ -134,14 +128,6 @@ module.exports = {
 
   // Map status
   mapStatus,
-
-  // WiFi relay socket (direct access for simplicity)
-  get wifiRelaySocket() { return wifiRelaySocket; },
-  set wifiRelaySocket(socket) { wifiRelaySocket = socket; },
-
-  // Mac launcher socket (GPU mapping daemon)
-  get macLauncherSocket() { return macLauncherSocket; },
-  set macLauncherSocket(socket) { macLauncherSocket = socket; },
 
   // Broadcast
   broadcast

@@ -10,38 +10,6 @@ ws.binaryType = 'arraybuffer';
 window.ws = ws;
 console.log('[WS] window.ws set:', window.ws);
 
-// ============ POSITION JUMP FILTER ============
-// Prevents the map from suddenly teleporting away from the robot
-// Robot can't move more than 500mm in a single frame update
-const MAX_POSITION_JUMP_MM = 500;  // 0.5 meters max jump
-
-function updateOdomStateWithFilter(newX, newY, newHeading, source) {
-  if (!window.odomState) {
-    window.odomState = { x: 0, y: 0, heading: 0, totalDistance: 0, trail: [{ x: 0, y: 0 }] };
-  }
-
-  const oldX = window.odomState.x || 0;
-  const oldY = window.odomState.y || 0;
-  const dx = newX - oldX;
-  const dy = newY - oldY;
-  const jumpDist = Math.sqrt(dx * dx + dy * dy);
-
-  // Allow jump if this is first update (odom was at 0,0) or jump is reasonable
-  const isFirstUpdate = (oldX === 0 && oldY === 0 && (newX !== 0 || newY !== 0));
-
-  if (isFirstUpdate || jumpDist <= MAX_POSITION_JUMP_MM) {
-    window.odomState.x = newX;
-    window.odomState.y = newY;
-    if (newHeading !== undefined) {
-      window.odomState.heading = newHeading;
-    }
-    return true;
-  } else {
-    console.warn(`[ODOM] BLOCKED jump of ${jumpDist.toFixed(0)}mm from ${source} - too far!`);
-    return false;
-  }
-}
-
 // ============ MESSAGE HANDLER ============
 ws.onopen = () => {
   // IMPORTANT: Identify as browser so server knows to send us broadcasts
@@ -92,10 +60,6 @@ ws.onmessage = function(e) {
   if (d.type === 'lidar') {
     if (window.lidar3dModule) window.lidar3dModule.updateLidar3D(d.points);
     if (window.lidar2dModule) window.lidar2dModule.drawLidarPoints(d.points);
-    // Jetson is online if we're receiving LIDAR data
-    if (window.camerasPtzModule && window.camerasPtzModule.updateJetsonStatus) {
-      window.camerasPtzModule.updateJetsonStatus(true);
-    }
   }
 
   // Object detection from Jetson
@@ -139,141 +103,60 @@ ws.onmessage = function(e) {
     console.log(`[3D MAP] Not found on server: ${d.name}`);
   }
 
-  // Autonomous mapping errors - just show error, don't reset button
+  // Autonomous mapping errors (only show if robot not connected)
   if (d.type === 'autonomous_error') {
-    console.error('[AUTONOMOUS] Error received:', d.error);
-    // Only show error in status text - don't reset button (autonomous_status handles that)
-    const statusText = document.getElementById('mapStatusText');
-    const status = document.getElementById('mapModeStatus');
-    if (statusText) {
-      statusText.textContent = d.error || 'Error';
-      statusText.style.color = '#f44';
+    console.error('[AUTONOMOUS] Error:', d.error);
+    alert('MAP MODE ERROR: ' + d.error);
+    // Reset the MAP button UI
+    if (typeof mapModeActive !== 'undefined') {
+      mapModeActive = false;
+      const btn = document.getElementById('mapModeBtn');
+      if (btn) {
+        btn.style.background = 'rgba(20,40,60,0.8)';
+        btn.style.color = '#5af';
+        btn.innerHTML = '🗺️ MAP';
+      }
     }
-    if (status) status.style.display = 'block';
   }
 
   // Autonomous status updates
   if (d.type === 'autonomous_status') {
-    console.log('[AUTONOMOUS] Status received:', d, 'running:', d.running, 'paused:', d.paused);
+    console.log('[AUTONOMOUS] Status:', d);
     const btn = document.getElementById('mapModeBtn');
     const status = document.getElementById('mapModeStatus');
     const statusText = document.getElementById('mapStatusText');
+    const slamStats = document.getElementById('slamMapStats');
 
-    // Determine if autonomous is running (default to current state if undefined)
-    const isRunning = d.running === true || (d.running === undefined && typeof mapModeActive !== 'undefined' && mapModeActive);
+    if (d.running !== undefined) {
+      // Update the global mapModeActive variable
+      if (typeof mapModeActive !== 'undefined') {
+        mapModeActive = d.running;
+      }
 
-    // Update the global mapModeActive variable
-    if (typeof mapModeActive !== 'undefined' && d.running !== undefined) {
-      mapModeActive = d.running;
-    }
-
-    // ALWAYS update MAP button appearance based on running state
-    if (btn) {
-      if (isRunning) {
-        if (d.paused) {
-          // PAUSED - show yellow/orange to indicate paused state
-          btn.style.background = '#ffaa00';
+      // Update MAP button appearance
+      if (btn) {
+        if (d.running) {
+          btn.style.background = 'rgba(90,170,255,0.9)';
           btn.style.color = '#000';
-          btn.style.borderColor = '#fa0';
-          btn.textContent = 'PAUSED';
-          console.log('[AUTONOMOUS] Button set to PAUSED (yellow)');
+          btn.style.borderColor = '#5af';
+          btn.innerHTML = '🗺️ AUTO';
         } else {
-          btn.style.background = '#00ff00';  // Bright green - active
-          btn.style.color = '#000';
-          btn.style.borderColor = '#0f0';
-          btn.textContent = 'AUTO';
-          console.log('[AUTONOMOUS] Button set to AUTO (green)');
+          btn.style.background = 'rgba(20,40,60,0.8)';
+          btn.style.color = '#5af';
+          btn.style.borderColor = 'rgba(90,170,255,0.5)';
+          btn.innerHTML = '🗺️ MAP';
         }
-      } else if (d.running === false) {
-        btn.style.background = 'rgba(20,40,60,0.8)';
-        btn.style.color = '#5af';
-        btn.style.borderColor = 'rgba(90,170,255,0.5)';
-        btn.textContent = 'MAP';
-        console.log('[AUTONOMOUS] Button set to MAP');
       }
-    }
 
-    // Update status text
-    if (status && statusText) {
-      status.style.display = isRunning ? 'block' : 'none';
-      if (isRunning) {
-        if (d.paused) {
-          statusText.textContent = 'Paused - will auto-resume';
-          statusText.style.color = '#fa0';
-        } else {
-          statusText.textContent = d.mode === 'direct' ? 'Autonomous (direct)' : 'Autonomous';
-          statusText.style.color = d.mode === 'direct' ? '#fc0' : '#0f0';
+      // Update status text
+      if (status && statusText) {
+        status.style.display = d.running ? 'block' : 'none';
+        if (d.running) {
+          statusText.textContent = d.mode === 'direct' ? 'Mapping (direct)' : 'Mapping';
+          statusText.style.color = d.mode === 'direct' ? '#fc0' : '#5af';
         }
       }
     }
-  }
-
-  // Mac GPU mapper status updates
-  if (d.type === 'mapping_status') {
-    console.log('[MAPPING] Mac mapper status:', d);
-    const statusText = document.getElementById('mapStatusText');
-    if (statusText && d.active !== undefined) {
-      if (d.active) {
-        statusText.textContent = 'GPU Mapping Active';
-        statusText.style.color = '#0f0';
-      }
-    }
-    // Store for other components
-    window.macMapperStatus = d;
-  }
-
-  // Mac launcher daemon status (GPU start/stop control)
-  if (d.type === 'mac_status') {
-    console.log('[MAC-GPU] Status:', d.status, 'GPU:', d.gpu_percent + '%');
-    if (typeof updateMacGpuUI === 'function') {
-      updateMacGpuUI(d.status, d.gpu_percent, d.message);
-    }
-  }
-
-  // Mac launcher daemon connection status
-  if (d.type === 'mac_launcher_status') {
-    console.log('[MAC-LAUNCHER] Connected:', d.connected, 'Name:', d.name);
-    if (d.connected) {
-      // Launcher just connected - will send status soon
-      if (typeof updateMacGpuUI === 'function') {
-        updateMacGpuUI('idle', 0, 'ready');
-      }
-    } else {
-      // Launcher disconnected
-      if (typeof updateMacGpuUI === 'function') {
-        updateMacGpuUI('disconnected', 0, 'daemon offline');
-      }
-    }
-  }
-
-  // RELOCALIZATION broadcast from server - update local position
-  if (d.type === 'relocalization') {
-    console.log(`[RELOCALIZE] Received: (${d.x}, ${d.y}) from ${d.source} area=${d.areaName}`);
-
-    // Update local odometry state
-    if (window.odomState) {
-      window.odomState.x = d.x;
-      window.odomState.y = d.y;
-      // Add to trail
-      if (window.odomState.trail) {
-        window.odomState.trail.push({ x: d.x, y: d.y });
-        if (window.odomState.trail.length > 1000) {
-          window.odomState.trail = window.odomState.trail.slice(-500);
-        }
-      }
-    }
-
-    // Show notification
-    let notice = document.getElementById('relocalizationNotice');
-    if (!notice) {
-      notice = document.createElement('div');
-      notice.id = 'relocalizationNotice';
-      notice.style.cssText = 'position:fixed;top:100px;left:50%;transform:translateX(-50%);background:#f90;color:#000;padding:10px 20px;border-radius:8px;z-index:9999;font-weight:bold;';
-      document.body.appendChild(notice);
-    }
-    notice.textContent = `🎯 RELOCALIZED to ${d.areaName || 'known position'}`;
-    notice.style.display = 'block';
-    setTimeout(() => { notice.style.display = 'none'; }, 3000);
   }
 
   // Indoor SLAM map status updates
@@ -332,6 +215,14 @@ ws.onmessage = function(e) {
   if (d.type === 'visual_map_data') {
     window.visualMapData = d;
     console.log(`[VISUAL] Received map with ${d.panoramas?.length || 0} panoramas`);
+  }
+
+  // Robot Brain responses
+  if (d.type === 'brain_status' && window.handleBrainStatus) {
+    window.handleBrainStatus(d);
+  }
+  if (d.type === 'brain_result' && window.handleBrainResult) {
+    window.handleBrainResult(d);
   }
 
   // Scene recognition result
@@ -425,59 +316,10 @@ ws.onmessage = function(e) {
     if (window.lidar3dModule && window.lidar3dModule.updateAccumulatedMap) {
       window.lidar3dModule.updateAccumulatedMap(d);
     }
-    // Track point count - use stats.total_points for REAL accumulated total
-    const pts = (d.stats && d.stats.total_points) || d.total || (d.points ? d.points.length : 0);
-    window.map1PointCount = pts;
-    // Update MAP 1 status display if active
-    if (window.updateMap1PointCount) {
-      window.updateMap1PointCount(pts);
-    }
-    // Update Mac GPU indicator with percentage toward GS readiness
-    const macDot = document.getElementById('macGpuDot');
-    const macPercent = document.getElementById('macGpuPercent');
-    const macStatus = document.getElementById('macGpuStatus');
-
-    // Target: 50K deduplicated points = 100% ready for Gaussian Splatting
-    // (Points are grid-deduplicated, so 50K unique points = good room coverage)
-    const TARGET_POINTS = 50000;
-    const percent = Math.min(100, Math.round((pts / TARGET_POINTS) * 100));
-
-    if (macDot) {
-      macDot.style.background = percent >= 100 ? '#0f8' : '#fa0';  // Green=ready, Orange=processing
-      macDot.style.boxShadow = '0 0 8px ' + (percent >= 100 ? '#0f8' : '#fa0');
-    }
-    if (macPercent) {
-      macPercent.textContent = percent + '%';
-      macPercent.style.color = percent >= 100 ? '#0f8' : '#fa0';
-    }
-    if (macStatus) {
-      if (percent >= 100) {
-        macStatus.textContent = 'READY for GS export';
-        macStatus.style.color = '#0f8';
-      } else {
-        // Format points nicely
-        let ptsStr = pts >= 1000000 ? (pts/1000000).toFixed(1) + 'M' :
-                     pts >= 1000 ? Math.round(pts/1000) + 'K' : pts.toString();
-        macStatus.textContent = ptsStr + ' / 50K pts';
-        macStatus.style.color = '#888';
-      }
-    }
     // Log occasionally
     if (Math.random() < 0.05) {
+      const pts = d.total || (d.points ? d.points.length : 0);
       console.log(`[3D MAP] Received ${pts} textured points from Mac processor`);
-    }
-  }
-
-  // Room planes from RANSAC detection (solid wall/floor/ceiling surfaces)
-  if (d.type === 'room_planes') {
-    if (window.lidar3dModule && window.lidar3dModule.updateRoomPlanes) {
-      window.lidar3dModule.updateRoomPlanes(d);
-    }
-    if (d.planes && d.planes.length > 0) {
-      const walls = d.planes.filter(p => p.type === 'wall').length;
-      const floors = d.planes.filter(p => p.type === 'floor').length;
-      const ceilings = d.planes.filter(p => p.type === 'ceiling').length;
-      console.log(`[PLANES] Received ${d.planes.length} planes: ${walls} walls, ${floors} floor, ${ceilings} ceiling`);
     }
   }
 
@@ -504,14 +346,6 @@ ws.onmessage = function(e) {
     handleDeadReckoning(d);
   }
 
-  // Motion settled (robot stopped moving - used by MAP 1)
-  if (d.type === 'motion_settled') {
-    console.log('[MOTION] Robot motion settled at heading=' + d.odomHeadingDeg + '°');
-    if (window.onMotionSettled) {
-      window.onMotionSettled(d);
-    }
-  }
-
   // Status updates
   if (d.type === 'status') {
     handleStatusUpdate(d);
@@ -524,10 +358,6 @@ ws.onmessage = function(e) {
       if (d.streaming && !window.camerasPtzModule.getCam1Active()) {
         window.camerasPtzModule.initCam1();
       }
-    }
-    // WiFi works via camera relay - show WiFi ON when camera is connected
-    if (window.controlsModule && window.controlsModule.updateWifiRelayStatus) {
-      window.controlsModule.updateWifiRelayStatus(d.connected);
     }
   }
 
@@ -551,76 +381,18 @@ ws.onmessage = function(e) {
     }
   }
 
-  // Ultrasonic sensor data - update UI badges AND 3D cones
+  // Ultrasonic sensor data - update UI badges
   if (d.type === 'ultrasonic') {
-    // Update corner badges with feet
     const flBadge = document.getElementById('usBadgeFL');
     const frBadge = document.getElementById('usBadgeFR');
     const rlBadge = document.getElementById('usBadgeRL');
     const rrBadge = document.getElementById('usBadgeRR');
-    if (flBadge) flBadge.textContent = d.fl > 0 ? `FL: ${(d.fl / 30.48).toFixed(1)}ft` : 'FL: --';
-    if (frBadge) frBadge.textContent = d.fr > 0 ? `FR: ${(d.fr / 30.48).toFixed(1)}ft` : 'FR: --';
-    if (rlBadge) rlBadge.textContent = d.rl > 0 ? `RL: ${(d.rl / 30.48).toFixed(1)}ft` : 'RL: --';
-    if (rrBadge) rrBadge.textContent = d.rr > 0 ? `RR: ${(d.rr / 30.48).toFixed(1)}ft` : 'RR: --';
-    // Update 3D ultrasonic cones
-    if (window.lidar3dModule) {
-      window.lidar3dModule.updateUltrasonic3D('FL', d.fl);
-      window.lidar3dModule.updateUltrasonic3D('FR', d.fr);
-      window.lidar3dModule.updateUltrasonic3D('RL', d.rl);
-      window.lidar3dModule.updateUltrasonic3D('RR', d.rr);
-    }
+    if (flBadge) flBadge.textContent = d.fl > 0 ? `FL: ${Math.round(d.fl)}cm` : 'FL: --';
+    if (frBadge) frBadge.textContent = d.fr > 0 ? `FR: ${Math.round(d.fr)}cm` : 'FR: --';
+    if (rlBadge) rlBadge.textContent = d.rl > 0 ? `RL: ${Math.round(d.rl)}cm` : 'RL: --';
+    if (rrBadge) rrBadge.textContent = d.rr > 0 ? `RR: ${Math.round(d.rr)}cm` : 'RR: --';
     // Store for autonomous use
     window.ultrasonicState = { fl: d.fl, fr: d.fr, rl: d.rl, rr: d.rr, timestamp: d.timestamp };
-  }
-
-  // ==================== WIFI RELAY STATUS ====================
-  // WiFi relay connected/disconnected
-  if (d.type === 'wifi_relay_status') {
-    console.log('[WIFI] Relay status:', d.connected);
-    if (window.controlsModule && window.controlsModule.updateWifiRelayStatus) {
-      window.controlsModule.updateWifiRelayStatus(d.connected);
-    }
-  }
-
-  // WiFi scan results (from camera relay)
-  if (d.type === 'wifi_scan_result' || d.type === 'wifi_networks') {
-    console.log('[WIFI] Scan result:', d.networks?.length || 0, 'networks');
-    if (window.controlsModule && window.controlsModule.displayWifiNetworks) {
-      window.controlsModule.displayWifiNetworks(d.networks);
-    }
-    if (d.error) {
-      console.error('[WIFI] Scan error:', d.error);
-    }
-  }
-
-  // WiFi connect result (from camera relay)
-  if (d.type === 'wifi_connect_result' || d.type === 'wifi_connected') {
-    const ssid = d.ssid;
-    console.log('[WIFI] Connected to:', ssid);
-    if (window.controlsModule && window.controlsModule.updateWifiStatus) {
-      window.controlsModule.updateWifiStatus({ ssid: ssid });
-    }
-    alert('Connected to ' + ssid + '!');
-    // Refresh network list
-    if (window.controlsModule && window.controlsModule.scanWifi) {
-      window.controlsModule.scanWifi();
-    }
-  }
-
-  // WiFi error
-  if (d.type === 'wifi_error') {
-    console.error('[WIFI] Error:', d.error);
-    alert('WiFi error: ' + d.error);
-    // Hide scanning indicator
-    const scanningEl = document.getElementById('wifiScanning');
-    if (scanningEl) scanningEl.style.display = 'none';
-  }
-
-  // WiFi status response
-  if (d.type === 'wifi_status' && d.ssid !== undefined) {
-    if (window.controlsModule && window.controlsModule.updateWifiStatus) {
-      window.controlsModule.updateWifiStatus({ ssid: d.ssid, connected: d.connected });
-    }
   }
 
   // Driver telemetry
@@ -629,14 +401,13 @@ ws.onmessage = function(e) {
       updateDriverTelemetry(d);
     }
 
-    // Sync odomState with server telemetry (with jump filter)
-    if (d.odomX !== undefined && d.odomY !== undefined) {
-      if (updateOdomStateWithFilter(d.odomX, d.odomY, d.odomHeading, 'telemetry')) {
-        if (window.odomState) {
-          window.odomState.totalDistance = d.odomDistance || window.odomState.totalDistance;
-          if (d.odomTrail) window.odomState.trail = d.odomTrail;
-        }
-      }
+    // Sync odomState with server telemetry
+    if (d.odomX !== undefined && d.odomY !== undefined && window.odomState) {
+      window.odomState.x = d.odomX;
+      window.odomState.y = d.odomY;
+      window.odomState.heading = d.odomHeading;
+      window.odomState.totalDistance = d.odomDistance || window.odomState.totalDistance;
+      if (d.odomTrail) window.odomState.trail = d.odomTrail;
     }
   }
 };
@@ -760,12 +531,12 @@ function handleSerialData(d) {
 function handleDeadReckoning(d) {
   console.warn('[GRID MOVE] x=' + d.odomX + 'mm, y=' + d.odomY + 'mm');
 
-  // Use jump filter to prevent map from teleporting away from robot
-  if (updateOdomStateWithFilter(d.odomX, d.odomY, d.odomHeading, 'dead_reckoning')) {
-    if (window.odomState) {
-      window.odomState.totalDistance = d.odomDistance || 0;
-      if (d.odomTrail) window.odomState.trail = d.odomTrail;
-    }
+  if (window.odomState) {
+    window.odomState.x = d.odomX;
+    window.odomState.y = d.odomY;
+    window.odomState.heading = d.odomHeading;
+    window.odomState.totalDistance = d.odomDistance || 0;
+    if (d.odomTrail) window.odomState.trail = d.odomTrail;
 
     // Update position display
     const xFt = (d.odomX / 304.8).toFixed(1);
@@ -840,11 +611,6 @@ function handleStatusUpdate(d) {
 
   if (d.camera && window.camerasPtzModule) {
     window.camerasPtzModule.updateCam1Status(d.camera.connected, d.camera.streaming);
-  }
-
-  // WiFi works via camera relay - update WiFi status based on camera/Jetson connection
-  if (d.camera && window.controlsModule && window.controlsModule.updateWifiRelayStatus) {
-    window.controlsModule.updateWifiRelayStatus(d.camera.connected);
   }
 
   if (d.controller && typeof updateXboxStatus === 'function') {

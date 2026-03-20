@@ -20,37 +20,12 @@ const wss = new WebSocket.Server({ server });
 // Share WSS with state module
 state.setWss(wss);
 
-// ╔═══════════════════════════════════════════════════════════════════════════════╗
-// ║                    CRITICAL SAFETY SYSTEM - DO NOT MODIFY                     ║
-// ║═══════════════════════════════════════════════════════════════════════════════║
-// ║                                                                               ║
-// ║  XBOX CONTROLLER + MANUAL DRIVE CONTROLS = ALWAYS OVERRIDE                   ║
-// ║                                                                               ║
-// ║  This robot is large and dangerous. Manual control MUST always work.          ║
-// ║  ANY input from Xbox controller or UI drive buttons IMMEDIATELY:              ║
-// ║    1. Blocks ALL autonomous movement commands                                 ║
-// ║    2. Takes full control of the robot                                         ║
-// ║    3. Stays in control for minimum 5 seconds after last manual input          ║
-// ║                                                                               ║
-// ║  Functions that MUST be called for any manual input:                          ║
-// ║    - setManualOverride()     Called when Xbox/joystick/UI drive detected      ║
-// ║    - isManualOverrideActive() ALL autonomous commands MUST check this first   ║
-// ║    - setEmergencyStop()      Sticky stop - blocks until explicitly cleared    ║
-// ║                                                                               ║
-// ║  ALL autonomous endpoints (/spin, /drive, etc) check isManualOverrideActive() ║
-// ║  before sending ANY movement command to the robot.                            ║
-// ║                                                                               ║
-// ║  TO VERIFY: Run /safety/status endpoint to see current override state         ║
-// ║                                                                               ║
-// ╚═══════════════════════════════════════════════════════════════════════════════╝
-
+// ============ MANUAL OVERRIDE SAFETY ============
+// Xbox/joystick/drive system is KING - always overrides autonomous
+// When manual input detected, block autonomous commands for 10 seconds
 global.manualOverrideUntil = 0;  // Timestamp when manual override expires
 global.emergencyStopActive = false;  // Sticky E-stop flag - requires explicit clear
-// ╔═══════════════════════════════════════════════════════════════════════════════╗
-// ║  MANUAL OVERRIDE DURATION - INCREASED FOR SAFETY                              ║
-// ║  INCIDENT: Jan 25, 2026 - 5 seconds was too short, mapping resumed too fast   ║
-// ╚═══════════════════════════════════════════════════════════════════════════════╝
-const MANUAL_OVERRIDE_DURATION = 30000;  // Block autonomous for 30 SECONDS after manual input (was 5s!)
+const MANUAL_OVERRIDE_DURATION = 5000;  // Block autonomous for 5 seconds after manual input
 
 // ============ MAPPING STATE ============
 global.mappingActive = false;  // Is autonomous mapping mode active?
@@ -160,10 +135,9 @@ try {
 
 if (authConfig) {
   app.use((req, res, next) => {
-    // SAFETY: Only /safety endpoint is allowed without auth (for status checks)
-    // INCIDENT: Jan 25, 2026 - /spin without auth allowed mapping to move robot
-    // /spin and /drive NOW REQUIRE AUTHENTICATION
-    if (req.path.startsWith('/safety')) {
+    // Allow localhost to access /spin without auth
+    const ip = req.ip || req.connection.remoteAddress;
+    if ((ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') && req.path.startsWith('/spin')) {
       return next();
     }
     const auth = req.headers.authorization;
@@ -199,286 +173,22 @@ app.use(express.static(path.join(__dirname, "public"), {
 }));
 
 // HTTP endpoint to spin robot - bypass websocket issues
-// SAFETY: Xbox controller and manual controls ALWAYS override this
 app.get('/spin/:direction/:degrees', (req, res) => {
   const direction = req.params.direction.toUpperCase();
   const degrees = parseInt(req.params.degrees) || 120;
-  const timestamp = Date.now();
 
-  console.log(`[HTTP-SPIN] ===== SPIN REQUEST =====`);
-  console.log(`[HTTP-SPIN] Direction: ${direction}, Degrees: ${degrees}, Time: ${timestamp}`);
-
-  // CRITICAL SAFETY CHECK: Xbox/manual control ALWAYS overrides autonomous mapping
-  if (isManualOverrideActive()) {
-    console.log(`[HTTP-SPIN] BLOCKED - Manual override active (Xbox/drive controls have priority)`);
-    res.status(409).json({
-      error: 'Manual override active',
-      message: 'Xbox controller or drive controls have priority',
-      timestamp: timestamp
-    });
-    return;
-  }
+  console.log(`[HTTP-SPIN] Request: ${direction} ${degrees}°`);
 
   const rs = state.getRobotSocket();
-  console.log(`[HTTP-SPIN] Robot socket: ${rs ? 'EXISTS' : 'NULL'}, readyState: ${rs ? rs.readyState : 'N/A'}`);
-
   if (rs && rs.readyState === 1) { // WebSocket.OPEN = 1
-    // First enable motors by sending MODE_MAPPING
-    console.log(`[HTTP-SPIN] Step 1: Enabling motors with MODE_MAPPING`);
-    rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
-
-    // Then send MOVE command after brief delay for motor init
-    setTimeout(() => {
-      // Re-check manual override before sending movement command
-      if (isManualOverrideActive()) {
-        console.log(`[HTTP-SPIN] BLOCKED before MOVE - Manual override became active`);
-        return;
-      }
-      const cmd = direction === 'RIGHT' ? `MOVE,${degrees},0` : `MOVE,-${degrees},0`;
-      const payload = JSON.stringify({ type: "serial_cmd", cmd: cmd });
-      console.log(`[HTTP-SPIN] Step 2: Sending MOVE command: ${payload}`);
-      rs.send(payload);
-      console.log(`[HTTP-SPIN] SENT SUCCESSFULLY!`);
-    }, 500);
-
-    res.json({ success: true, command: `MOVE,${degrees},0`, timestamp: timestamp });
+    const cmd = direction === 'RIGHT' ? `MOVE,${degrees},0` : `MOVE,-${degrees},0`;
+    rs.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
+    console.log(`[HTTP-SPIN] Sent to robot: ${cmd}`);
+    res.json({ success: true, command: cmd });
   } else {
     console.log(`[HTTP-SPIN] Robot socket not available!`);
-    res.status(503).json({ error: 'Robot not connected', timestamp: timestamp });
+    res.status(503).json({ error: 'Robot not connected' });
   }
-});
-
-// HTTP endpoint to trigger MAP sequence - reliable alternative to WebSocket
-app.get('/map/start', (req, res) => {
-  console.log('[MAP-HTTP] ===== MAP START REQUEST =====');
-
-  // Broadcast mapping_control to all processors
-  broadcastToProcessors({ type: 'mapping_control', cmd: 'START' });
-  console.log('[MAP-HTTP] Sent mapping_control START to processors');
-
-  res.json({ success: true, message: 'Mapping started' });
-});
-
-app.get('/map/stop', (req, res) => {
-  console.log('[MAP-HTTP] ===== MAP STOP REQUEST =====');
-  broadcastToProcessors({ type: 'mapping_control', cmd: 'STOP' });
-  res.json({ success: true, message: 'Mapping stopped' });
-});
-
-// HTTP endpoint to drive robot forward/backward - for mapping traversal
-// SAFETY: Xbox controller and manual controls ALWAYS override this
-app.get('/drive/:direction/:distance', (req, res) => {
-  const direction = req.params.direction.toUpperCase();
-  const distance = parseInt(req.params.distance) || 50; // cm
-  const timestamp = Date.now();
-
-  console.log(`[HTTP-DRIVE] ===== DRIVE REQUEST =====`);
-  console.log(`[HTTP-DRIVE] Direction: ${direction}, Distance: ${distance}cm`);
-
-  // CRITICAL SAFETY CHECK: Xbox/manual control ALWAYS overrides autonomous
-  if (isManualOverrideActive()) {
-    console.log(`[HTTP-DRIVE] BLOCKED - Manual override active (Xbox/drive controls have priority)`);
-    res.status(409).json({
-      error: 'Manual override active',
-      message: 'Xbox controller or drive controls have priority',
-      timestamp: timestamp
-    });
-    return;
-  }
-
-  const rs = state.getRobotSocket();
-  if (rs && rs.readyState === 1) {
-    // Enable motors first
-    console.log(`[HTTP-DRIVE] Enabling motors with MODE_MAPPING`);
-    rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
-
-    setTimeout(() => {
-      // Re-check manual override before sending movement command
-      if (isManualOverrideActive()) {
-        console.log(`[HTTP-DRIVE] BLOCKED before move - Manual override became active`);
-        return;
-      }
-      // MOVEDIR command: F=forward, B=backward, L=left, R=right
-      const dir = direction === 'FORWARD' || direction === 'FWD' ? 'F' :
-                  direction === 'BACKWARD' || direction === 'BACK' ? 'B' : direction.charAt(0);
-      const cmd = `MOVEDIR,${dir},${distance}`;
-      console.log(`[HTTP-DRIVE] Sending: ${cmd}`);
-      rs.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
-    }, 300);
-
-    res.json({ success: true, direction, distance, timestamp });
-  } else {
-    res.status(503).json({ error: 'Robot not connected', timestamp });
-  }
-});
-
-// ============ SAFETY VERIFICATION ENDPOINTS ============
-// These endpoints allow verification that the safety system is working
-
-// GET /safety/status - Check current safety override status
-app.get('/safety/status', (req, res) => {
-  const now = Date.now();
-  const overrideActive = isManualOverrideActive();
-  const timeRemaining = Math.max(0, global.manualOverrideUntil - now);
-
-  res.json({
-    safety_system: 'ACTIVE',
-    manual_override_active: overrideActive,
-    emergency_stop_active: global.emergencyStopActive,
-    override_expires_in_ms: timeRemaining,
-    mapping_active: global.mappingActive,
-    mapping_paused: global.mappingWasPaused,
-    message: overrideActive
-      ? 'Xbox/manual controls have priority - autonomous commands BLOCKED'
-      : 'No manual override - autonomous commands allowed',
-    timestamp: now
-  });
-});
-
-// POST /safety/test - Test that manual override blocks autonomous commands
-app.post('/safety/test', (req, res) => {
-  console.log('[SAFETY-TEST] Testing manual override system...');
-
-  // Trigger manual override
-  setManualOverride();
-
-  // Verify it's active
-  const isBlocking = isManualOverrideActive();
-
-  res.json({
-    test: 'manual_override',
-    result: isBlocking ? 'PASS' : 'FAIL',
-    override_active: isBlocking,
-    message: isBlocking
-      ? 'SUCCESS: Manual override is blocking autonomous commands'
-      : 'FAILURE: Manual override not working!',
-    autonomous_blocked: isBlocking,
-    timestamp: Date.now()
-  });
-});
-
-// POST /safety/emergency-stop - Trigger emergency stop
-app.post('/safety/emergency-stop', (req, res) => {
-  console.log('[E-STOP] Emergency stop triggered via API');
-  setEmergencyStop();
-
-  // Also send STOP command to robot immediately
-  const rs = state.getRobotSocket();
-  if (rs && rs.readyState === 1) {
-    rs.send(JSON.stringify({ type: "serial_cmd", cmd: "STOP" }));
-    console.log('[E-STOP] Sent STOP command to robot');
-  }
-
-  res.json({
-    emergency_stop: 'ACTIVATED',
-    all_autonomous_blocked: true,
-    message: 'Emergency stop active - ALL autonomous movement blocked until cleared',
-    timestamp: Date.now()
-  });
-});
-
-// POST /safety/clear-emergency - Clear emergency stop
-app.post('/safety/clear-emergency', (req, res) => {
-  console.log('[E-STOP] Emergency stop cleared via API');
-  clearEmergencyStop();
-
-  res.json({
-    emergency_stop: 'CLEARED',
-    message: 'Emergency stop cleared - autonomous movement allowed again',
-    timestamp: Date.now()
-  });
-});
-
-// HTTP endpoint to control Jetson services (start LIDAR, etc)
-app.get('/jetson/:action/:service', (req, res) => {
-  const action = req.params.action; // start, stop, restart
-  const service = req.params.service; // robot-lidar, robot-detection, robot-camera
-  const allowed = ['robot-lidar', 'robot-detection', 'robot-camera'];
-  const allowedActions = ['start', 'stop', 'restart', 'status'];
-
-  if (!allowed.includes(service) || !allowedActions.includes(action)) {
-    return res.status(400).json({ error: 'Invalid service or action' });
-  }
-
-  console.log(`[JETSON-HTTP] Service command: ${action} ${service}`);
-
-  // Find Jetson relay socket
-  let jetsonSocket = null;
-  wss.clients.forEach(client => {
-    if (client.isJetsonRelay && client.readyState === 1) {
-      jetsonSocket = client;
-    }
-  });
-
-  if (!jetsonSocket) {
-    console.log('[JETSON-HTTP] No Jetson relay connected!');
-    return res.status(503).json({ error: 'Jetson relay not connected' });
-  }
-
-  jetsonSocket.send(JSON.stringify({
-    type: 'jetson_service',
-    service: service,
-    action: action
-  }));
-
-  console.log(`[JETSON-HTTP] Sent ${action} ${service} to Jetson`);
-  res.json({ success: true, action: action, service: service, message: 'Command sent to Jetson' });
-});
-
-// WiFi REST API - bypasses WebSocket issues
-const { exec } = require('child_process');
-
-app.get('/wifi/scan', (req, res) => {
-  console.log('[WIFI-HTTP] Scanning WiFi networks via SSH...');
-
-  const sshCmd = `ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no jetson@192.168.1.31 "nmcli device wifi rescan ifname wlx00c0caab495d 2>/dev/null; sleep 2; nmcli -t -f SSID,SIGNAL,SECURITY device wifi list ifname wlx00c0caab495d 2>/dev/null || nmcli -t -f SSID,SIGNAL,SECURITY device wifi list"`;
-
-  exec(sshCmd, { timeout: 15000 }, (error, stdout, stderr) => {
-    if (error) {
-      console.log('[WIFI-HTTP] SSH error:', error.message);
-      return res.status(500).json({ error: 'Failed to scan WiFi', details: error.message });
-    }
-
-    const networks = [];
-    const seen = new Set();
-    stdout.split('\\n').forEach(line => {
-      if (!line.trim()) return;
-      const parts = line.split(':');
-      const ssid = parts[0];
-      if (!ssid || seen.has(ssid)) return;
-      seen.add(ssid);
-      networks.push({
-        ssid: ssid,
-        signal: parseInt(parts[1]) || 0,
-        security: parts[2] || 'Open'
-      });
-    });
-
-    networks.sort((a, b) => b.signal - a.signal);
-    console.log('[WIFI-HTTP] Found', networks.length, 'networks');
-    res.json({ networks: networks });
-  });
-});
-
-app.post('/wifi/connect', (req, res) => {
-  const { ssid, password } = req.body;
-  console.log('[WIFI-HTTP] Connecting to:', ssid);
-
-  let sshCmd;
-  if (password) {
-    sshCmd = `ssh -o ConnectTimeout=5 jetson@192.168.1.31 "nmcli device wifi connect '${ssid}' password '${password}' ifname wlx00c0caab495d"`;
-  } else {
-    sshCmd = `ssh -o ConnectTimeout=5 jetson@192.168.1.31 "nmcli connection up '${ssid}'"`;
-  }
-
-  exec(sshCmd, { timeout: 30000 }, (error, stdout, stderr) => {
-    if (error) {
-      console.log('[WIFI-HTTP] Connect error:', stderr || error.message);
-      return res.status(500).json({ error: 'Failed to connect', details: stderr || error.message });
-    }
-    console.log('[WIFI-HTTP] Connected to', ssid);
-    res.json({ success: true, ssid: ssid });
-  });
 });
 
 // GPU Renderer - receives frames via WebSocket from Mac processor
@@ -654,12 +364,6 @@ wss.on("connection", (ws, req) => {
       console.log(`[DEBUG-MSG] Client ${ws.clientIP} msg #${ws.msgCount}: ${preview}`);
     }
 
-    // DEBUG: Log EVERY message type at the start
-    const firstBytes = Buffer.isBuffer(msg) ? msg.slice(0, 50).toString('utf8') : (typeof msg === 'string' ? msg.substring(0, 50) : 'unknown');
-    if (firstBytes.includes('camera_hello') || firstBytes.includes('wifi')) {
-      console.log('[DEBUG-EARLY] IMPORTANT MSG:', isBinary ? 'BINARY' : 'TEXT', firstBytes);
-    }
-
     // Handle binary talkback audio from browser
     if (isBinary && ws.isBrowser) {
       const data = Buffer.from(msg);
@@ -673,57 +377,9 @@ wss.on("connection", (ws, req) => {
     }
 
     // Handle binary frames from camera relay
-    // Markers: 0x00=cam1 video, 0x01=cam1 audio, 0x02=cam2 video, 0x03=cam2 audio
-    // Note: Also detect binary by content if isBinary flag is wrong
-    const data = Buffer.isBuffer(msg) ? msg : Buffer.from(msg);
-    const firstByte = data[0];
-
-    // Debug: Log messages that look like binary camera data being sent as text
-    if (!isBinary && data.length > 100 && firstByte <= 0x10) {
-      console.log(`[DEBUG-BINARY-MISMATCH] Client ${ws.clientIP}: isBinary=false but firstByte=0x${firstByte?.toString(16)}, len=${data.length}, first10=[${data.slice(0,10).join(',')}]`);
-    }
-
-    // Detect camera frames by marker (0x00-0x03) followed by JPEG magic (FFD8)
-    // Also detect by looking for JPEG marker anywhere in first 5 bytes
-    const hasJpegMagic = (data[1] === 0xFF && data[2] === 0xD8) ||
-                         (data[0] === 0xFF && data[1] === 0xD8) ||
-                         (data.length > 5 && data.slice(0, 5).includes(0xFF) && data.indexOf(0xD8) === data.indexOf(0xFF) + 1);
-    const isLikelyCameraFrame = data.length > 100 && (
-      (firstByte <= 0x03 && hasJpegMagic) ||
-      (firstByte === 0xFF && data[1] === 0xD8)  // Raw JPEG without marker
-    );
-
-    if (isBinary || isLikelyCameraFrame) {
-      if (isLikelyCameraFrame) {
-        // Auto-register as camera if not already
-        if (!ws.isCamera) {
-          console.log('[CAMERA] ★ Auto-registering camera relay from frame (marker:', firstByte, ', size:', data.length, ')');
-          state.setCameraSocket(ws);
-          ws.isCamera = true;
-          ws.isBrowser = false;
-          state.cameraStatus.connected = true;
-          state.broadcast({ type: "camera_status", connected: true });
-        }
-        handleCameraFrame(ws, msg);
-        return;
-      }
-
-      // Handle talkback audio from browser (marker 0x10)
-      if (firstByte === 0x10 && ws.isBrowser) {
-        const cameraSocket = state.getCameraSocket();
-        if (cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
-          cameraSocket.send(msg);
-        }
-        return;
-      }
-
-      // Other binary data - try to detect and handle
-      if (isBinary) {
-        if (firstByte <= 0x03) {
-          handleCameraFrame(ws, msg);
-        }
-        return;
-      }
+    if (isBinary && ws.isCamera) {
+      handleCameraFrame(ws, msg);
+      return;
     }
 
     try {
@@ -739,10 +395,6 @@ wss.on("connection", (ws, req) => {
       }
       if (msgStr.includes('ptz') || msgStr.includes('PTZ')) {
         console.log("[RAW PTZ]", msgStr.substring(0, 150));
-      }
-      // DEBUG: Explicitly log serial_cmd for spin debugging
-      if (msgStr.includes('serial_cmd')) {
-        console.log("[RAW SERIAL_CMD]", msgStr.substring(0, 200));
       }
       const data = JSON.parse(msg);
 
@@ -769,41 +421,14 @@ wss.on("connection", (ws, req) => {
         console.log("[DEBUG REGISTER]", JSON.stringify(data));
       }
 
-      // Debug for WiFi relay messages
-      if (data.type && data.type.includes("wifi")) {
-        console.log("[DEBUG WIFI]", JSON.stringify(data));
-      }
-
       handleMessage(ws, data);
 
     } catch (err) {
       const rawMsg = typeof msg === 'string' ? msg : msg.toString();
-
-      // Detect camera frames that came in as text (binary data corrupted through string encoding)
-      // FFmpeg JPEG output contains "Lav" marker, or JFIF marker
-      if (rawMsg.includes('Lav') || rawMsg.includes('JFIF') || rawMsg.includes('\xFF\xD8')) {
-        // This is likely a camera frame sent as text instead of binary
-        // Auto-register this socket as camera relay
-        if (!ws.isCamera) {
-          console.log('[CAMERA] ★ Auto-registering camera relay from text-encoded binary frame');
-          state.setCameraSocket(ws);
-          ws.isCamera = true;
-          ws.isBrowser = false;
-          state.cameraStatus.connected = true;
-          state.broadcast({ type: "camera_status", connected: true });
-        }
-        // Pass the raw buffer to frame handler
-        handleCameraFrame(ws, Buffer.isBuffer(msg) ? msg : Buffer.from(msg, 'binary'));
-        return;
-      }
-
       if (rawMsg.includes('ptz') || rawMsg.includes('PTZ') || rawMsg.includes('DPAD')) {
         console.error("[WS] PTZ Parse Error:", err.message, "RAW:", rawMsg.substring(0, 200));
       } else {
-        // Don't spam logs for binary data errors
-        if (!err.message.includes('not valid JSON')) {
-          console.error("[WS] Error:", err.message);
-        }
+        console.error("[WS] Error:", err.message);
       }
     }
   });
@@ -817,10 +442,6 @@ wss.on("connection", (ws, req) => {
 
 // ============ MESSAGE HANDLERS ============
 function handleMessage(ws, data) {
-  // Debug: log camera and wifi related messages
-  if (data.type && (data.type.includes('camera') || data.type.includes('wifi'))) {
-    console.log("[MSG-DEBUG] Type:", data.type, "from", ws.clientIP);
-  }
   const robotSocket = state.getRobotSocket();
   const cameraSocket = state.getCameraSocket();
 
@@ -863,12 +484,7 @@ function handleMessage(ws, data) {
       state.setRobotSocket(ws);
       ws.isRobot = true;
       ws.isBrowser = false;
-      console.log("[ROBOT] ★★★ ESP32 CONNECTED via serial data ★★★");
-    }
-    // Log robot socket status periodically
-    if (Math.random() < 0.01) {  // 1% of messages
-      const rs = state.getRobotSocket();
-      console.log(`[ROBOT-DEBUG] Robot socket: ${rs ? 'EXISTS' : 'NULL'}, ws.isRobot: ${ws.isRobot}`);
+      console.log("[ROBOT] ESP32 connected via serial data");
     }
     handleSerialData(data, ws);
   }
@@ -968,18 +584,12 @@ function handleMessage(ws, data) {
 
   // Serial command to Teensy (via ESP32) - OVERRIDES autonomous mode for movement commands
   if (data.type === "serial_cmd") {
-    console.log("[SERIAL_CMD] ===== RECEIVED serial_cmd =====");
-    console.log("[SERIAL_CMD] Command:", data.cmd);
-
-    // Movement commands override autonomous mode (FWD, BACK, LEFT, RIGHT, STOP, MOVE, etc.)
+    // Movement commands override autonomous mode (FWD, BACK, LEFT, RIGHT, STOP, etc.)
     // NOTE: AUTO_ commands are from autonomous system, not manual - don't override for those
-    const manualMovementCmds = ["FWD", "BACK", "LEFT", "RIGHT", "STOP", "TURN", "MOVE"];
+    const manualMovementCmds = ["FWD", "BACK", "LEFT", "RIGHT", "STOP", "TURN"];
     const isManualMovementCmd = manualMovementCmds.some(cmd =>
       data.cmd && data.cmd.includes(cmd) && !data.cmd.startsWith("AUTO_")
     );
-
-    // MOVE commands need motors enabled first - auto-send MODE_MAPPING
-    const isMoveCmd = data.cmd && data.cmd.startsWith("MOVE,");
 
     if (isManualMovementCmd) {
       // Set manual override - blocks ALL autonomous commands
@@ -994,27 +604,9 @@ function handleMessage(ws, data) {
     }
 
     const rs = state.getRobotSocket();
-    console.log("[SERIAL_CMD] Robot socket:", rs ? "EXISTS" : "NULL", "readyState:", rs ? rs.readyState : "N/A");
     if (rs && rs.readyState === WebSocket.OPEN) {
-      // For MOVE commands, first enable motors with MODE_MAPPING
-      if (isMoveCmd) {
-        console.log("[SERIAL_CMD] MOVE detected - sending MODE_MAPPING first to enable motors");
-        rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
-        // Mark robot as moving for motion detection (MAP 1 uses this)
-        odometry.markMoving();
-        // Send MOVE command after brief delay for motor init
-        setTimeout(() => {
-          const payload = JSON.stringify({ type: "serial_cmd", cmd: data.cmd });
-          console.log("[SERIAL_CMD] Sending MOVE to ESP32:", payload);
-          rs.send(payload);
-          console.log("[SERIAL_CMD] ✓ SENT to robot:", data.cmd);
-        }, 500);
-      } else {
-        const payload = JSON.stringify({ type: "serial_cmd", cmd: data.cmd });
-        console.log("[SERIAL_CMD] Sending to ESP32:", payload);
-        rs.send(payload);
-        console.log("[SERIAL_CMD] ✓ SENT to robot:", data.cmd);
-      }
+      rs.send(JSON.stringify({ type: "serial_cmd", cmd: data.cmd }));
+      console.log("[SERIAL_CMD]", data.cmd);
     } else {
       console.log("[SERIAL_CMD] ❌ Robot socket not available for:", data.cmd);
     }
@@ -1027,38 +619,8 @@ function handleMessage(ws, data) {
     console.log("[MAP1] Forwarded to Mac processors");
   }
 
-  // LIDAR capture request from MAP 1 - signal to Mac processor to capture current LIDAR
-  if (data.type === "lidar_capture") {
-    console.log("[LIDAR] Capture requested at position:", data.position);
-    broadcastToProcessors({
-      type: "lidar_capture",
-      position: data.position,
-      timestamp: Date.now(),
-      odometry: odometry.getOdometry()
-    });
-  }
-
-  // ╔═══════════════════════════════════════════════════════════════════════════════╗
-  // ║  ROBOT SPIN - BLOCKED WHEN XBOX IS ACTIVE                                     ║
-  // ║  INCIDENT: Jan 25, 2026 - Mapping sent spin commands that overrode Xbox       ║
-  // ║  NOW: robot_spin is BLOCKED if manual override is active (Xbox used recently) ║
-  // ╚═══════════════════════════════════════════════════════════════════════════════╝
+  // Robot spin command from Mac mapper - forward to robot
   if (data.type === "robot_spin") {
-    // SAFETY CHECK: Block if Xbox/manual control was used recently
-    if (isManualOverrideActive()) {
-      console.log("[SPIN] BLOCKED - Xbox controller has priority! Override active for",
-        Math.max(0, global.manualOverrideUntil - Date.now()), "ms more");
-      // Notify the requester that spin was blocked
-      if (ws.send) {
-        ws.send(JSON.stringify({
-          type: "spin_blocked",
-          reason: "Xbox controller has priority",
-          retry_after_ms: Math.max(0, global.manualOverrideUntil - Date.now())
-        }));
-      }
-      return;  // DO NOT SEND SPIN COMMAND
-    }
-
     console.log("[SPIN] Received spin command:", data.direction, data.degrees);
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
@@ -1116,19 +678,14 @@ function handleMessage(ws, data) {
   // Jetson lidar
   if (data.type === "identify" && data.device === "jetson-lidar") {
     ws.isJetsonLidar = true;
-    console.log("[JETSON-LIDAR] ★★★ Lidar relay connected! ★★★");
+    console.log("[JETSON] Lidar relay connected");
   }
-  if (data.type === "lidar") {
-    console.log(`[LIDAR-DEBUG] Received lidar data: isJetsonLidar=${ws.isJetsonLidar}, points=${data.count}`);
-    if (ws.isJetsonLidar) {
-      state.broadcast({ type: "lidar", points: data.points, count: data.count }, ws);
-      // Also forward to Mac processors for 3D fusion
-      broadcastToProcessors({ type: "lidar", points: data.points, count: data.count });
-      console.log(`[LIDAR] Broadcasting ${data.count} points to clients + processors`);
+  if (data.type === "lidar" && ws.isJetsonLidar) {
+    state.broadcast({ type: "lidar", points: data.points, count: data.count }, ws);
 
-      // LIDAR SAFETY: Check for obstacles in MAP mode
-      // Only active when robot is in mapping mode
-      if (state.robotStatus.mode === "mapping") {
+    // LIDAR SAFETY: Check for obstacles in MAP mode
+    // Only active when robot is in mapping mode
+    if (state.robotStatus.mode === "mapping") {
       const LIDAR_STOP_CM = 40;  // 16 inches = stop distance
       const points = data.points || [];
 
@@ -1163,7 +720,6 @@ function handleMessage(ws, data) {
           console.log(`[LIDAR SAFETY] STOP! ${direction} obstacle at ${minDist.toFixed(0)}cm`);
         }
       }
-    }
     }
   }
 
@@ -1219,6 +775,22 @@ function handleMessage(ws, data) {
         }));
       }
     });
+  }
+
+  // Brain commands from browser -> Jetson brain (forwarded via WebSocket)
+  if (data.type === "brain_command") {
+    // Forward to all autonomous clients (the brain)
+    wss.clients.forEach(c => {
+      if (c.isAutonomous && c.readyState === WebSocket.OPEN) {
+        c.send(JSON.stringify(data));
+      }
+    });
+    console.log(`[BRAIN] Browser command: ${data.action} ${data.value || ''}`);
+  }
+
+  // Brain responses from Jetson -> browsers
+  if (data.type === "brain_status" || data.type === "brain_result") {
+    state.broadcast(data, ws);
   }
 
   // Autonomous commands from Jetson -> Robot
@@ -1503,40 +1075,6 @@ function handleMessage(ws, data) {
     }
   }
 
-  // ==================== MAC LAUNCHER DAEMON ====================
-  // Register Mac launcher daemon (controls GPU mapping start/stop)
-  if (data.type === "register_mac_launcher") {
-    ws.isMacLauncher = true;
-    ws.macLauncherName = data.name || "mac-launcher";
-    state.macLauncherSocket = ws;
-    console.log(`[MAC-LAUNCHER] Connected: ${ws.macLauncherName}`);
-    state.broadcast({ type: "mac_launcher_status", connected: true, name: ws.macLauncherName });
-  }
-
-  // Mac control command from browser -> forward to Mac launcher
-  if (data.type === "mac_control") {
-    const cmd = data.cmd;  // "start" or "stop"
-    console.log(`[MAC-LAUNCHER] Received command from browser: ${cmd}`);
-    if (state.macLauncherSocket && state.macLauncherSocket.readyState === WebSocket.OPEN) {
-      state.macLauncherSocket.send(JSON.stringify({ type: "mac_control", cmd: cmd }));
-      console.log(`[MAC-LAUNCHER] Forwarded ${cmd} to Mac`);
-    } else {
-      console.log(`[MAC-LAUNCHER] ERROR: No Mac launcher connected!`);
-      state.broadcast({ type: "mac_status", status: "error", message: "Mac launcher not connected", gpu_percent: 0 });
-    }
-  }
-
-  // Mac status from launcher daemon -> broadcast to browsers
-  if (data.type === "mac_status" && ws.isMacLauncher) {
-    console.log(`[MAC-LAUNCHER] Status: ${data.status}, GPU: ${data.gpu_percent}%`);
-    state.broadcast({
-      type: "mac_status",
-      status: data.status,  // "idle", "starting", "running", "stopping", "error"
-      gpu_percent: data.gpu_percent || 0,
-      message: data.message || ""
-    });
-  }
-
   // Accumulated map from Mac Mini - broadcast to browsers for visualization
   // New format: points with {x, y, z, r, g, b, c(confidence)} for textured 3D point cloud
   // Accept from ANY connected client sending accumulated_map (auto-register as processor)
@@ -1578,59 +1116,6 @@ function handleMessage(ws, data) {
       }
     });
     console.log("[3D MAP] Clear command sent to processor");
-  }
-
-  // LIDAR wall colors from Mac camera fusion -> broadcast to browsers
-  if (data.type === "lidar_colors") {
-    const colorCount = data.colors ? Object.keys(data.colors).length : 0;
-    if (colorCount > 0) {
-      state.broadcast(data, ws);
-      if (Math.random() < 0.1) {
-        console.log(`[LIDAR-COLORS] Broadcast ${colorCount} angle colors to browsers`);
-      }
-    }
-  }
-
-  // ==================== GAUSSIAN SPLATTING ====================
-  // Trained 3DGS model from Mac GPU processor
-
-  // Gaussian splats data from Mac -> broadcast to browsers
-  if (data.type === "gaussian_splats") {
-    const numSplats = data.num_splats || 0;
-    console.log(`[GSPLAT] Received ${numSplats} splats from Mac processor`);
-    state.broadcast(data, ws);
-  }
-
-  // Apple SHARP splats (photorealistic single-image 3DGS)
-  if (data.type === "sharp_splats") {
-    const numSplats = data.num_splats || 0;
-    console.log(`[SHARP] Received ${numSplats} splats from ${data.num_frames || 0} frames`);
-    state.broadcast(data, ws);
-  }
-
-  // Gaussian splat mapper status -> broadcast to browsers
-  if (data.type === "gsplat_status") {
-    console.log(`[GSPLAT] Status: ${data.num_frames} frames, training=${data.is_training}, model=${data.has_model}`);
-    state.broadcast(data, ws);
-  }
-
-  // Gaussian splat train command from browser -> Mac processor
-  if (data.type === "gsplat_train") {
-    wss.clients.forEach(client => {
-      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "gsplat_train" }));
-      }
-    });
-    console.log("[GSPLAT] Train command sent to processor");
-  }
-
-  // Gaussian splat status request from browser -> Mac processor
-  if (data.type === "gsplat_status_request") {
-    wss.clients.forEach(client => {
-      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "gsplat_status_request" }));
-      }
-    });
   }
 
   // Mapping status from Mac processor -> broadcast to browsers
@@ -1790,70 +1275,6 @@ function handleMessage(ws, data) {
     state.broadcast({ type: "cam_snapshot_data", camera: data.camera, data: data.data }, ws);
   }
 
-  // ============ WiFi Relay Messages ============
-  if (data.type === "wifi_relay_hello") {
-    ws.isWifiRelay = true;
-    ws.isBrowser = false;
-    state.wifiRelaySocket = ws;
-    console.log("[WIFI] ★★★ WiFi relay connected! Capabilities:", data.capabilities);
-    state.broadcast({ type: "wifi_relay_status", connected: true });
-  }
-
-  // Forward WiFi scan results to browsers
-  if (data.type === "wifi_scan_result" && ws.isWifiRelay) {
-    console.log(`[WIFI] Scan complete: ${data.networks?.length || 0} networks found`);
-    state.broadcast({ type: "wifi_scan_result", networks: data.networks || [], error: data.error }, ws);
-  }
-
-  // Forward WiFi connect results to browsers
-  if (data.type === "wifi_connect_result" && ws.isWifiRelay) {
-    console.log(`[WIFI] Connect result for ${data.ssid}: ${data.success ? 'SUCCESS' : 'FAILED'}`);
-    state.broadcast({ type: "wifi_connect_result", ssid: data.ssid, success: data.success, message: data.message }, ws);
-  }
-
-  // Forward WiFi status to browsers
-  if (data.type === "wifi_status_result" && ws.isWifiRelay) {
-    state.broadcast({ type: "wifi_status_result", status: data.status }, ws);
-  }
-
-  // Handle WiFi commands from browsers - forward to camera relay (which has WiFi capability)
-  // Note: Accept from any client that's not the camera/robot itself (they wouldn't send wifi_scan)
-  if ((data.type === "wifi_scan" || data.type === "wifi_connect" || data.type === "wifi_status") && !ws.isCamera && !ws.isRobot) {
-    ws.isBrowser = true;  // Mark as browser since only browsers send wifi commands
-    console.log(`[WIFI] ★★★ Received ${data.type} from browser`);
-
-    // Prefer dedicated WiFi relay, but fall back to camera relay
-    let targetSocket = state.wifiRelaySocket;
-    console.log(`[WIFI] WiFi relay socket: ${targetSocket ? 'exists' : 'null'}, state: ${targetSocket?.readyState}`);
-    if (!targetSocket || targetSocket.readyState !== WebSocket.OPEN) {
-      targetSocket = state.getCameraSocket();
-      console.log(`[WIFI] Camera socket: ${targetSocket ? 'exists' : 'null'}, state: ${targetSocket?.readyState}, isCamera: ${targetSocket?.isCamera}, isJetsonRelay: ${targetSocket?.isJetsonRelay}, IP: ${targetSocket?.clientIP}`);
-    }
-
-    if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-      const msgToSend = JSON.stringify(data);
-      console.log(`[WIFI] ✓ Sending to relay: ${msgToSend}`);
-      targetSocket.send(msgToSend);
-
-      // Set a timeout - if no response in 10 seconds, send error to browser
-      if (data.type === 'wifi_scan') {
-        setTimeout(() => {
-          // Check if we got a response (simple check - could be more robust)
-          ws.send(JSON.stringify({ type: 'wifi_scan_timeout', error: 'No response from robot WiFi scanner. The robot may need to be restarted.' }));
-        }, 10000);
-      }
-    } else {
-      console.log(`[WIFI] ✗ No relay connected to forward ${data.type}`);
-      ws.send(JSON.stringify({ type: "wifi_error", error: "No relay connected" }));
-    }
-  }
-
-  // Forward WiFi responses from camera relay to browsers
-  if ((data.type === "wifi_networks" || data.type === "wifi_connected" || data.type === "wifi_error" || data.type === "wifi_status") && ws.isCamera) {
-    console.log(`[WIFI] Broadcasting ${data.type} from camera relay`);
-    state.broadcast(data, ws);
-  }
-
   // PTZ commands
   handlePtzCommand(data, ws);
 
@@ -1958,8 +1379,9 @@ function handleSerialData(data, ws) {
       const lat = parseFloat(parts[2]);
       const lon = parseFloat(parts[3]);
       const sats = parseInt(parts[4]);
-      // Always log GPS - even invalid - so we can see if data is arriving
-      console.log(`[GPS] valid=${valid}, lat=${lat.toFixed(6)}, lon=${lon.toFixed(6)}, sats=${sats}`);
+      if (valid && lat !== 0 && lon !== 0) {
+        console.log(`[GPS] ${lat.toFixed(6)}, ${lon.toFixed(6)} (${sats} sats)`);
+      }
       state.broadcast({ type: "gps", valid: valid, lat: lat, lon: lon, sats: sats });
     }
   }
@@ -2165,24 +1587,6 @@ function handleDisconnect(ws) {
     state.cameraStatus.streaming = false;
     state.broadcast({ type: "camera_status", ...state.cameraStatus });
     console.log("[CAMERA] Relay disconnected");
-  }
-
-  if (ws.isWifiRelay && ws === state.wifiRelaySocket) {
-    state.wifiRelaySocket = null;
-    state.broadcast({ type: "wifi_relay_status", connected: false });
-    console.log("[WIFI] Relay disconnected");
-  }
-
-  if (ws.isMacLauncher && ws === state.macLauncherSocket) {
-    state.macLauncherSocket = null;
-    state.broadcast({ type: "mac_launcher_status", connected: false });
-    state.broadcast({ type: "mac_status", status: "disconnected", gpu_percent: 0, message: "daemon offline" });
-    console.log("[MAC-LAUNCHER] Disconnected");
-  }
-
-  if (ws.isProcessor) {
-    state.broadcast({ type: "processor_status", connected: false, name: ws.processorName || "unknown" });
-    console.log(`[PROCESSOR] ${ws.processorName || 'Unknown'} disconnected`);
   }
 }
 
