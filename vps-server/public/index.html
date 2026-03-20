@@ -907,8 +907,8 @@
       <div class="serial-trigger" onclick="toggleCodePopup()">
         <span class="emoji">&#128221;</span> CODE
       </div>
-      <div class="serial-trigger" onclick="toggleBrainPopup()" style="border-color:rgba(0,255,136,0.5);color:#0f8;">
-        <span class="emoji">&#129504;</span> BRAIN
+      <div class="serial-trigger" onclick="toggleAgentPopup()" style="border-color:rgba(0,255,136,0.5);color:#0f8;">
+        <span class="emoji">&#129504;</span> AGENT
       </div>
       <div class="sidebar-battery">
         <span class="header-batt-icon">&#128267;</span>
@@ -951,97 +951,114 @@
   </div>
 </div>
 
-<!-- Robot Brain Control Popup -->
-<div class="serial-popup" id="brainPopup" style="display:none;width:320px;right:20px;top:100px;">
-  <div class="serial-popup-header" id="brainPopupHeader">
-    <span>&#129504; ROBOT BRAIN</span>
-    <span class="serial-popup-close" onclick="toggleBrainPopup()">&times;</span>
+<!-- Robot Agent Chat Panel -->
+<div class="serial-popup" id="agentPopup" style="display:none;width:380px;right:20px;top:60px;max-height:80vh;">
+  <div class="serial-popup-header" id="agentPopupHeader">
+    <span>&#129504; ROBOT AGENT</span>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button onclick="clearAgentChat()" style="background:none;border:1px solid #555;color:#888;padding:1px 6px;border-radius:3px;font-size:9px;cursor:pointer;">CLEAR</button>
+      <span class="serial-popup-close" onclick="toggleAgentPopup()">&times;</span>
+    </div>
   </div>
-  <div style="padding:8px;">
-    <div id="brainStatus" style="font-size:11px;color:#0f8;padding:4px 8px;background:rgba(0,30,15,0.8);border-radius:4px;margin-bottom:6px;font-family:monospace;">
-      Status: idle | Not connected
-    </div>
-    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
-      <button onclick="brainCmd('forward','3')" style="flex:1;background:#1a3a2a;border:1px solid #0f8;color:#0f8;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">FWD 3ft</button>
-      <button onclick="brainCmd('backward','2')" style="flex:1;background:#1a3a2a;border:1px solid #0f8;color:#0f8;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">BACK 2ft</button>
-      <button onclick="brainCmd('turn','-90')" style="flex:1;background:#1a2a3a;border:1px solid #5af;color:#5af;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">LEFT 90</button>
-      <button onclick="brainCmd('turn','90')" style="flex:1;background:#1a2a3a;border:1px solid #5af;color:#5af;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">RIGHT 90</button>
-    </div>
-    <div style="display:flex;gap:4px;margin-bottom:6px;">
-      <button onclick="brainCmd('explore')" style="flex:1;background:#2a2a1a;border:1px solid #fa0;color:#fa0;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">EXPLORE</button>
-      <button onclick="brainCmd('go_home')" style="flex:1;background:#2a1a2a;border:1px solid #f5f;color:#f5f;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">GO HOME</button>
-      <button onclick="brainCmd('stop')" style="flex:1;background:#3a1a1a;border:1px solid #f44;color:#f44;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;font-weight:bold;">STOP</button>
-    </div>
-    <div style="display:flex;gap:4px;">
-      <input type="text" id="brainInput" placeholder="Type command... (e.g. go forward 6)" style="flex:1;background:#111;border:1px solid #333;color:#fff;padding:6px 8px;border-radius:4px;font-size:11px;" onkeydown="if(event.key==='Enter')sendBrainText()">
-      <button onclick="sendBrainText()" style="background:#0f8;color:#000;border:none;padding:4px 10px;border-radius:4px;font-weight:bold;cursor:pointer;font-size:11px;">SEND</button>
-    </div>
-    <div id="brainLog" style="margin-top:6px;max-height:100px;overflow-y:auto;font-size:10px;color:#888;font-family:monospace;padding:4px;background:rgba(0,0,0,0.5);border-radius:4px;"></div>
+  <div id="agentMessages" style="height:350px;overflow-y:auto;padding:8px;font-size:12px;line-height:1.5;background:#0a0a0a;">
+    <div style="color:#555;font-style:italic;padding:8px;">Ask me anything about the robot. I can check sensors, run commands, help with code, plan tasks...</div>
+  </div>
+  <div style="display:flex;gap:4px;padding:6px 8px;background:#111;border-top:1px solid #222;">
+    <input type="text" id="agentInput" placeholder="Talk to your robot..." style="flex:1;background:#1a1a1a;border:1px solid #333;color:#fff;padding:8px 10px;border-radius:6px;font-size:12px;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMsg()}">
+    <button onclick="sendAgentMsg()" style="background:linear-gradient(135deg,#0f8,#0a6);color:#000;border:none;padding:8px 14px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:12px;">&#9654;</button>
   </div>
 </div>
 
 <script>
-// Robot Brain UI - commands go through WebSocket to VPS, VPS forwards to brain
-let brainPopupVisible = false;
+// Robot Agent Chat
+let agentVisible = false;
+const agentSessionId = 'web-' + Math.random().toString(36).slice(2, 8);
 
-function toggleBrainPopup() {
-  brainPopupVisible = !brainPopupVisible;
-  document.getElementById('brainPopup').style.display = brainPopupVisible ? 'block' : 'none';
-  if (brainPopupVisible) {
-    // Request status from brain via WebSocket
-    if (window.ws && window.ws.readyState === 1) {
-      window.ws.send(JSON.stringify({ type: 'brain_command', action: 'status' }));
-    }
-  }
+function toggleAgentPopup() {
+  agentVisible = !agentVisible;
+  document.getElementById('agentPopup').style.display = agentVisible ? 'flex' : 'none';
+  document.getElementById('agentPopup').style.flexDirection = 'column';
+  if (agentVisible) document.getElementById('agentInput').focus();
 }
 
-function brainCmd(action, value) {
-  if (window.ws && window.ws.readyState === 1) {
-    window.ws.send(JSON.stringify({ type: 'brain_command', action: action, value: value }));
-    brainLog('> ' + action + ' ' + (value||''));
-  } else {
-    brainLog('Error: not connected to server');
-  }
-}
-
-function sendBrainText() {
-  const input = document.getElementById('brainInput');
+function sendAgentMsg() {
+  const input = document.getElementById('agentInput');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
-  brainLog('> ' + text);
+
+  // Show user message
+  addAgentMsg('you', text);
+
+  // Send to server -> Claude API
   if (window.ws && window.ws.readyState === 1) {
-    window.ws.send(JSON.stringify({ type: 'brain_command', action: 'text', value: text }));
+    window.ws.send(JSON.stringify({
+      type: 'agent_chat',
+      message: text,
+      sessionId: agentSessionId
+    }));
+    // Show typing indicator
+    addAgentMsg('typing', '...');
+  } else {
+    addAgentMsg('agent', 'Not connected to server.');
   }
 }
 
-// Handle brain_status messages from server
-window.handleBrainStatus = function(data) {
-  const pos = data.position || {};
-  const obs = data.obstacles || {};
-  document.getElementById('brainStatus').innerHTML =
-    '<span style="color:#5af;">' + (data.task || 'idle') + '</span> | ' +
-    '<span style="color:#0f8;">' + (data.status || '') + '</span><br>' +
-    'Pos: ' + (pos.x_mm||0) + 'mm, ' + (pos.y_mm||0) + 'mm | Hdg: ' + (pos.heading_deg||0) + '&deg; | ' +
-    'Front: ' + (obs.front_cm||'?') + 'cm | Batt: ' + (data.battery_v||'?') + 'V';
-};
+function addAgentMsg(role, text) {
+  const container = document.getElementById('agentMessages');
 
-window.handleBrainResult = function(data) {
-  brainLog('Robot: ' + (data.result || data.status || 'ok'));
-};
+  // Remove typing indicator
+  const typing = container.querySelector('.typing-msg');
+  if (typing) typing.remove();
 
-function brainLog(msg) {
-  const log = document.getElementById('brainLog');
-  log.innerHTML += msg + '<br>';
-  log.scrollTop = log.scrollHeight;
+  const div = document.createElement('div');
+  div.style.marginBottom = '8px';
+  div.style.padding = '6px 10px';
+  div.style.borderRadius = '8px';
+  div.style.maxWidth = '90%';
+  div.style.wordBreak = 'break-word';
+  div.style.whiteSpace = 'pre-wrap';
+
+  if (role === 'you') {
+    div.style.background = 'rgba(0,100,50,0.3)';
+    div.style.border = '1px solid rgba(0,255,136,0.2)';
+    div.style.color = '#0f8';
+    div.style.marginLeft = 'auto';
+    div.style.textAlign = 'right';
+    div.textContent = text;
+  } else if (role === 'typing') {
+    div.className = 'typing-msg';
+    div.style.color = '#555';
+    div.style.fontStyle = 'italic';
+    div.innerHTML = '&#129504; thinking...';
+  } else {
+    div.style.background = 'rgba(30,30,40,0.8)';
+    div.style.border = '1px solid rgba(100,150,255,0.2)';
+    div.style.color = '#ccc';
+    // Simple markdown: **bold**, `code`, newlines
+    let html = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#5af">$1</strong>')
+      .replace(/`(.+?)`/g, '<code style="background:#1a1a2a;padding:1px 4px;border-radius:3px;color:#fa0">$1</code>')
+      .replace(/\n/g, '<br>');
+    div.innerHTML = html;
+  }
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
 }
 
-// Auto-request brain status every 5 seconds when popup is open
-setInterval(() => {
-  if (brainPopupVisible && window.ws && window.ws.readyState === 1) {
-    window.ws.send(JSON.stringify({ type: 'brain_command', action: 'status' }));
+function clearAgentChat() {
+  document.getElementById('agentMessages').innerHTML = '<div style="color:#555;font-style:italic;padding:8px;">Conversation cleared. Ask me anything.</div>';
+  if (window.ws && window.ws.readyState === 1) {
+    window.ws.send(JSON.stringify({ type: 'agent_clear', sessionId: agentSessionId }));
   }
-}, 5000);
+}
+
+// Handle agent replies from server
+window.handleAgentReply = function(data) {
+  addAgentMsg('agent', data.message || 'No response');
+};
 </script>
 
 <!-- Load JavaScript modules in correct order -->
