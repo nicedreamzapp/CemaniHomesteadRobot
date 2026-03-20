@@ -783,23 +783,12 @@
           <!-- Fullscreen button -->
           <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen" style="pointer-events:auto;">⛶</button>
         </div>
-        <!-- Bottom control bar - simplified: just MAP 1 and STOP (hidden until MAP 1 starts) -->
+        <!-- Bottom control bar -->
         <div style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:20;">
           <button id="map1Btn" onclick="event.stopPropagation(); toggleMap1Mode()" title="Full Room Scan: 3x120° turns with camera sweeps" style="background:rgba(30,50,20,0.8);border:1px solid #0f8;color:#0f8;padding:3px 10px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP 1</button>
-          <button id="emergencyStopBtn" onclick="event.stopPropagation(); emergencyStopMapping()" style="display:none;background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
-        </div>
-        <!-- Mac GPU Processing Control - bottom left -->
-        <div id="macGpuIndicator" onclick="event.stopPropagation(); toggleMacGpu()" style="pointer-events:auto;position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.8);border:1px solid #0af;border-radius:4px;padding:4px 8px;font-size:9px;color:#0af;z-index:20;cursor:pointer;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <div id="macGpuDot" style="width:8px;height:8px;border-radius:50%;background:#666;"></div>
-            <div>
-              <div style="display:flex;align-items:center;gap:4px;">
-                <span id="macGpuLabel" style="font-weight:bold;">START GPU</span>
-                <span id="macGpuPercent" style="color:#0f8;font-weight:bold;display:none;">0%</span>
-              </div>
-              <div id="macGpuStatus" style="font-size:7px;color:#888;">click to start</div>
-            </div>
-          </div>
+          <button onclick="event.stopPropagation(); setCameraHome()" title="Save current camera positions as HOME" style="background:rgba(50,30,10,0.8);border:1px solid #fa0;color:#fa0;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">SET HOME</button>
+          <button id="emergencyStopBtn" onclick="event.stopPropagation(); emergencyStopMapping()" style="background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
+          <button onclick="event.stopPropagation(); window.lidar3dModule && window.lidar3dModule.clearAllPoints()" title="Clear current session (map auto-corrects via fingerprints)" style="background:rgba(30,30,30,0.6);border:1px solid #666;color:#888;padding:2px 5px;border-radius:3px;font-size:7px;cursor:pointer;">CLR</button>
         </div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
@@ -918,6 +907,9 @@
       <div class="serial-trigger" onclick="toggleCodePopup()">
         <span class="emoji">&#128221;</span> CODE
       </div>
+      <div class="serial-trigger" onclick="toggleBrainPopup()" style="border-color:rgba(0,255,136,0.5);color:#0f8;">
+        <span class="emoji">&#129504;</span> BRAIN
+      </div>
       <div class="sidebar-battery">
         <span class="header-batt-icon">&#128267;</span>
         <div class="header-batt-bar"><div class="header-batt-fill" id="headerBatteryFill2"></div></div>
@@ -959,6 +951,98 @@
   </div>
 </div>
 
+<!-- Robot Brain Control Popup -->
+<div class="serial-popup" id="brainPopup" style="display:none;width:320px;right:20px;top:100px;">
+  <div class="serial-popup-header" id="brainPopupHeader">
+    <span>&#129504; ROBOT BRAIN</span>
+    <span class="serial-popup-close" onclick="toggleBrainPopup()">&times;</span>
+  </div>
+  <div style="padding:8px;">
+    <div id="brainStatus" style="font-size:11px;color:#0f8;padding:4px 8px;background:rgba(0,30,15,0.8);border-radius:4px;margin-bottom:6px;font-family:monospace;">
+      Status: idle | Not connected
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
+      <button onclick="brainCmd('forward','3')" style="flex:1;background:#1a3a2a;border:1px solid #0f8;color:#0f8;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">FWD 3ft</button>
+      <button onclick="brainCmd('backward','2')" style="flex:1;background:#1a3a2a;border:1px solid #0f8;color:#0f8;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">BACK 2ft</button>
+      <button onclick="brainCmd('turn','-90')" style="flex:1;background:#1a2a3a;border:1px solid #5af;color:#5af;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">LEFT 90</button>
+      <button onclick="brainCmd('turn','90')" style="flex:1;background:#1a2a3a;border:1px solid #5af;color:#5af;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">RIGHT 90</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <button onclick="brainCmd('explore')" style="flex:1;background:#2a2a1a;border:1px solid #fa0;color:#fa0;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">EXPLORE</button>
+      <button onclick="brainCmd('go_home')" style="flex:1;background:#2a1a2a;border:1px solid #f5f;color:#f5f;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;">GO HOME</button>
+      <button onclick="brainCmd('stop')" style="flex:1;background:#3a1a1a;border:1px solid #f44;color:#f44;padding:4px;border-radius:4px;font-size:10px;cursor:pointer;font-weight:bold;">STOP</button>
+    </div>
+    <div style="display:flex;gap:4px;">
+      <input type="text" id="brainInput" placeholder="Type command... (e.g. go forward 6)" style="flex:1;background:#111;border:1px solid #333;color:#fff;padding:6px 8px;border-radius:4px;font-size:11px;" onkeydown="if(event.key==='Enter')sendBrainText()">
+      <button onclick="sendBrainText()" style="background:#0f8;color:#000;border:none;padding:4px 10px;border-radius:4px;font-weight:bold;cursor:pointer;font-size:11px;">SEND</button>
+    </div>
+    <div id="brainLog" style="margin-top:6px;max-height:100px;overflow-y:auto;font-size:10px;color:#888;font-family:monospace;padding:4px;background:rgba(0,0,0,0.5);border-radius:4px;"></div>
+  </div>
+</div>
+
+<script>
+// Robot Brain UI - commands go through WebSocket to VPS, VPS forwards to brain
+let brainPopupVisible = false;
+
+function toggleBrainPopup() {
+  brainPopupVisible = !brainPopupVisible;
+  document.getElementById('brainPopup').style.display = brainPopupVisible ? 'block' : 'none';
+  if (brainPopupVisible) {
+    // Request status from brain via WebSocket
+    if (window.ws && window.ws.readyState === 1) {
+      window.ws.send(JSON.stringify({ type: 'brain_command', action: 'status' }));
+    }
+  }
+}
+
+function brainCmd(action, value) {
+  if (window.ws && window.ws.readyState === 1) {
+    window.ws.send(JSON.stringify({ type: 'brain_command', action: action, value: value }));
+    brainLog('> ' + action + ' ' + (value||''));
+  } else {
+    brainLog('Error: not connected to server');
+  }
+}
+
+function sendBrainText() {
+  const input = document.getElementById('brainInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  brainLog('> ' + text);
+  if (window.ws && window.ws.readyState === 1) {
+    window.ws.send(JSON.stringify({ type: 'brain_command', action: 'text', value: text }));
+  }
+}
+
+// Handle brain_status messages from server
+window.handleBrainStatus = function(data) {
+  const pos = data.position || {};
+  const obs = data.obstacles || {};
+  document.getElementById('brainStatus').innerHTML =
+    '<span style="color:#5af;">' + (data.task || 'idle') + '</span> | ' +
+    '<span style="color:#0f8;">' + (data.status || '') + '</span><br>' +
+    'Pos: ' + (pos.x_mm||0) + 'mm, ' + (pos.y_mm||0) + 'mm | Hdg: ' + (pos.heading_deg||0) + '&deg; | ' +
+    'Front: ' + (obs.front_cm||'?') + 'cm | Batt: ' + (data.battery_v||'?') + 'V';
+};
+
+window.handleBrainResult = function(data) {
+  brainLog('Robot: ' + (data.result || data.status || 'ok'));
+};
+
+function brainLog(msg) {
+  const log = document.getElementById('brainLog');
+  log.innerHTML += msg + '<br>';
+  log.scrollTop = log.scrollHeight;
+}
+
+// Auto-request brain status every 5 seconds when popup is open
+setInterval(() => {
+  if (brainPopupVisible && window.ws && window.ws.readyState === 1) {
+    window.ws.send(JSON.stringify({ type: 'brain_command', action: 'status' }));
+  }
+}, 5000);
+</script>
 
 <!-- Load JavaScript modules in correct order -->
 <script src="js/telemetry.js?v=7"></script>
@@ -969,9 +1053,9 @@
 <script src="js/cameras-ptz.js?v=1"></script>
 <script src="js/lidar2d.js?v=1"></script>
 <script src="js/occupancy-grid.js?v=1"></script>
-<script src="js/lidar3d.js?v=14"></script>
+<script src="js/lidar3d.js?v=8"></script>
 <script src="js/sonar-display.js?v=1"></script>
-<script src="js/websocket.js?v=67"></script>
+<script src="js/websocket.js?v=66"></script>
 <script>
 // Map save/load prompts
 function saveMapPrompt() {
@@ -1366,8 +1450,6 @@ async function toggleMap1Mode() {
   var status = document.getElementById('mapModeStatus');
   var statusText = document.getElementById('mapStatusText');
 
-  var stopBtn = document.getElementById('emergencyStopBtn');
-
   if (map1ModeActive) {
     // Cancel scan
     map1Cancelled = true;
@@ -1377,7 +1459,6 @@ async function toggleMap1Mode() {
       btn.style.color = '#0f8';
       btn.textContent = 'MAP 1';
     }
-    if (stopBtn) stopBtn.style.display = 'none';
     if (statusText) statusText.textContent = 'Cancelled';
     setTimeout(() => { if (status) status.style.display = 'none'; }, 1000);
     return;
@@ -1390,9 +1471,8 @@ async function toggleMap1Mode() {
   if (btn) {
     btn.style.background = '#00ff88';
     btn.style.color = '#000';
-    btn.textContent = 'SCANNING...';
+    btn.textContent = 'STOP';
   }
-  if (stopBtn) stopBtn.style.display = 'inline-block';
   if (status) status.style.display = 'block';
 
   // Helper: update status
@@ -1518,107 +1598,10 @@ async function toggleMap1Mode() {
     btn.style.color = '#0f8';
     btn.textContent = 'MAP 1';
   }
-  if (stopBtn) stopBtn.style.display = 'none';
   if (status) status.style.display = 'none';
 }
 
 window.toggleMap1Mode = toggleMap1Mode;
-
-// ========== MAC GPU CONTROL ==========
-// State tracking for Mac GPU mapper
-let macGpuState = 'disconnected';  // disconnected, idle, starting, running, stopping, error
-
-function updateMacGpuUI(status, gpuPercent, message) {
-  macGpuState = status;
-  const indicator = document.getElementById('macGpuIndicator');
-  const dot = document.getElementById('macGpuDot');
-  const label = document.getElementById('macGpuLabel');
-  const percent = document.getElementById('macGpuPercent');
-  const statusText = document.getElementById('macGpuStatus');
-
-  if (!indicator) return;
-
-  switch(status) {
-    case 'disconnected':
-      dot.style.background = '#666';
-      indicator.style.borderColor = '#666';
-      label.textContent = 'GPU OFFLINE';
-      label.style.color = '#666';
-      percent.style.display = 'none';
-      statusText.textContent = 'daemon not running';
-      statusText.style.color = '#f44';
-      break;
-    case 'idle':
-      dot.style.background = '#0af';
-      indicator.style.borderColor = '#0af';
-      label.textContent = 'START GPU';
-      label.style.color = '#0af';
-      percent.style.display = 'none';
-      statusText.textContent = 'click to start';
-      statusText.style.color = '#888';
-      break;
-    case 'starting':
-      dot.style.background = '#fa0';
-      indicator.style.borderColor = '#fa0';
-      label.textContent = 'GPU';
-      label.style.color = '#fa0';
-      percent.style.display = 'none';
-      statusText.textContent = message || 'starting...';
-      statusText.style.color = '#fa0';
-      break;
-    case 'running':
-      dot.style.background = '#0f8';
-      indicator.style.borderColor = '#0f8';
-      label.textContent = 'GPU';
-      label.style.color = '#0f8';
-      percent.style.display = 'inline';
-      percent.textContent = gpuPercent + '%';
-      statusText.textContent = 'click to stop';
-      statusText.style.color = '#0f8';
-      break;
-    case 'stopping':
-      dot.style.background = '#fa0';
-      indicator.style.borderColor = '#fa0';
-      label.textContent = 'GPU';
-      label.style.color = '#fa0';
-      percent.style.display = 'none';
-      statusText.textContent = 'stopping...';
-      statusText.style.color = '#fa0';
-      break;
-    case 'error':
-      dot.style.background = '#f44';
-      indicator.style.borderColor = '#f44';
-      label.textContent = 'GPU ERROR';
-      label.style.color = '#f44';
-      percent.style.display = 'none';
-      statusText.textContent = message || 'error';
-      statusText.style.color = '#f44';
-      break;
-  }
-}
-
-function toggleMacGpu() {
-  console.log('[MAC-GPU] Toggle clicked, current state:', macGpuState);
-  var socket = window.ws;
-  if (!socket || socket.readyState !== 1) {
-    alert('WebSocket not connected!');
-    return;
-  }
-
-  // Always allow start/stop regardless of state for now
-  if (macGpuState === 'running' || macGpuState === 'starting') {
-    // Stop GPU mapping
-    console.log('[MAC-GPU] Sending stop command');
-    socket.send(JSON.stringify({ type: 'mac_control', cmd: 'stop' }));
-    updateMacGpuUI('stopping', 0, 'stopping...');
-  } else {
-    // Start GPU mapping (idle, disconnected, error, or any other state)
-    console.log('[MAC-GPU] Sending start command');
-    socket.send(JSON.stringify({ type: 'mac_control', cmd: 'start' }));
-    updateMacGpuUI('starting', 0, 'starting...');
-  }
-}
-window.toggleMacGpu = toggleMacGpu;
 
 // ========== SET CAMERA HOME POSITION ==========
 function setCameraHome() {

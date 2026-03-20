@@ -12,22 +12,6 @@
 
 **Built to protect chickens, automate chores, and give kids rides around the homestead**
 
----
-
-## CRITICAL SAFETY NOTICE
-
-> **January 25, 2026**: A safety incident occurred when the robot's Xbox controller failsafe was overridden by autonomous mapping processes, resulting in injuries. This has been fixed in **v4.0.0** of the firmware.
-
-### Safety Architecture (v4.0.0)
-- **Xbox controller is SACRED** - processed FIRST every loop, before any WebSocket/network data
-- **Xbox watchdog (300ms)** - motors stop within 300ms if Xbox heartbeat lost
-- **General watchdog (500ms)** - backup motor stop if no communication
-- **Immediate stop on disconnect** - Xbox disconnect sends triple STOP commands
-- **30-second manual override** - autonomous commands blocked for 30s after any Xbox input
-- **robot_spin blocked** - mapping cannot spin robot while Xbox has priority
-
-See `SAFETY_FAILURE_DIAGNOSTIC.md` for full incident analysis and `CLAUDE.md` for safety rules.
-
 [Demo Videos](#demo) | [3D Mapping](#-3d-mapping--sensor-fusion) | [AI Detection](#-ai-object-detection) | [Web Interface](#-web-interface) | [Hardware](#-hardware)
 
 ---
@@ -311,7 +295,7 @@ Click **MAP** to start autonomous exploration:
 | **LIDAR** | RPLidar A1M8 (360°, 8000 samples/sec) |
 | **Cameras** | 2x Sricam PTZ (1080p, ONVIF) |
 | **Power** | 24V LiFePO4 8S, 720Wh |
-| **Sensors** | 4x ultrasonic, GPS, compass (BNO085) |
+| **Sensors** | 4x ultrasonic, GPS, compass (HMC5883L) |
 
 ### Weight & Dimensions
 
@@ -336,7 +320,59 @@ CemaniHomesteadRobot/
 ├── jetson-lidar/              # RPLidar streaming
 ├── mac-visualizer/            # Hybrid 3D mapper, depth estimation
 ├── mac-camera-relay/          # PTZ control relay
+├── robot-brain/               # Autonomous movement brain + text control
 └── docs/                      # Wiring diagrams, screenshots
+```
+
+---
+
+## Robot Brain - Autonomous Control
+
+**Text your robot commands from your phone. It moves, avoids obstacles, and texts you back.**
+
+### Text Message Commands
+
+| Command | Example | What It Does |
+|---------|---------|-------------|
+| **Forward** | `forward 6` | Move forward 6 feet |
+| **Backward** | `back 3` | Reverse 3 feet |
+| **Turn** | `turn left 90` | Turn left 90 degrees |
+| **Explore** | `explore` | Wander avoiding obstacles |
+| **Go Home** | `go home` | Return to starting position |
+| **Stop** | `stop` | Emergency stop |
+| **Status** | `status` | Get position, battery, obstacles |
+| **Natural Language** | `go check the yard` | Claude AI parses and executes |
+
+### How It Works
+
+```
+Phone (iMessage) ──► Mac (relay) ──► Jetson (brain.py)
+                                          │
+                                     Claude API
+                                    (parse command)
+                                          │
+                                     Robot Brain
+                                    (plan movement)
+                                          │
+                                     VPS Server
+                                    (route to robot)
+                                          │
+                                     ESP32 → Teensy
+                                    (motor control)
+                                          │
+                                     LIDAR + Ultrasonic
+                                    (obstacle avoidance)
+```
+
+### API
+
+```bash
+# Start the brain
+cd robot-brain && bash start.sh
+
+# HTTP API (port 5000)
+curl -X POST localhost:5000/command -d '{"action":"forward","value":3}'
+curl localhost:5000/status
 ```
 
 ---
@@ -377,17 +413,26 @@ CemaniHomesteadRobot/
 - [x] Dynamic object classification
 - [x] Autonomous mapping mode
 - [x] Dead reckoning odometry
+- [x] Robot Brain - autonomous movement API
+- [x] Text message control from phone (iMessage)
+- [x] Claude AI natural language command parsing
+- [x] Distance-based movement (go forward X feet)
+- [x] Obstacle avoidance during autonomous movement
 
 ### In Progress
 - [ ] SLAM loop closure
 - [ ] Path planning with A*
 - [ ] Predator detection alerts
 - [ ] Multi-room fingerprinting
+- [ ] Auto-docking charging station
 
 ### Future
-- [ ] OpenArm integration
+- [ ] Robotic arm for tasks (scoop, pour, grab)
+- [ ] Dog walking / leash tension control
+- [ ] Chicken coop automation (feeding, door)
+- [ ] Poop scooping attachment
+- [ ] Patrol route scheduling
 - [ ] Voice commands
-- [ ] Mobile app with notifications
 - [ ] Train engine body for kids
 
 ---
