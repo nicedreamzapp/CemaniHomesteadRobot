@@ -12,6 +12,7 @@ const state = require('./server-state');
 const odometry = require('./server-odometry');
 const ptzServer = require('./ptz-server');
 const compile = require('./compile');
+const agent = require('./server-agent');
 
 const app = express();
 const server = http.createServer(app);
@@ -775,6 +776,19 @@ function handleMessage(ws, data) {
         }));
       }
     });
+  }
+
+  // Agent chat from browser -> Claude API
+  if (data.type === "agent_chat") {
+    agent.handleChat(ws, data);
+  }
+  if (data.type === "agent_clear") {
+    agent.clearConversation(data.sessionId);
+  }
+
+  // Feed telemetry to agent for context
+  if (data.type === "teensy_telemetry" || data.type === "ultrasonic" || data.type === "compass") {
+    agent.updateTelemetry(data);
   }
 
   // Brain commands from browser -> Jetson brain (forwarded via WebSocket)

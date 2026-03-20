@@ -217,6 +217,11 @@ ws.onmessage = function(e) {
     console.log(`[VISUAL] Received map with ${d.panoramas?.length || 0} panoramas`);
   }
 
+  // Robot Agent chat replies
+  if (d.type === 'agent_reply' && window.handleAgentReply) {
+    window.handleAgentReply(d);
+  }
+
   // Robot Brain responses
   if (d.type === 'brain_status' && window.handleBrainStatus) {
     window.handleBrainStatus(d);
