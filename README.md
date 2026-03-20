@@ -2,17 +2,16 @@
 
 # Cemani Homestead Robot
 
-### Autonomous Dual-Armed Tank Platform with AI Vision & 3D Mapping
+### Autonomous AI-Powered Tank Platform
 
-![Made with](https://img.shields.io/badge/Made_with-Blood_Sweat_Tears-red?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-3D_Mapping_Live-green?style=for-the-badge)
-![Power](https://img.shields.io/badge/Power-24V_LiFePO4-orange?style=for-the-badge)
-![AI](https://img.shields.io/badge/AI-YOLOv8_+_Depth_Anything-purple?style=for-the-badge)
-![LIDAR](https://img.shields.io/badge/LIDAR-RPLidar_A1M8-blue?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Robot_Brain_Live-green?style=for-the-badge)
+![AI](https://img.shields.io/badge/AI-Claude_+_YOLOv8_+_Depth_AI-purple?style=for-the-badge)
+![Power](https://img.shields.io/badge/Power-24V_LiFePO4_1kW-orange?style=for-the-badge)
+![Control](https://img.shields.io/badge/Control-Text_From_Phone-blue?style=for-the-badge)
 
-**Built to protect chickens, automate chores, and give kids rides around the homestead**
+**Text it commands from your phone. It drives itself, avoids obstacles, detects 601 objects, builds 3D maps, and texts you back.**
 
-[Demo Videos](#demo) | [3D Mapping](#-3d-mapping--sensor-fusion) | [AI Detection](#-ai-object-detection) | [Web Interface](#-web-interface) | [Hardware](#-hardware)
+[Demo](#demo) | [Robot Brain](#-robot-brain) | [3D Mapping](#-3d-mapping) | [AI Vision](#-ai-vision) | [Architecture](#-architecture) | [Hardware](#-hardware) | [Roadmap](#-roadmap)
 
 ---
 
@@ -20,11 +19,11 @@
 
 ---
 
-### Command Center Live
+### Command Center
 
 ![Command Center](docs/command-center.png)
 
-*Real-time web interface: dual PTZ cameras with AI object detection, 3D LIDAR point cloud mapping, and tank drive controls*
+*Real-time web interface: dual PTZ cameras with AI object detection, 3D LIDAR point cloud, autonomous brain control, and tank drive*
 
 </div>
 
@@ -36,36 +35,9 @@
 
 https://github.com/user-attachments/assets/6a05e239-ce66-46ee-b951-474730370bfe
 
-*Successfully pulling a loaded metal cart - first real-world test after 6 months of building and learning.*
+*1kW tank platform pulling a loaded metal cart around the homestead.*
 
 ---
-
-### Build Process & Testing
-
-<table>
-<tr>
-<td width="50%">
-
-**Chassis Assembly**
-
-![Chassis](https://github.com/user-attachments/assets/32430365-4cf8-4abc-9d9f-82167b31484c)
-
-*2020 aluminum extrusion frame with motor mounts*
-
-</td>
-<td width="50%">
-
-**Electronics Bay**
-
-![Electronics](https://github.com/user-attachments/assets/c5690957-92af-4711-9627-1c7eadb0bac4)
-
-*Teensy 4.1, ESP32, ZLAC drivers, and power distribution*
-
-</td>
-</tr>
-</table>
-
-### More Testing Footage
 
 <table>
 <tr>
@@ -73,21 +45,21 @@ https://github.com/user-attachments/assets/6a05e239-ce66-46ee-b951-474730370bfe
 
 https://github.com/user-attachments/assets/9921ebb9-426a-4740-9e35-a875a7818416
 
-*Initial mobility test*
+*Mobility test*
 
 </td>
 <td width="33%">
 
 https://github.com/user-attachments/assets/a52f8c41-8795-4027-825c-4a8bdb81a10c
 
-*Maneuverability demo*
+*Maneuverability*
 
 </td>
 <td width="33%">
 
 https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
-*Speed testing*
+*Speed test*
 
 </td>
 </tr>
@@ -95,217 +67,163 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 
 ---
 
-## 3D Mapping & Sensor Fusion
+## Robot Brain
 
-**Real-time photorealistic 3D environment mapping using hybrid sensor fusion**
+**Text your robot from your phone. It understands natural language, moves autonomously, and reports back.**
+
+### Phone Commands
+
+| You Text | Robot Does |
+|----------|-----------|
+| `forward 6` | Drives forward 6 feet, avoids obstacles |
+| `back 3` | Reverses 3 feet |
+| `turn left 90` | Turns left 90 degrees |
+| `explore` | Wanders autonomously, avoiding everything |
+| `go home` | Returns to starting position |
+| `status` | Texts back position, battery, obstacles |
+| `go check the yard` | Claude AI parses intent, plans route |
+| `stop` | Emergency stop |
 
 ### How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    HYBRID 3D MAPPING PIPELINE                           │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   PTZ Cameras (2x)              RPLidar A1M8                           │
-│        │                              │                                 │
-│        ▼                              ▼                                 │
-│   ┌──────────────┐            ┌──────────────┐                         │
-│   │ Depth        │            │ 360° Laser   │                         │
-│   │ Anything V2  │            │ Point Cloud  │                         │
-│   │ (Mac M1 GPU) │            │ (8000 pts/s) │                         │
-│   └──────┬───────┘            └──────┬───────┘                         │
-│          │                           │                                  │
-│          ▼                           ▼                                  │
-│   ┌─────────────────────────────────────────────┐                      │
-│   │         POINT CLOUD FUSION                   │                      │
-│   │  • Voxel grid downsampling (10cm)           │                      │
-│   │  • Dynamic object classification            │                      │
-│   │  • Observation persistence scoring          │                      │
-│   │  • Wall confirmation (3+ observations)      │                      │
-│   └──────────────────┬──────────────────────────┘                      │
-│                      │                                                  │
-│                      ▼                                                  │
-│   ┌─────────────────────────────────────────────┐                      │
-│   │         3D VISUALIZATION (Browser)          │                      │
-│   │  • Three.js WebGL rendering                 │                      │
-│   │  • Color-coded depth (near=warm, far=cool)  │                      │
-│   │  • Live robot position tracking             │                      │
-│   │  • Compass heading overlay                  │                      │
-│   └─────────────────────────────────────────────┘                      │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+Your Phone (iMessage)
+    |
+    v
+Mac Mini (message relay)
+    |
+    v
+Jetson Orin Nano (robot-brain/brain.py)
+    ├── Claude API parses natural language
+    ├── Plans movement from sensor data
+    ├── LIDAR + ultrasonic obstacle avoidance
+    └── Sends motor commands via WebSocket
+            |
+            v
+      VPS Server (command routing)
+            |
+            v
+      ESP32 -> Teensy 4.1 -> Motors
 ```
 
-### Features
+### Web Command Center
 
-| Feature | Description |
-|---------|-------------|
-| **Monocular Depth** | Depth Anything V2 estimates distance from single camera images |
-| **LIDAR Fusion** | Calibrates depth scale using accurate laser measurements |
-| **PTZ Scanning** | Cameras sweep patterns to map full environment |
-| **Dynamic Classification** | Distinguishes static walls from moving objects |
-| **Persistence** | Confirmed walls saved to disk, survive restarts |
-| **Dead Reckoning** | Encoder-based odometry tracks robot position |
+The brain is also controllable from the web UI with a **BRAIN** panel:
+- Quick buttons: FWD, BACK, LEFT, RIGHT, EXPLORE, HOME, STOP
+- Text input for natural language commands
+- Live status: position, heading, obstacles, battery
 
-### Dynamic Object Detection
+### API
 
-Points are classified as static or dynamic based on observation patterns:
+```bash
+# Start the brain on Jetson
+cd robot-brain && bash start.sh
 
-```
-Motion Score = 0.0 → Static (walls, furniture)     [Solid rendering]
-Motion Score = 0.5 → Uncertain                     [Yellow tint]
-Motion Score = 1.0 → Dynamic (people, pets)        [Orange/pulsing]
+# HTTP endpoints (port 5000)
+curl -X POST localhost:5000/command -d '{"action":"forward","value":3}'
+curl -X POST localhost:5000/text -d '{"text":"go forward 6 feet"}'
+curl localhost:5000/status
 ```
 
 ---
 
-## AI Object Detection
+## 3D Mapping
 
-**Real-time 601-class object detection running on Jetson Orin Nano**
-
-### Detection Pipeline
+**Real-time photorealistic 3D environment mapping using sensor fusion**
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                      SHARED STREAM DETECTION                           │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                        │
-│   PTZ Cameras ──► relay.js ──► TCP Frame Share ──► detect.py          │
-│       │              │                                  │              │
-│       │         (captures       (shares frames     (YOLOv8 +          │
-│       │          RTSP)          to detector)       TensorRT)          │
-│       │                                                 │              │
-│       │                                                 ▼              │
-│       │                                        ┌──────────────┐       │
-│       │                                        │  ~11ms/frame │       │
-│       │                                        │  GPU Accel   │       │
-│       │                                        └──────┬───────┘       │
-│       │                                               │               │
-│       ▼                                               ▼               │
-│   Browser ◄──────────────── VPS ◄─────────────── Detections          │
-│   (overlay                 (relay)               + bounding           │
-│    boxes)                                         boxes               │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
+PTZ Cameras (2x)         RPLidar A1M8 (360°)
+      |                        |
+      v                        v
+Depth Anything V2        Laser Point Cloud
+(Mac M1 GPU)             (8000 pts/sec)
+      |                        |
+      +--------+-------+------+
+               |
+        Point Cloud Fusion
+        • Voxel grid (10cm cells)
+        • Dynamic vs static classification
+        • Wall confirmation (3+ observations)
+        • 1M point photorealistic output
+               |
+               v
+        Three.js 3D Visualization
+        (live in browser)
 ```
 
-### Classes Detected
-
-| Category | Examples |
-|----------|----------|
-| **Living** | person, dog, cat, bird, bear, raccoon, chicken |
-| **Vehicles** | car, truck, bicycle, motorcycle |
-| **Indoor** | chair, couch, bed, toilet, tv, laptop |
-| **Outdoor** | tree, fence, bench, fire hydrant |
-| **Animals** | 80+ species including wildlife threats |
-
-### Indoor/Outdoor Filtering
-
-Toggle between detection modes:
-- **All** - Show everything
-- **Indoor** - Furniture, appliances, household items
-- **Outdoor** - Vehicles, wildlife, landscape features
+| Feature | Detail |
+|---------|--------|
+| **Monocular Depth** | Depth Anything V2 from single camera |
+| **LIDAR Fusion** | Laser calibrates monocular depth scale |
+| **PTZ Scanning** | Automated camera sweep patterns |
+| **Dead Reckoning** | Encoder-based odometry (4096 counts/rev) |
+| **Persistence** | Confirmed walls save to disk |
 
 ---
 
-## Web Interface
+## AI Vision
 
-**Control and monitor from ANYWHERE in the world**
+**601-class real-time object detection on Jetson Orin Nano**
 
-### Command Center Features
+- **YOLOv8n** with TensorRT GPU acceleration (~11ms per frame)
+- **Indoor mode:** furniture, appliances, household items
+- **Outdoor mode:** vehicles, wildlife, landscape
+- **Living mode:** people, animals, threats (triggers safety stops)
+- Detections overlay on live camera feeds in browser
 
-| Feature | Description |
-|---------|-------------|
-| **Virtual Joystick** | Tank steering control (touch or mouse) |
-| **Dual Camera Feeds** | Front/rear PTZ with live depth overlay |
-| **3D LIDAR Map** | Real-time point cloud visualization |
-| **Object Detection** | Bounding boxes with class labels |
-| **Telemetry** | Battery, motor RPM, temperatures |
-| **Compass/GPS** | Heading and position display |
-| **Ultrasonic** | 4-corner proximity sensors |
-| **Autonomous Mode** | One-click mapping patrol |
+---
 
-### Autonomous Mapping
-
-Click **MAP** to start autonomous exploration:
-1. Robot drives forward
-2. PTZ cameras scan in patterns
-3. Depth points accumulate in 3D map
-4. Obstacles trigger avoidance maneuvers
-5. Walls get confirmed after multiple observations
-6. Xbox controller overrides for manual control
-
-### Architecture
+## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                     SYSTEM ARCHITECTURE                               │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│   Browser (Anywhere)                                                  │
-│       │                                                               │
-│       │ HTTPS/WSS                                                     │
-│       ▼                                                               │
-│   ┌────────────────────────────────────────┐                         │
-│   │   VPS Server (Node.js + Nginx)         │                         │
-│   │   robot.yourdomain.com                 │                         │
-│   │   • WebSocket hub                      │                         │
-│   │   • Command routing                    │                         │
-│   │   • Frame relay                        │                         │
-│   └───────────────┬────────────────────────┘                         │
-│                   │ WebSocket                                         │
-│       ┌───────────┼───────────┬────────────────┐                     │
-│       ▼           ▼           ▼                ▼                     │
-│   ┌───────┐  ┌─────────┐  ┌────────┐    ┌──────────┐                │
-│   │ ESP32 │  │ Jetson  │  │Mac Mini│    │ Cameras  │                │
-│   │(WiFi) │  │ Orin    │  │(3D Map)│    │ (PTZ)    │                │
-│   └───┬───┘  └────┬────┘  └────────┘    └──────────┘                │
-│       │           │                                                   │
-│       │Serial     │ RTSP + Detection                                 │
-│       ▼           ▼                                                   │
-│   ┌───────┐  ┌─────────┐                                             │
-│   │Teensy │  │ YOLOv8  │                                             │
-│   │ 4.1   │  │TensorRT │                                             │
-│   └───┬───┘  └─────────┘                                             │
-│       │                                                               │
-│       │ Modbus RS-485                                                 │
-│       ▼                                                               │
-│   ┌─────────────────────────────────────┐                            │
-│   │  ZLAC8015D Drivers → Hub Motors     │                            │
-│   │  (4x ZLLG80ASM250, tank config)     │                            │
-│   └─────────────────────────────────────┘                            │
-│                                                                       │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                                                                │
+│   Phone ──► Mac ──► Jetson (Robot Brain)                      │
+│                        ├── YOLOv8 Detection                   │
+│                        ├── LIDAR Streaming                    │
+│                        └── Autonomous Navigation              │
+│                              |                                 │
+│   Browser ◄──► VPS Server (WebSocket Hub) ◄──► ESP32          │
+│                     ├── Command routing          |             │
+│                     ├── Frame relay          Teensy 4.1        │
+│                     └── Brain control         ├── Modbus       │
+│                              |                ├── Sensors      │
+│                         Mac Mini M1           └── Motors       │
+│                         └── Depth Anything V2                  │
+│                         └── 3D Mapping                         │
+│                                                                │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+### Compute Stack
+
+| Device | Role |
+|--------|------|
+| **Teensy 4.1** | Motor control, Modbus, sensors, safety watchdog |
+| **ESP32** | WiFi/Bluetooth bridge, Xbox controller (Bluepad32) |
+| **Jetson Orin Nano Super** | Robot brain, YOLOv8, LIDAR relay |
+| **Mac Mini M1** | Depth Anything V2, 3D mapping, iMessage relay |
+| **VPS** | WebSocket hub, web UI hosting, API |
 
 ---
 
 ## Hardware
 
-### Main Components
-
 | Component | Specification |
 |-----------|---------------|
-| **Drive Motors** | 4x ZLLG80ASM250 hub motors, 250W each |
-| **Motor Drivers** | 2x ZLAC8015D, Modbus RS-485 |
-| **Main Controller** | Teensy 4.1 (motor control, sensors) |
-| **WiFi/Bluetooth** | ESP32 (Bluepad32 for Xbox controller) |
-| **AI Processor** | Jetson Orin Nano Super (YOLOv8) |
-| **3D Processing** | Mac Mini M1 (Depth Anything V2) |
-| **LIDAR** | RPLidar A1M8 (360°, 8000 samples/sec) |
-| **Cameras** | 2x Sricam PTZ (1080p, ONVIF) |
+| **Drive** | 4x ZLLG80ASM250 hub motors (250W each, 1kW total) |
+| **Drivers** | 2x ZLAC8015D (Modbus RS-485) |
+| **LIDAR** | RPLidar A1M8 (360°, 8000 samples/sec, 6m range) |
+| **Cameras** | 2x Sricam PTZ (1080p, ONVIF, pan/tilt) |
+| **Ultrasonics** | 4x JSN-SR04T (corners: FL, FR, RL, RR) |
+| **Compass** | HMC5883L magnetometer |
+| **GPS** | Serial @ 38400 baud |
+| **Encoders** | 4096 counts/rev (built into ZLAC drivers) |
 | **Power** | 24V LiFePO4 8S, 720Wh |
-| **Sensors** | 4x ultrasonic, GPS, compass (HMC5883L) |
-
-### Weight & Dimensions
-
-| Spec | Value |
-|------|-------|
-| Total Weight | ~80 lbs |
-| Wheel Diameter | 10" pneumatic |
-| Ground Clearance | 4" |
-| Max Speed | ~8 mph |
-| Payload | 100+ lbs tested |
+| **Wheels** | 10" pneumatic, direct hub motor drive |
+| **Frame** | 2020 aluminum extrusion |
+| **Weight** | ~80 lbs, 100+ lbs payload tested |
+| **Speed** | ~8 mph max, ~0.4 mph autonomous |
 
 ---
 
@@ -313,143 +231,66 @@ Click **MAP** to start autonomous exploration:
 
 ```
 CemaniHomesteadRobot/
-├── teensy-robot/              # Motor control, sensors, Modbus
-├── esp32-robot-controller/    # WiFi/Bluetooth bridge, OTA
-├── vps-server/                # Web UI, WebSocket relay
-├── jetson-object-detection/   # YOLOv8, TensorRT, camera relay
-├── jetson-lidar/              # RPLidar streaming
-├── mac-visualizer/            # Hybrid 3D mapper, depth estimation
-├── mac-camera-relay/          # PTZ control relay
-├── robot-brain/               # Autonomous movement brain + text control
-└── docs/                      # Wiring diagrams, screenshots
+├── robot-brain/               # Autonomous movement + text control + Claude AI
+├── teensy-robot/              # Motor control, Modbus, sensors, safety
+├── esp32-robot-controller/    # WiFi/BT bridge, Xbox controller
+├── vps-server/                # Web UI, WebSocket hub, command routing
+├── jetson-object-detection/   # YOLOv8 TensorRT + autonomous navigation
+├── jetson-lidar/              # RPLidar A1 streaming
+├── mac-visualizer/            # Depth Anything V2, 3D mapping pipeline
+├── mac-camera-relay/          # PTZ camera control relay
+└── docs/                      # Diagrams, screenshots
 ```
-
----
-
-## Robot Brain - Autonomous Control
-
-**Text your robot commands from your phone. It moves, avoids obstacles, and texts you back.**
-
-### Text Message Commands
-
-| Command | Example | What It Does |
-|---------|---------|-------------|
-| **Forward** | `forward 6` | Move forward 6 feet |
-| **Backward** | `back 3` | Reverse 3 feet |
-| **Turn** | `turn left 90` | Turn left 90 degrees |
-| **Explore** | `explore` | Wander avoiding obstacles |
-| **Go Home** | `go home` | Return to starting position |
-| **Stop** | `stop` | Emergency stop |
-| **Status** | `status` | Get position, battery, obstacles |
-| **Natural Language** | `go check the yard` | Claude AI parses and executes |
-
-### How It Works
-
-```
-Phone (iMessage) ──► Mac (relay) ──► Jetson (brain.py)
-                                          │
-                                     Claude API
-                                    (parse command)
-                                          │
-                                     Robot Brain
-                                    (plan movement)
-                                          │
-                                     VPS Server
-                                    (route to robot)
-                                          │
-                                     ESP32 → Teensy
-                                    (motor control)
-                                          │
-                                     LIDAR + Ultrasonic
-                                    (obstacle avoidance)
-```
-
-### API
-
-```bash
-# Start the brain
-cd robot-brain && bash start.sh
-
-# HTTP API (port 5000)
-curl -X POST localhost:5000/command -d '{"action":"forward","value":3}'
-curl localhost:5000/status
-```
-
----
-
-## Lessons Learned
-
-### The Hard Parts
-
-| Challenge | Solution |
-|-----------|----------|
-| **Tank steering** | Driver-specific direction inversion, atomic Modbus writes |
-| **Power stability** | Automotive-grade buck converters (destroyed 4 Teensys with hobby DROKs) |
-| **Ground loops** | Star grounding from battery negative |
-| **Depth calibration** | LIDAR-calibrated scale for monocular depth |
-| **WebSocket reliability** | Reconnection logic, ping/pong disabled for GPU blocking |
-
-### Component Damage Report
-
-| Component | Destroyed | Cause | Cost |
-|-----------|-----------|-------|------|
-| Teensy 4.1 | 4 | DROK voltage spikes | ~$120 |
-| ESP32 | 3+ | DROK voltage spikes | ~$30 |
-| Buck converters | 4 | Hobby-grade failure | ~$40 |
-| **Since automotive grade** | **0** | - | **$0** |
 
 ---
 
 ## Roadmap
 
-### Completed
-- [x] Remote web control from anywhere
-- [x] Dual PTZ camera streaming
-- [x] Xbox controller support
-- [x] Real-time object detection (601 classes)
-- [x] 3D LIDAR visualization
-- [x] Monocular depth estimation
-- [x] Hybrid sensor fusion mapping
-- [x] Dynamic object classification
-- [x] Autonomous mapping mode
-- [x] Dead reckoning odometry
-- [x] Robot Brain - autonomous movement API
-- [x] Text message control from phone (iMessage)
+### Working Now
+- [x] Tank drive with Xbox controller + web joystick
+- [x] Dual PTZ camera streaming with depth overlay
+- [x] 601-class AI object detection (YOLOv8 + TensorRT)
+- [x] 360° LIDAR with 3D point cloud visualization
+- [x] Hybrid 3D mapping (LIDAR + monocular depth fusion)
+- [x] Encoder-based dead reckoning odometry
+- [x] Autonomous mapping with obstacle avoidance
+- [x] Robot Brain with text message control from phone
 - [x] Claude AI natural language command parsing
 - [x] Distance-based movement (go forward X feet)
-- [x] Obstacle avoidance during autonomous movement
+- [x] Web command center with brain control panel
+- [x] Indoor SLAM occupancy grid mapping
+- [x] Semantic map (named zones, object tracking)
 
-### In Progress
+### Building Next
+- [ ] IMU upgrade (BNO085 - accelerometer + gyroscope)
+- [ ] Intel RealSense D455 depth camera
+- [ ] A* path planning with obstacle map
 - [ ] SLAM loop closure
-- [ ] Path planning with A*
-- [ ] Predator detection alerts
-- [ ] Multi-room fingerprinting
 - [ ] Auto-docking charging station
+- [ ] Predator detection alerts (text when bear/coyote seen)
+- [ ] Patrol route scheduling (time-based rounds)
 
-### Future
-- [ ] Robotic arm for tasks (scoop, pour, grab)
-- [ ] Dog walking / leash tension control
-- [ ] Chicken coop automation (feeding, door)
-- [ ] Poop scooping attachment
-- [ ] Patrol route scheduling
-- [ ] Voice commands
-- [ ] Train engine body for kids
+### Future Vision
+- [ ] Robotic arm (scoop poop, pour chicken feed, grab objects)
+- [ ] Dog walking with leash tension control
+- [ ] Chicken coop automation (feeding, door open/close)
+- [ ] Voice commands via phone
+- [ ] Multi-robot coordination
+- [ ] Train engine body shell for giving kids rides
 
 ---
 
 ## License
 
-MIT - Use this for your own robot projects!
+MIT
 
 ---
 
 <div align="center">
 
-**Built with love on a homestead in Humboldt County, California**
+**Built on a homestead in Humboldt County, California**
 
-*Started with a chicken problem, ended up building an autonomous homestead assistant.*
-
-### "If it takes more than 10 minutes, automate it."
+*Started with a chicken predator problem. Now it's an autonomous AI homestead assistant you can text from your phone.*
 
 [GitHub](https://github.com/nicedreamzapp) | [Reddit](https://www.reddit.com/r/robotics/comments/1ov3k5v/)
 
