@@ -777,6 +777,22 @@ function handleMessage(ws, data) {
     });
   }
 
+  // Brain commands from browser -> Jetson brain (forwarded via WebSocket)
+  if (data.type === "brain_command") {
+    // Forward to all autonomous clients (the brain)
+    wss.clients.forEach(c => {
+      if (c.isAutonomous && c.readyState === WebSocket.OPEN) {
+        c.send(JSON.stringify(data));
+      }
+    });
+    console.log(`[BRAIN] Browser command: ${data.action} ${data.value || ''}`);
+  }
+
+  // Brain responses from Jetson -> browsers
+  if (data.type === "brain_status" || data.type === "brain_result") {
+    state.broadcast(data, ws);
+  }
+
   // Autonomous commands from Jetson -> Robot
   // BLOCKED when manual override is active (Xbox/drive system is KING)
   if (data.type === "autonomous_cmd") {

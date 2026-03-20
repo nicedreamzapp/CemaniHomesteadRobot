@@ -217,6 +217,14 @@ ws.onmessage = function(e) {
     console.log(`[VISUAL] Received map with ${d.panoramas?.length || 0} panoramas`);
   }
 
+  // Robot Brain responses
+  if (d.type === 'brain_status' && window.handleBrainStatus) {
+    window.handleBrainStatus(d);
+  }
+  if (d.type === 'brain_result' && window.handleBrainResult) {
+    window.handleBrainResult(d);
+  }
+
   // Scene recognition result
   if (d.type === 'scene_recognition_result') {
     const indicator = document.getElementById('sceneRecognition');

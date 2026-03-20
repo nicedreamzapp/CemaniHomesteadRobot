@@ -297,6 +297,60 @@ class RobotBrain:
             if cmd == "STOP":
                 self.stop()
 
+        # Brain commands from web UI (forwarded by server)
+        elif msg_type == "brain_command":
+            self._handle_brain_command(data)
+
+    # ========== Brain command handler (from web UI) ==========
+
+    def _handle_brain_command(self, data):
+        """Handle commands from the web UI via server."""
+        action = data.get("action", "")
+        value = data.get("value")
+
+        if action == "status":
+            # Send status back through WebSocket
+            status = self.get_status()
+            status["type"] = "brain_status"
+            self._send(status)
+            return
+
+        def run_and_respond():
+            result = ""
+            if action == "forward":
+                result = self.go_forward(float(value or 3))
+            elif action == "backward":
+                result = self.go_backward(float(value or 2))
+            elif action == "turn":
+                result = self.turn(float(value or 90))
+            elif action == "explore":
+                result = self.explore()
+            elif action == "go_home":
+                result = self.go_home()
+            elif action == "stop":
+                result = self.stop()
+            elif action == "set_home":
+                result = self.set_home()
+            elif action == "text":
+                _, result = self.parse_text_command(str(value or ""))
+            else:
+                result = f"unknown action: {action}"
+
+            # Send result back
+            self._send({"type": "brain_result", "action": action, "result": result})
+            # Also send updated status
+            status = self.get_status()
+            status["type"] = "brain_status"
+            self._send(status)
+
+        if action == "stop":
+            self.stop()
+            self._send({"type": "brain_result", "action": "stop", "result": "stopped"})
+        else:
+            threading.Thread(target=run_and_respond, daemon=True).start()
+            # Immediate acknowledgment
+            self._send({"type": "brain_result", "action": action, "result": f"started: {action}"})
+
     # ========== Low-level motor commands ==========
 
     def _send(self, data):
