@@ -786,8 +786,8 @@ function handleMessage(ws, data) {
     agent.clearConversation(data.sessionId);
   }
 
-  // Feed telemetry to agent for context
-  if (data.type === "teensy_telemetry" || data.type === "ultrasonic" || data.type === "compass") {
+  // Feed all sensor data to agent for context
+  if (data.type === "teensy_telemetry" || data.type === "ultrasonic" || data.type === "compass" || data.type === "dead_reckoning" || data.type === "detections" || data.type === "DETECTIONS") {
     agent.updateTelemetry(data);
   }
 
