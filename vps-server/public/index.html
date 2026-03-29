@@ -532,7 +532,7 @@
       </div>
       <div class="cam-container" id="cam1-container">
         <div class="cam-video">
-          <div id="cam1-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+          <div id="cam1-video" style="width:100%;height:100%;background:#0a0a0a;pointer-events:none;"></div>
           <canvas id="overlayCanvas1" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
         </div>
         <!-- iOS-style detection info overlay (top-right) -->
@@ -570,7 +570,7 @@
       </div>
       <div class="cam-container" id="cam2-container">
         <div class="cam-video">
-          <div id="cam2-video" style="width:100%;height:100%;background:#0a0a0a;"></div>
+          <div id="cam2-video" style="width:100%;height:100%;background:#0a0a0a;pointer-events:none;"></div>
           <canvas id="overlayCanvas2" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
         </div>
         <!-- Speaker toggle (center top) -->
@@ -786,12 +786,19 @@
           <!-- Fullscreen button -->
           <button class="lidar3d-expand-btn" onclick="toggleLidar3DFullscreen()" title="Fullscreen" style="pointer-events:auto;">⛶</button>
         </div>
-        <!-- Bottom control bar -->
-        <div style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:20;">
-          <button id="map1Btn" onclick="event.stopPropagation(); toggleMap1Mode()" title="Full Room Scan: 3x120° turns with camera sweeps" style="background:rgba(30,50,20,0.8);border:1px solid #0f8;color:#0f8;padding:3px 10px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP 1</button>
-          <button onclick="event.stopPropagation(); setCameraHome()" title="Save current camera positions as HOME" style="background:rgba(50,30,10,0.8);border:1px solid #fa0;color:#fa0;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">SET HOME</button>
-          <button id="emergencyStopBtn" onclick="event.stopPropagation(); emergencyStopMapping()" style="background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
-          <button onclick="event.stopPropagation(); window.lidar3dModule && window.lidar3dModule.clearAllPoints()" title="Clear current session (map auto-corrects via fingerprints)" style="background:rgba(30,30,30,0.6);border:1px solid #666;color:#888;padding:2px 5px;border-radius:3px;font-size:7px;cursor:pointer;">CLR</button>
+        <!-- Bottom control bar - simplified: just MAP 1 and STOP (hidden until MAP 1 starts) -->
+        <!-- Bottom control bar - single row, no overlap -->
+        <div style="position:absolute;bottom:6px;left:6px;right:6px;display:flex;align-items:center;gap:6px;pointer-events:auto;z-index:20;">
+          <!-- Main nav buttons -->
+          <button id="map1Btn" onclick="event.stopPropagation(); toggleMap1Mode()" title="Full Room Scan" style="background:rgba(30,50,20,0.8);border:1px solid #0f8;color:#0f8;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">MAP</button>
+          <button id="exploreBtn" onclick="event.stopPropagation(); toggleExplore()" title="Auto-explore with LIDAR safety" style="background:rgba(20,30,50,0.8);border:1px solid #0af;color:#0af;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;">EXPLORE</button>
+          <button id="toggleGridBtn" onclick="event.stopPropagation(); toggleGridDisplay()" title="Toggle grid map" style="background:rgba(20,40,30,0.8);border:1px solid #0f8;color:#0f8;padding:3px 8px;border-radius:4px;font-size:9px;cursor:pointer;">GRID</button>
+          <button id="emergencyStopBtn" onclick="event.stopPropagation(); emergencyStopMapping()" style="display:none;background:rgba(80,20,20,0.8);border:1px solid #f44;color:#f88;padding:3px 6px;border-radius:4px;font-size:9px;cursor:pointer;">STOP</button>
+          <!-- Spacer -->
+          <div style="flex:1;"></div>
+          <!-- Status - right side -->
+          <span id="navStatus" style="color:#0fc;font-size:8px;font-weight:bold;white-space:nowrap;"></span>
+          <span id="mapStats" style="color:#888;font-size:7px;white-space:nowrap;"></span>
         </div>
         <!-- Ultrasonic corner badges -->
         <div class="us-badge us-fl" id="usBadgeFL">FL: --</div>
@@ -1283,6 +1290,10 @@ function setCameraMode(mode) {
   const ocrResultPanel = document.getElementById('ocrResultPanel');
   const detectionPanel1 = document.getElementById('detectionPanel1');
 
+  // Hide LIVE badge + detection overlay in OCR mode so they don't cover text
+  const cam1Status = document.getElementById('cam1-status');
+  const overlayCanvas1 = document.getElementById('overlayCanvas1');
+
   if (mode === 'detect') {
     modeDetect.style.background = 'rgba(90,170,255,0.8)';
     modeDetect.style.color = '#000';
@@ -1292,6 +1303,8 @@ function setCameraMode(mode) {
     if (ocrControlsHeader) ocrControlsHeader.style.display = 'none';
     if (ocrResultPanel) ocrResultPanel.style.display = 'none';
     if (detectionPanel1) detectionPanel1.style.display = 'block';
+    if (cam1Status) cam1Status.style.display = '';
+    if (overlayCanvas1) overlayCanvas1.style.display = '';
     console.log('[MODE] Object Detection');
   } else {
     modeOCR.style.background = 'rgba(90,170,255,0.8)';
@@ -1302,82 +1315,61 @@ function setCameraMode(mode) {
     if (ocrControlsHeader) ocrControlsHeader.style.display = 'flex';
     if (ocrResultPanel) ocrResultPanel.style.display = 'block';
     if (detectionPanel1) detectionPanel1.style.display = 'none';
+    if (cam1Status) cam1Status.style.display = 'none';
+    if (overlayCanvas1) overlayCanvas1.style.display = 'none';
     console.log('[MODE] OCR');
   }
 }
 
-// OCR using Tesseract.js (load dynamically)
-let tesseractLoaded = false;
-let tesseractWorker = null;
+// OCR via Jetson GPU (EasyOCR) - much better than browser-side Tesseract
+let ocrTimeout = null;
 
-async function loadTesseract() {
-  if (tesseractLoaded) return true;
-  try {
-    // Load Tesseract.js from CDN
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
-    document.head.appendChild(script);
-    await new Promise((resolve, reject) => {
-      script.onload = resolve;
-      script.onerror = reject;
-    });
-    tesseractLoaded = true;
-    console.log('[OCR] Tesseract loaded');
-    return true;
-  } catch (e) {
-    console.error('[OCR] Failed to load Tesseract:', e);
-    return false;
+function captureOCR() {
+  const resultPanel = document.getElementById('ocrResultPanel');
+  resultPanel.innerHTML = '<span style="color:#5af;">Reading text via Jetson GPU...</span>';
+
+  if (!window.ws || window.ws.readyState !== WebSocket.OPEN) {
+    resultPanel.innerHTML = '<span style="color:#f55;">Not connected</span>';
+    return;
   }
+
+  // Send OCR request to Jetson via server
+  window.ws.send(JSON.stringify({ type: 'ocr_request', camera: 1 }));
+
+  // Timeout after 10 seconds
+  if (ocrTimeout) clearTimeout(ocrTimeout);
+  ocrTimeout = setTimeout(() => {
+    if (resultPanel.innerHTML.includes('Reading text')) {
+      resultPanel.innerHTML = '<span style="color:#f55;">OCR timed out - Jetson may be busy</span>';
+    }
+  }, 10000);
 }
 
-async function captureOCR() {
+// Handle OCR result from Jetson (called from websocket.js message handler)
+function handleOCRResult(data) {
+  if (ocrTimeout) clearTimeout(ocrTimeout);
   const resultPanel = document.getElementById('ocrResultPanel');
-  resultPanel.innerHTML = '<span style="color:#5af;">Capturing...</span>';
+  if (!resultPanel) return;
 
-  // Get frame from front camera canvas
-  const cam1Video = document.getElementById('cam1-video');
-  const canvas = document.createElement('canvas');
-  canvas.width = 640;
-  canvas.height = 360;
-  const ctx = canvas.getContext('2d');
-
-  // Try to get image from the video element or existing canvas
-  const img = cam1Video.querySelector('img');
-  if (img) {
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  } else {
-    resultPanel.innerHTML = '<span style="color:#f55;">No camera feed available</span>';
+  if (data.error) {
+    resultPanel.innerHTML = `<span style="color:#f55;">OCR error: ${data.error}</span>`;
     return;
   }
 
-  // Load Tesseract if needed
-  if (!await loadTesseract()) {
-    resultPanel.innerHTML = '<span style="color:#f55;">OCR library failed to load</span>';
+  const words = data.words || [];
+  if (words.length === 0) {
+    resultPanel.innerHTML = '<span style="opacity:0.5;font-style:italic;">No text detected. Point camera at text and try again.</span>';
+    lastOCRText = '';
     return;
   }
 
-  resultPanel.innerHTML = '<span style="color:#5af;">Recognizing text...</span>';
-
-  try {
-    const result = await Tesseract.recognize(canvas, 'eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          resultPanel.innerHTML = `<span style="color:#5af;">Recognizing... ${Math.round(m.progress * 100)}%</span>`;
-        }
-      }
-    });
-
-    lastOCRText = result.data.text.trim();
-    if (lastOCRText) {
-      resultPanel.innerHTML = `<div style="color:#fff;">${lastOCRText.replace(/\n/g, '<br>')}</div>`;
-      console.log('[OCR] Detected:', lastOCRText);
-    } else {
-      resultPanel.innerHTML = '<span style="opacity:0.5;font-style:italic;">No text detected. Try moving closer to the text.</span>';
-    }
-  } catch (e) {
-    console.error('[OCR] Error:', e);
-    resultPanel.innerHTML = '<span style="color:#f55;">OCR failed: ' + e.message + '</span>';
-  }
+  lastOCRText = words.map(w => w.text).join('  ');
+  const html = words.map(w => {
+    const confColor = w.confidence > 0.7 ? '#5f5' : w.confidence > 0.4 ? '#ff5' : '#f95';
+    return `<span style="color:${confColor};font-weight:700;">${w.text}</span> <span style="opacity:0.4;font-size:9px;">${Math.round(w.confidence * 100)}%</span>`;
+  }).join('&nbsp;&nbsp;');
+  resultPanel.innerHTML = html;
+  console.log('[OCR] Jetson result:', lastOCRText);
 }
 
 function speakOCR() {
@@ -1461,11 +1453,59 @@ function toggleMapMode() {
 // Ensure function is globally accessible
 window.toggleMapMode = toggleMapMode;
 
+// ========== AUTONOMOUS EXPLORATION ==========
+let exploreRunning = false;
+function toggleExplore() {
+  // If MAP is running, stop it first
+  if (map1ModeActive) {
+    map1Cancelled = true;
+    map1ModeActive = false;
+    const mapBtn = document.getElementById('map1Btn');
+    if (mapBtn) { mapBtn.style.color = '#0f8'; mapBtn.textContent = 'MAP'; mapBtn.style.background = 'rgba(30,50,20,0.8)'; }
+    ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
+  }
+
+  exploreRunning = !exploreRunning;
+  const btn = document.getElementById('exploreBtn');
+  if (exploreRunning) {
+    btn.textContent = 'STOP';
+    btn.style.borderColor = '#ff0';
+    btn.style.color = '#ff0';
+    ws.send(JSON.stringify({ type: 'explore_start' }));
+  } else {
+    btn.textContent = 'EXPLORE';
+    btn.style.borderColor = '#0af';
+    btn.style.color = '#0af';
+    ws.send(JSON.stringify({ type: 'explore_stop' }));
+  }
+}
+window.toggleExplore = toggleExplore;
+
+function toggleGridDisplay() {
+  if (window.lidar3dModule && window.lidar3dModule.toggleOccupancyGrid) {
+    const showing = window.lidar3dModule.toggleOccupancyGrid();
+    const btn = document.getElementById('toggleGridBtn');
+    if (btn) {
+      btn.style.borderColor = showing ? '#0f8' : '#666';
+      btn.style.color = showing ? '#0f8' : '#666';
+    }
+  }
+}
+window.toggleGridDisplay = toggleGridDisplay;
+
 // ========== MAP 1: FULL ROOM SCAN (Direct Control) ==========
 let map1ModeActive = false;
 let map1Cancelled = false;
 
 async function toggleMap1Mode() {
+  // If EXPLORE is running, stop it first
+  if (exploreRunning) {
+    exploreRunning = false;
+    const expBtn = document.getElementById('exploreBtn');
+    if (expBtn) { expBtn.textContent = 'EXPLORE'; expBtn.style.borderColor = '#0af'; expBtn.style.color = '#0af'; }
+    ws.send(JSON.stringify({ type: 'explore_stop' }));
+  }
+
   var btn = document.getElementById('map1Btn');
   var status = document.getElementById('mapModeStatus');
   var statusText = document.getElementById('mapStatusText');
