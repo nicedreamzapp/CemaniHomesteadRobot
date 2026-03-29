@@ -959,6 +959,7 @@ h1 { font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 20px rgba(0,255,136,
   align-items: center;
   justify-content: center;
   background: #0a0a0a;
+  pointer-events: none;
 }
 .cam-video video, .cam-video img {
   max-width: 100%;

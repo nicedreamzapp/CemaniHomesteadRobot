@@ -75,44 +75,24 @@ function setStatus(text, type) {
 function selectDirection(dir) {
   currentDir = dir;
   updateDisplay();
-
-  // INSTANT DRIVE: Send immediate short move command when clicking direction
-  const INSTANT_DRIVE_DISTANCE = 0.3;  // 0.3 meters (~1 foot)
-  if (window.ws && window.ws.readyState === 1) {
-    // For L/R, send turn commands instead
-    if (dir === 'L' || dir === 'R') {
-      const turnAngle = dir === 'L' ? -30 : 30;
-      window.ws.send(JSON.stringify({
-        type: 'serial_cmd',
-        cmd: `TURN,${turnAngle}`
-      }));
-      console.log('[DRIVE] Turning', turnAngle, 'degrees');
-    } else {
-      // FWD/BACK - send serial_cmd for immediate response
-      const cmd = dir === 'F' ? 'FWD,30' : 'BACK,30';  // 30 RPM speed
-      window.ws.send(JSON.stringify({
-        type: 'serial_cmd',
-        cmd: cmd
-      }));
-      console.log('[DRIVE] Sent', cmd);
-      // Auto-stop after 0.5 seconds
-      setTimeout(() => {
-        if (window.ws && window.ws.readyState === 1) {
-          window.ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
-        }
-      }, 500);
-    }
-  }
+  // Direction only selects - movement happens when user presses GO
 }
 
 function selectDistance(distance) {
   currentDist = distance;
   updateDisplay();
+  // SAFETY: Distance selection NEVER triggers movement
+  // User MUST press GO button to execute
 }
 
+let goButtonPressed = false;  // SAFETY: Only true when GO button is physically clicked
+
 function executeQueue() {
+  goButtonPressed = true;  // Mark that GO was explicitly pressed
+
   if (!currentDir || !currentDist) {
     setStatus('Select direction and distance first!', 'error');
+    goButtonPressed = false;
     return;
   }
 
@@ -128,17 +108,24 @@ function executeQueue() {
   const boxEl = document.getElementById('ctrlQueueDisplay');
   if (boxEl) boxEl.classList.add('executing');
 
-  const distanceMeters = cmd.dist * FEET_TO_METERS;
+  // SAFETY: Triple-check that GO was explicitly pressed before sending ANY movement
+  if (!goButtonPressed) {
+    console.error('[SAFETY] Movement blocked - GO button was not pressed!');
+    setStatus('Press GO to move!', 'error');
+    return;
+  }
+  goButtonPressed = false;  // Reset immediately after use
+
+  const distanceCm = Math.round(cmd.dist * FEET_TO_METERS * 100);
+
+  // Send drive command via WebSocket — server handles MODE_MAPPING + motor init
   if (window.ws && window.ws.readyState === 1) {
-    window.ws.send(JSON.stringify({
-      type: 'move_command',
-      distance: distanceMeters,
-      direction: cmd.dir
-    }));
-    console.log('[CONTROLS] Sent move_command:', cmd.dir, distanceMeters + 'm');
+    const moveCmd = 'MOVEDIR,' + cmd.dir + ',' + distanceCm;
+    window.ws.send(JSON.stringify({ type: 'serial_cmd_relay', cmd: moveCmd }));
+    console.log('[CONTROLS] Sent ' + moveCmd);
   } else {
     console.error('[CONTROLS] WebSocket not connected!');
-    setStatus('WebSocket not connected!', 'error');
+    setStatus('Not connected!', 'error');
   }
 
   const movePixels = cmd.dist * PIXELS_PER_FOOT;
