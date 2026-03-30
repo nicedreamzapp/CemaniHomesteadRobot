@@ -145,10 +145,10 @@ CAM_HEIGHT = PROC_HEIGHT  # 480
 LIDAR_HEIGHT = 0.70  # 70cm above ground
 LIDAR_OFFSET = np.array([0.15, LIDAR_HEIGHT, 0.0])  # Right side of robot
 
-# 3D mapping parameters - MAXIMUM QUALITY for beautiful maps
-GRID_SIZE = 0.08  # 8cm grid cells - LARGER to eliminate "walls behind walls" from depth variance
-MAX_POINTS = 1000000  # 1M points for maximum detail like reference image
-POINT_MERGE_DISTANCE = 0.008  # 8mm - VERY tight merging for crisp edges
+# 3D mapping parameters - DENSE for photorealistic coverage
+GRID_SIZE = 0.02  # 2cm grid cells - DENSE for solid coverage
+MAX_POINTS = 2000000  # 2M points for maximum density
+POINT_MERGE_DISTANCE = 0.005  # 5mm - tight merging
 
 # DYNAMIC OBJECT FILTERING - exclude moving things from map
 # Objects in this list will be excluded when detected
@@ -173,62 +173,53 @@ DETECTION_EXPIRY_MS = 500  # Detections expire after 500ms
 CONTINUOUS_PTZ_SCAN = True  # Enable continuous PTZ sweeping
 CONTINUOUS_SCAN_INTERVAL = 0.8  # Seconds between position changes
 
-# Camera 1 (front) is INSIDE the LIDAR tower - LIMITED field of view
-# Pan: -45 to +45 only (frame posts block further)
-# Tilt: can go all the way DOWN, only -75 UP max (negative=up, positive=down)
+# Camera 1 (front) - ±30° pan, -30° up to +90° down (full down for floor/ground)
+# TILT: negative = UP, positive = DOWN
+# Pan/tilt limited to avoid seeing robot chassis
 CAM1_SCAN_PATTERNS = {
     "mapping": [
-        # Per user: -30 to +30 pan, down and 30 up
-        # But cam1 is limited - max 15° pan before hitting frame
-        (0, 0, 0.6),      # Center
-        (-15, 0, 0.6),    # Left (max for cam1)
-        (15, 0, 0.6),     # Right (max for cam1)
-        (0, -15, 0.6),    # Up 15° (limited by frame)
-        (0, 0, 0.4),      # Back to center
+        (0, 0, 0.6),       # Center (straight ahead)
+        (-20, 0, 0.6),     # Slight left
+        (20, 0, 0.6),      # Slight right
+        (0, -20, 0.6),     # Slight up
+        (0, 90, 0.6),      # Full down (floor mapping)
+        (-20, -15, 0.6),   # Left + up
+        (20, -15, 0.6),    # Right + up
+        (-15, 60, 0.6),    # Left + down (floor)
+        (15, 60, 0.6),     # Right + down (floor)
+        (0, 0, 0.4),       # Back to center
     ],
     "detailed": [
-        (0, 0, 1.0),      # Center (forward)
-        (-15, 0, 1.0),    # Slight left
-        (15, 0, 1.0),     # Slight right
-        (0, -5, 1.0),     # Slight UP (negative = up)
-        (0, 0, 0.5),      # Return to center
+        (0, 0, 1.0),       # Center
+        (-20, 0, 1.0),     # Slight left
+        (20, 0, 1.0),      # Slight right
+        (0, -20, 1.0),     # Slight up
+        (0, 90, 1.0),      # Full down
+        (0, 0, 0.5),       # Return to center
     ]
 }
 
-# Camera 2 (rear) is on external arm - FULL field of view
-# MAXIMUM COVERAGE: floors, ceilings, walls - everything!
+# Camera 2 (rear) - same limits, faces backward
 CAM2_SCAN_PATTERNS = {
     "mapping": [
-        # Full sweep for maximum coverage of floors/ceilings/walls
-        # Pan: -30 to +30, Tilt: -45 (ceiling) to +60 (floor)
-        (0, 0, 0.5),       # Center level
-        (-30, 0, 0.5),     # Left 30°
-        (30, 0, 0.5),      # Right 30°
-        (0, -45, 0.5),     # CEILING (up 45°)
-        (0, 60, 0.5),      # FLOOR (down 60°)
-        (-30, -45, 0.5),   # Left + ceiling
-        (30, -45, 0.5),    # Right + ceiling
-        (-30, 60, 0.5),    # Left + floor
-        (30, 60, 0.5),     # Right + floor
-        (0, -30, 0.5),     # Upper walls
-        (-30, -30, 0.5),   # Upper left
-        (30, -30, 0.5),    # Upper right
-        (0, 30, 0.5),      # Lower walls
-        (-30, 30, 0.5),    # Lower left
-        (30, 30, 0.5),     # Lower right
+        (0, 0, 0.5),       # Center (straight back)
+        (-20, 0, 0.5),     # Slight left
+        (20, 0, 0.5),      # Slight right
+        (0, -20, 0.5),     # Slight up
+        (0, 90, 0.5),      # Full down (floor mapping)
+        (-20, -15, 0.5),   # Left + up
+        (20, -15, 0.5),    # Right + up
+        (-15, 60, 0.5),    # Left + down (floor)
+        (15, 60, 0.5),     # Right + down (floor)
         (0, 0, 0.3),       # Back to center
     ],
     "detailed": [
-        (0, 0, 1.0),
-        (-80, 0, 1.0),
-        (-40, 0, 1.0),
-        (40, 0, 1.0),
-        (80, 0, 1.0),
-        (0, -35, 1.0),    # High up
-        (0, 25, 1.0),     # Down
-        (-50, -20, 1.0),
-        (50, -20, 1.0),
-        (0, 0, 0.5),
+        (0, 0, 1.0),       # Center
+        (-20, 0, 1.0),     # Slight left
+        (20, 0, 1.0),      # Slight right
+        (0, -20, 1.0),     # Slight up
+        (0, 90, 1.0),      # Full down
+        (0, 0, 0.5),       # Return to center
     ]
 }
 
@@ -246,13 +237,13 @@ MIN_OBSERVATIONS = 1  # Just 1 observation = keep it!
 DECAY_TIME = 300.0  # 5 minutes before decay starts
 REMOVAL_TIME = 3600.0  # 1 HOUR before removal - keep everything!
 
-# Color enhancement - VIVID like reference image (neon greens, bright pinks)
-COLOR_SATURATION_BOOST = 2.0  # 2x saturation for vivid colors
-COLOR_CONTRAST_BOOST = 1.4  # 40% more contrast - punchy colors
-COLOR_BRIGHTNESS_BOOST = 1.15  # 15% brighter
+# Color enhancement - NATURAL but vivid (realistic photo colors)
+COLOR_SATURATION_BOOST = 1.4  # 40% saturation boost - vivid but realistic
+COLOR_CONTRAST_BOOST = 1.2  # 20% more contrast - clearer details
+COLOR_BRIGHTNESS_BOOST = 1.1  # 10% brighter - compensate for shadows
 
-# Point sampling density - MORE points per frame
-SAMPLE_DENSITY = 4  # Sample every 4th pixel - MORE DETAIL with 64GB GPU
+# Point sampling density - DENSE points per frame for solid surfaces
+SAMPLE_DENSITY = 3  # Sample every 3rd pixel - MAXIMUM DETAIL with 64GB GPU
 
 # Depth calibration
 DEPTH_SCALE_DEFAULT = 4.0  # Initial depth scale for monocular
@@ -388,7 +379,7 @@ class Hybrid3DMapper:
         # LIDAR BOUNDARY - prevents depth points from going beyond walls
         # Maps angle bins (0-359) to max distance in meters
         self.lidar_boundary = {}  # angle_deg -> distance_m
-        self.lidar_boundary_tolerance = 0.3  # Allow 30cm beyond LIDAR (for noise)
+        self.lidar_boundary_tolerance = 0.05  # Only 5cm tolerance - strict wall enforcement
 
         # MAPPING CONTROL - IDLE until user presses MAP 1 button
         self.mapping_active = False  # IDLE - waits for MAP 1 button press
@@ -436,6 +427,7 @@ class Hybrid3DMapper:
 
         # MAPPING SEQUENCE STATE
         self.mapping_sequence_active = False
+        self.manual_drive_mode = False  # When True, skip robot spins - user drives with Xbox
         self.current_heading = 0.0  # Track robot heading for spin commands
         self.capture_frame_for_map = False  # Flag to capture frame at current camera position
         self.frames_captured_this_position = 0  # Count frames captured at each position
@@ -456,6 +448,20 @@ class Hybrid3DMapper:
         print("[MAPPING] *** MAPPING STARTED ***")
         print("[MAPPING] GPU processing ACTIVE")
         print("[MAPPING] Full mapping sequence will begin!")
+        print("=" * 50)
+
+    def start_manual_mapping(self):
+        """Start MANUAL mapping mode - PTZ sweep + GPU processing, but NO robot movement
+        User drives with Xbox controller while cameras sweep and map builds"""
+        self.mapping_active = True
+        self.mapping_paused_by_override = False
+        self.mapping_sequence_active = True  # Enable PTZ sweeping
+        self.manual_drive_mode = True  # Flag to skip robot spin commands
+        print("=" * 50)
+        print("[MAPPING] *** MANUAL MAPPING MODE ***")
+        print("[MAPPING] GPU processing ACTIVE")
+        print("[MAPPING] Camera PTZ sweep ACTIVE")
+        print("[MAPPING] Robot movement: XBOX CONTROLLER (you drive!)")
         print("=" * 50)
 
     def stop_mapping(self):
@@ -1112,7 +1118,7 @@ class Hybrid3DMapper:
         for v in range(0, h, step):
             for u in range(0, w, step):
                 d = depth_meters[v, u]
-                if d < 0.3 or d > 8.0:  # Wider range - capture more
+                if d < 0.3 or d > 1.5:  # STRICT: Only 0.3-1.5m - beyond is unreliable
                     continue
 
                 # Get color from original image
@@ -1187,26 +1193,32 @@ class Hybrid3DMapper:
             return
 
         # DISTANCE FILTER: Depth estimates get worse with distance
-        MAX_DEPTH_DISTANCE = 8.0  # Don't trust depths beyond 8 meters
+        MAX_DEPTH_DISTANCE = 3.0  # Strict 3m limit - beyond this depth is unreliable
         point_dist = math.sqrt((point.x - robot_x)**2 + (point.y - robot_y)**2)
         if point_dist > MAX_DEPTH_DISTANCE:
             return
 
         # LIDAR BOUNDARY CHECK: Reject depth points beyond LIDAR walls
         # This prevents the "impossible" scattered dots outside walls
-        if point.source == "mono" and self.lidar_boundary:
-            # Calculate angle from robot to this point
+        if point.source == "mono":
             dx = point.x - robot_x
             dy = point.y - robot_y
             angle_rad = math.atan2(dy, dx) - self.robot_pose.heading
             angle_deg = math.degrees(angle_rad) % 360
-            # Find nearest angle bin
             angle_bin = int(angle_deg / 5) * 5
-            if angle_bin in self.lidar_boundary:
+
+            # If we have LIDAR data for this angle, use it
+            if self.lidar_boundary and angle_bin in self.lidar_boundary:
                 lidar_dist = self.lidar_boundary[angle_bin]
-                # Reject if depth point is beyond LIDAR wall + tolerance
-                if point_dist > lidar_dist + self.lidar_boundary_tolerance:
+                if point_dist > lidar_dist + 0.05:  # 5cm tolerance
                     return  # Point is beyond wall - impossible!
+            elif self.lidar_boundary:
+                # No LIDAR data for this angle - use nearest angle or reject
+                nearest_angles = [b for b in self.lidar_boundary.keys() if abs(b - angle_bin) <= 15]
+                if nearest_angles:
+                    min_dist = min(self.lidar_boundary[a] for a in nearest_angles)
+                    if point_dist > min_dist + 0.1:
+                        return  # Beyond nearest wall
 
         # Grid key for deduplication
         gx = int(point.x / GRID_SIZE)
@@ -1526,15 +1538,15 @@ class Hybrid3DMapper:
 
         # ======== QUALITY FILTERS - REALTIME MAPPING ========
         MIN_OBSERVATIONS_LIDAR = 1   # Show LIDAR immediately
-        MIN_OBSERVATIONS_MONO = 2    # Show mono after 2 observations
-        MIN_CONFIDENCE = 0.2         # Include mono depth
-        MIN_HEIGHT = 0.10            # 10cm above floor
-        MAX_HEIGHT = 2.2             # 2.2m max
-        VOXEL_SIZE = 0.10            # 10cm voxel grid - clean
+        MIN_OBSERVATIONS_MONO = 1    # Show mono immediately (was 2 - too strict)
+        MIN_CONFIDENCE = 0.15        # Lower threshold - show more depth points
+        MIN_HEIGHT = 0.05            # 5cm above floor (include low objects)
+        MAX_HEIGHT = 4.0             # 4m max for warehouses
+        VOXEL_SIZE = 0.05            # 5cm voxel grid - MORE DETAIL
         LIDAR_PRIORITY = True
 
-        # Limit points
-        MAX_SEND_POINTS = 8000
+        # Limit points - MORE for detailed maps
+        MAX_SEND_POINTS = 15000
 
         # Sort by confidence and observations for priority
         sorted_points = sorted(
@@ -1574,7 +1586,29 @@ class Hybrid3DMapper:
                 filtered_count += 1
                 continue
 
-            # 4. Voxel downsampling - one point per 3cm cube
+            # 3.5 DISTANCE CAP - Filter unreliable far points
+            # For warehouses, allow up to 6m - LIDAR calibrates depth at each position
+            robot_x = self.robot_pose.x
+            robot_y = self.robot_pose.y
+            dx = p.x - robot_x
+            dy = p.y - robot_y
+            point_dist = math.sqrt(dx*dx + dy*dy)
+            if point_dist > 6.0:  # 6m cap for warehouses - LIDAR validates accuracy
+                filtered_count += 1
+                continue
+
+            # 4. LIDAR BOUNDARY - Allow points up to walls (20cm tolerance for depth noise)
+            if not is_lidar and self.lidar_boundary:
+                angle_rad = math.atan2(dy, dx)
+                angle_deg = math.degrees(angle_rad) % 360
+                angle_bin = int(angle_deg / 5) * 5
+                if angle_bin in self.lidar_boundary:
+                    lidar_dist = self.lidar_boundary[angle_bin]
+                    if point_dist > lidar_dist + 0.20:  # 20cm tolerance for depth noise
+                        filtered_count += 1
+                        continue  # BEYOND WALL - reject!
+
+            # 5. Voxel downsampling - one point per 3cm cube
             vx = int(p.x / VOXEL_SIZE)
             vy = int(p.y / VOXEL_SIZE)
             vz = int(p.z / VOXEL_SIZE)
@@ -1605,7 +1639,32 @@ class Hybrid3DMapper:
             "pending_points": int(pending_count),
             "filtered_points": int(filtered_count),
             "stats": {k: int(v) for k, v in self.stats.items()},  # Ensure native ints
-            "format": "compact_v2"  # [x, y, z, r, g, b, obs, motion] arrays
+            "format": "compact_v2",  # [x, y, z, r, g, b, obs, motion] arrays
+            "robot_x": float(round(self.robot_pose.x, 2)),
+            "robot_y": float(round(self.robot_pose.y, 2))
+        }
+
+    def get_lidar_colors(self) -> Dict:
+        """
+        Get angle->color mapping for LIDAR walls.
+        Browser uses this to color the realtime LIDAR panels.
+        """
+        angle_colors = {}
+
+        # Find colored LIDAR points and map them to angles
+        for key, p in self.accumulated_points.items():
+            if p.source == "lidar" and p.confidence >= 0.9:
+                # Calculate angle from robot to point
+                dx = p.x - self.robot_pose.x
+                dy = p.y - self.robot_pose.y
+                angle = int(math.degrees(math.atan2(dy, dx)) + 90) % 360
+
+                # Store color for this angle (keep most recent)
+                angle_colors[angle] = [int(p.r), int(p.g), int(p.b)]
+
+        return {
+            "type": "lidar_colors",
+            "colors": angle_colors  # {angle: [r,g,b], ...}
         }
 
     def clear_map(self):
@@ -2015,7 +2074,7 @@ class Hybrid3DMapper:
 
     async def continuous_ptz_scan(self, ws):
         """
-        Runs the full mapping sequence when mapping is active
+        Runs mapping - either full autonomous sequence OR manual mode (just camera sweep)
         """
         print("[PTZ] Waiting for mapping to start...", flush=True)
 
@@ -2030,12 +2089,73 @@ class Hybrid3DMapper:
                     await asyncio.sleep(0.5)
                     continue
 
-                # Run the full mapping sequence
-                await self.full_mapping_sequence(ws)
+                # MANUAL MODE: Just sweep cameras continuously, user drives with Xbox
+                if self.manual_drive_mode:
+                    await self.manual_mapping_loop(ws)
+                else:
+                    # AUTONOMOUS MODE: Full sequence with robot spins
+                    await self.full_mapping_sequence(ws)
 
             except Exception as e:
                 print(f"[PTZ] Error: {e}", flush=True)
                 await asyncio.sleep(1)
+
+    async def manual_mapping_loop(self, ws):
+        """
+        MANUAL MAPPING: Camera sweep + GPU depth, but NO robot movement.
+        User drives with Xbox controller while cameras continuously scan.
+        """
+        print("", flush=True)
+        print("╔" + "═" * 78 + "╗", flush=True)
+        print("║" + " " * 15 + "MANUAL MAPPING MODE - YOU DRIVE WITH XBOX" + " " * 22 + "║", flush=True)
+        print("╠" + "═" * 78 + "╣", flush=True)
+        print("║  🎮 Robot Control: XBOX CONTROLLER (you drive!)" + " " * 30 + "║", flush=True)
+        print("║  📷 Camera PTZ: AUTO-SWEEP (cameras scan continuously)" + " " * 23 + "║", flush=True)
+        print("║  🧠 Depth AI: ACTIVE (GPU processing every frame)" + " " * 28 + "║", flush=True)
+        print("║  🗺️  Mapping: ACTIVE (building 3D map as you drive)" + " " * 26 + "║", flush=True)
+        print("╚" + "═" * 78 + "╝", flush=True)
+        print("", flush=True)
+
+        await self.send_ai_status(ws, "MANUAL_MAPPING", "Drive with Xbox - cameras sweeping", 0.0, {
+            "mode": "manual",
+            "robot_control": "Xbox Controller",
+            "cameras": "Auto-sweep",
+            "gpu": "Depth AI active"
+        })
+
+        sweep_count = 0
+        while self.mapping_sequence_active and self.manual_drive_mode:
+            try:
+                sweep_count += 1
+                print(f"\n[MANUAL] 📷 Camera sweep #{sweep_count}...", flush=True)
+
+                # Sweep both cameras
+                await self.scan_both_cameras(ws)
+
+                # Report progress
+                points = len(self.accumulated_points)
+                print(f"[MANUAL] ✓ Sweep complete: {points:,} total points", flush=True)
+
+                await self.send_ai_status(ws, "MANUAL_MAPPING", f"Sweep #{sweep_count} done", 0.5, {
+                    "sweeps": sweep_count,
+                    "total_points": points,
+                    "depth_points": self.stats.get('mono_points', 0),
+                    "lidar_points": self.stats.get('lidar_points', 0)
+                })
+
+                # Auto-save periodically
+                if sweep_count % 5 == 0 and PERSISTENCE_ENABLED:
+                    self._save_confirmed_walls()
+                    print(f"[MANUAL] 💾 Auto-saved map ({points:,} points)", flush=True)
+
+                # Small delay between sweeps
+                await asyncio.sleep(0.5)
+
+            except Exception as e:
+                print(f"[MANUAL] Sweep error: {e}", flush=True)
+                await asyncio.sleep(1)
+
+        print("[MANUAL] Manual mapping stopped", flush=True)
 
 
 # ============ WEBSOCKET CLIENT ============
@@ -2098,27 +2218,12 @@ async def handle_vps_connection():
                         data.get("odomHeadingDeg", data.get("heading", 0))
                     )
 
-                # COMPASS heading - USE THIS since encoders are broken!
+                # COMPASS heading - use to supplement encoder heading
+                # Encoders ARE working - use compass only for absolute heading reference
                 if data.get("type") == "compass":
                     compass_heading = data.get("heading", 0)
-                    # Update heading only, keep x/y position
-                    mapper.robot_pose.heading = math.radians(compass_heading)
-                    # Also update current_heading for the mapping sequence
+                    # Store for mapping sequence use, but don't overwrite encoder pose
                     mapper.current_heading = compass_heading
-
-                # VELOCITY-BASED position estimate (since encoders broken)
-                if data.get("type") == "teensy_telemetry":
-                    velL = data.get("velL", 0)  # RPM
-                    velR = data.get("velR", 0)  # RPM
-                    # Average velocity in m/s (8" wheel = 0.2m circumference)
-                    avg_vel_mps = (velL + velR) / 2.0 * 0.2 / 60.0
-                    if abs(avg_vel_mps) > 0.01:  # Moving
-                        dt = 0.2  # ~200ms between TELEM
-                        dist = avg_vel_mps * dt
-                        # Update position based on heading
-                        mapper.robot_pose.x += dist * math.sin(mapper.robot_pose.heading)
-                        mapper.robot_pose.y += dist * math.cos(mapper.robot_pose.heading)
-                        print(f"[VELOCITY] vel={avg_vel_mps:.2f}m/s pos=({mapper.robot_pose.x:.2f}, {mapper.robot_pose.y:.2f})")
 
                 # LIDAR scan
                 if data.get("type") == "lidar":
@@ -2145,6 +2250,15 @@ async def handle_vps_connection():
                             "type": "mapping_status",
                             "active": True,
                             "message": "Mapping started - GPU processing active"
+                        }))
+                    elif cmd == "START_MANUAL":
+                        # MANUAL MODE: PTZ sweep + GPU processing, YOU drive with Xbox
+                        mapper.start_manual_mapping()
+                        await ws.send(json.dumps({
+                            "type": "mapping_status",
+                            "active": True,
+                            "mode": "manual",
+                            "message": "Manual mapping - YOU drive with Xbox, cameras sweep automatically"
                         }))
                     elif cmd == "STOP":
                         mapper.stop_mapping()
@@ -2390,9 +2504,16 @@ async def handle_hybrid_connection():
             asyncio.create_task(mapper.continuous_ptz_scan(ws))
             print("[PTZ] Continuous scan task started - cameras will sweep constantly during mapping")
 
-        # AUTO-START DISABLED - User must press MAP 1 button in UI to start mapping
-        # This is a safety requirement - only the user can initiate robot movement
-        print("[INIT] Mapper ready - waiting for MAP 1 button press in UI...", flush=True)
+        # AUTO-START in MANUAL mode - PTZ sweep + GPU processing, user drives with Xbox
+        # Safety: NO robot movement commands sent - only cameras move
+        print("[INIT] AUTO-STARTING in MANUAL MAPPING MODE...", flush=True)
+        mapper.start_manual_mapping()
+        await ws.send(json.dumps({
+            "type": "mapping_status",
+            "active": True,
+            "mode": "manual",
+            "message": "Manual mapping active - drive with Xbox, cameras sweep automatically"
+        }))
 
         async for message in ws:
             try:
@@ -2431,18 +2552,17 @@ async def handle_hybrid_connection():
                     cam = data.get("camera", 1)
                     mapper.update_camera_ptz(cam, data.get("pan", 0), data.get("tilt", 0))
 
-                # Dead reckoning - update robot pose
+                # Dead reckoning - update robot pose (use degrees field)
                 elif data.get("type") == "dead_reckoning":
                     mapper.update_pose(
                         data.get("odomX", 0),
                         data.get("odomY", 0),
-                        data.get("odomHeading", 0)
+                        data.get("odomHeadingDeg", 0)
                     )
 
-                # COMPASS heading - critical for accurate turns!
+                # COMPASS heading - store for reference but don't overwrite encoder pose
                 elif data.get("type") == "compass":
                     compass_heading = data.get("heading", 0)
-                    mapper.robot_pose.heading = math.radians(compass_heading)
                     mapper.current_heading = compass_heading
 
                 # Clear map command
@@ -2519,6 +2639,12 @@ async def handle_hybrid_connection():
                         try:
                             map_json = json.dumps(map_data, ensure_ascii=True)
                             await ws.send(map_json)
+
+                            # Also send LIDAR colors for wall texturing
+                            lidar_colors = mapper.get_lidar_colors()
+                            if lidar_colors["colors"]:
+                                await ws.send(json.dumps(lidar_colors))
+
                             print(f"[DEBUG] Sent {len(map_json)} bytes to VPS", flush=True)
                         except Exception as e:
                             print(f"[ERROR] Failed to send map: {e}", flush=True)

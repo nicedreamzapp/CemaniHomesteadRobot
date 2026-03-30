@@ -245,6 +245,7 @@ const OccupancyGrid = {
         y: world.y,
         state: data.state,
         confidence: data.confidence,
+        visits: data.visits || 1,
         type: data.type
       });
     }

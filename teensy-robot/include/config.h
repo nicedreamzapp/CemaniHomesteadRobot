@@ -5,7 +5,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEENSY_VERSION "4.3.0"  // Fixed telemetry blocking delays
+#define TEENSY_VERSION "4.4.0"  // Don't zero joystick on watchdog - fixes re-push requirement
 
 // ===== ROBOT CONFIGURATION =====
 #define INVERT_DRIVER_1 true

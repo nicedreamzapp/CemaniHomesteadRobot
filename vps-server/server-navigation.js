@@ -50,27 +50,13 @@ function updateSonar(fl, fr, rl, rr) {
   latestSonar = { fl, fr, rl, rr };
 }
 
-// Stall detection - if driving but encoders don't change, robot is stuck
+// Encoder tracking for explore (encoders work fine)
 let lastEncoderL = 0;
 let lastEncoderR = 0;
-let stallStartTime = 0;
-let isStalled = false;
-const STALL_TIMEOUT_MS = 1500;  // 1.5 seconds of no encoder change = stalled
 
 function updateEncoders(posL, posR) {
-  if (posL !== lastEncoderL || posR !== lastEncoderR) {
-    lastEncoderL = posL;
-    lastEncoderR = posR;
-    stallStartTime = Date.now();
-    isStalled = false;
-  } else if (exploreActive && reactiveState === 'forward' && stallStartTime > 0) {
-    if (Date.now() - stallStartTime > STALL_TIMEOUT_MS) {
-      if (!isStalled) {
-        isStalled = true;
-        console.log(`[EXPLORE-STALL] Robot stuck! Encoders unchanged for ${STALL_TIMEOUT_MS}ms`);
-      }
-    }
-  }
+  lastEncoderL = posL;
+  lastEncoderR = posR;
 }
 
 // Safety messages from Teensy (tilt, etc)
@@ -887,17 +873,7 @@ function reactiveExplore() {
     return;
   }
 
-  // STALL: Wheels spinning but not moving = stuck against something
-  if (isStalled && reactiveState === 'forward') {
-    rs.send(JSON.stringify({ type: "serial_cmd", cmd: "AUTO_STOP" }));
-    reactiveState = Math.random() > 0.5 ? 'turning_left' : 'turning_right';
-    reactiveTimer = Date.now();
-    console.log('[EXPLORE] STALL detected - wheels spinning, turning away');
-    state.broadcast({ type: 'nav_status', status: 'stalled' });
-    isStalled = false;
-    stallStartTime = Date.now();
-    return;
-  }
+  // Encoders work - no stall detection needed
 
   // Check LIDAR for obstacles
   const odom = odometry.getOdometry();

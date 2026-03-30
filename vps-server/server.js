@@ -11,6 +11,7 @@ const path = require("path");
 const state = require('./server-state');
 const odometry = require('./server-odometry');
 const navigation = require('./server-navigation');
+const scanMatcher = require('./server-scan-matcher');
 const ptzServer = require('./ptz-server');
 const compile = require('./compile');
 const agent = require('./server-agent');
@@ -815,6 +816,27 @@ function handleMessage(ws, data) {
         console.log(`[NAV-ERROR] processLidarScan failed: ${e.message}`);
       }
 
+      // SCAN MATCHING: Use LIDAR to determine robot position (replaces broken encoders)
+      try {
+        const compassHeading = state.robotStatus.compassHeading !== undefined
+          ? state.robotStatus.compassHeading * Math.PI / 180  // deg to rad
+          : undefined;
+        const matchResult = scanMatcher.matchScans(data.points, compassHeading);
+        if (matchResult) {
+          // Broadcast updated position to all browsers
+          state.broadcast({
+            type: "dead_reckoning",
+            x: matchResult.x,
+            y: matchResult.y,
+            heading: matchResult.heading * 180 / Math.PI,
+            source: "scan_match",
+            confidence: matchResult.confidence
+          });
+        }
+      } catch (e) {
+        console.log(`[SLAM-ERROR] scanMatch failed: ${e.message}`);
+      }
+
       // LIDAR SAFETY: Check for obstacles in MAP mode
       // Only active when robot is in mapping mode
       if (state.robotStatus.mode === "mapping") {
@@ -1551,8 +1573,12 @@ function handleSerialData(data, ws) {
     const parts = data.data.split(",");
     if (parts.length >= 5) {
       const heading = parseFloat(parts[1]);
-      console.log(`[COMPASS] Heading: ${heading.toFixed(1)}°`);
-      state.broadcast({ type: "compass", heading: heading, x: parseInt(parts[2]), y: parseInt(parts[3]), z: parseInt(parts[4]) });
+      // Calibration: raw 96° = actual 128° (308° NW rear - 180° flip = 128° SE front)
+      const COMPASS_OFFSET = 32;
+      const calibrated = (heading + COMPASS_OFFSET) % 360;
+      state.robotStatus.compassHeading = calibrated;  // Store for scan matcher
+      console.log(`[COMPASS] Heading: ${calibrated.toFixed(1)}° (raw: ${heading.toFixed(1)}°)`);
+      state.broadcast({ type: "compass", heading: calibrated, raw: heading, x: parseInt(parts[2]), y: parseInt(parts[3]), z: parseInt(parts[4]) });
     }
   }
 

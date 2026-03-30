@@ -57,29 +57,35 @@ void readDriverTelemetry() {
 
   // Then read one other register per cycle (slower data like temps)
   // Cases 0-6: voltage, motorTemp1, motorTemp2, drvTemp1, drvTemp2, posL, posR
+  // delay(3) before each read ensures Modbus bus has settled from velocity reads
   switch (telemReadIndex) {
     case 0:
       // Bus voltage from driver 1 (register 0x20A1) - battery voltage
+      delay(3);
       val = readModbusRegister(1, 0x20A1);
       if (val >= 0) telemetry_busVoltage = (uint16_t)val;
       break;
     case 1:
       // Motor temperature from driver 1 (RIGHT side) (register 0x20A4)
+      delay(3);
       val = readModbusRegister(1, 0x20A4);
       if (val >= 0) telemetry_motorTemp1 = (uint16_t)val;
       break;
     case 2:
       // Motor temperature from driver 2 (LEFT side) (register 0x20A4)
+      delay(3);
       val = readModbusRegister(2, 0x20A4);
       if (val >= 0) telemetry_motorTemp2 = (uint16_t)val;
       break;
     case 3:
       // Driver 1 temperature (register 0x20B0)
+      delay(3);
       val = readModbusRegister(1, 0x20B0);
       if (val >= 0) telemetry_driverTemp1 = (uint16_t)val;
       break;
     case 4:
       // Driver 2 temperature (register 0x20B0)
+      delay(3);
       val = readModbusRegister(2, 0x20B0);
       if (val >= 0) telemetry_driverTemp2 = (uint16_t)val;
       break;

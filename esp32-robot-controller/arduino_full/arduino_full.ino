@@ -108,7 +108,7 @@ void setup() {
 
   Serial.begin(115200);
   delay(100);  // Minimal delay for serial init
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.13.0 - SERIAL THROTTLE FIX!");
+  Serial.println("\n[ESP32] Cemani Robot Controller v4.4.0 - OFFLINE XBOX FIX!");
 
   // Initialize NVS - keeps paired Bluetooth devices for instant reconnection
   nvs_flash_init();
@@ -136,9 +136,11 @@ void setup() {
   wifiMulti.addAP(WIFI_SSID_2, WIFI_PASS_2);
   wifiMulti.addAP(WIFI_SSID_3, WIFI_PASS_3);
 
+  // Try WiFi but don't block long - Xbox controller is more important than WiFi
+  // wifiMulti.run() blocks ~500ms per attempt, so limit to 6 attempts (3 seconds)
   int attempts = 0;
-  while (wifiMulti.run() != WL_CONNECTED && attempts < 20) {
-    delay(500);
+  while (wifiMulti.run() != WL_CONNECTED && attempts < 6) {
+    delay(100);
     Serial.print(".");
     attempts++;
     BP32.update();
@@ -251,16 +253,20 @@ void loop() {
   }
 
   // ╔═══════════════════════════════════════════════════════════════════════════════╗
-  // ║  WEBSOCKET - Time-limited processing to prevent blocking Xbox                 ║
+  // ║  WEBSOCKET - ONLY process when WiFi is connected!                             ║
+  // ║  SSL reconnection attempts block for SECONDS on ESP32, starving Bluetooth.    ║
+  // ║  Without this check, Xbox controller dies whenever there's no WiFi.           ║
   // ╚═══════════════════════════════════════════════════════════════════════════════╝
-  unsigned long wsStart = millis();
-  webSocket.loop();
-  unsigned long wsTime = millis() - wsStart;
-  if (wsTime > WS_LOOP_TIME_LIMIT) {
-    Serial.printf("[WARNING] WebSocket took %lums (limit %lums) - may delay Xbox!\n", wsTime, WS_LOOP_TIME_LIMIT);
-  }
+  if (WiFi.status() == WL_CONNECTED) {
+    unsigned long wsStart = millis();
+    webSocket.loop();
+    unsigned long wsTime = millis() - wsStart;
+    if (wsTime > WS_LOOP_TIME_LIMIT) {
+      Serial.printf("[WARNING] WebSocket took %lums (limit %lums) - may delay Xbox!\n", wsTime, WS_LOOP_TIME_LIMIT);
+    }
 
-  ArduinoOTA.handle();  // Check for wireless OTA updates
+    ArduinoOTA.handle();  // Check for wireless OTA updates
+  }
 
   // WiFi monitoring - NON-BLOCKING! Xbox must never be delayed by WiFi
   // Only check every 2 seconds, and NEVER block
@@ -274,14 +280,24 @@ void loop() {
       }
     } else {
       wifiDropCount++;
+      // CRITICAL: Mark WebSocket as disconnected so sendTXT() calls don't block!
+      // Without this, wsConnected stays true and sendTXT() blocks on dead socket,
+      // which starves Bluetooth and kills turning.
+      if (wsConnected) {
+        wsConnected = false;
+        Serial.println("[WS] Marked disconnected (WiFi lost)");
+      }
       Serial.printf("[WiFi] Disconnected! Attempt %d... (non-blocking)\n", wifiDropCount);
       // DO NOT call wifiMulti.run() here - it BLOCKS for seconds!
-      // WiFi will auto-reconnect in background
-      // Only force disconnect after long timeout
-      if (now - lastWiFiConnected > 30000) {  // 30 seconds without WiFi
-        Serial.println("[WiFi] Long disconnect - triggering reconnect");
+      // WiFi auto-reconnects in background via ESP32 WiFi stack
+      // Only attempt reconnect every 60 seconds to minimize blocking
+      if (now - lastWiFiConnected > 60000) {  // 60 seconds without WiFi
+        Serial.println("[WiFi] Long disconnect - triggering background reconnect");
         WiFi.disconnect(false);  // Non-blocking disconnect
-        WiFi.begin();  // Non-blocking reconnect attempt
+        // WiFi.begin() without args uses last known credentials
+        // This is relatively non-blocking but only do it rarely
+        WiFi.begin();
+        lastWiFiConnected = now;  // Reset timer so we don't spam reconnects
       }
     }
   }
@@ -302,14 +318,18 @@ void loop() {
   // Small delay - but not too long to avoid delaying Xbox polling
   delay(5);  // Reduced from 10ms to 5ms for faster Xbox response
 
-  // WATCHDOG: Reboot if WebSocket disconnected too long
+  // WATCHDOG: Reboot if WiFi IS connected but WebSocket is stuck
+  // Only reboot when WiFi is available - if there's no WiFi (e.g. farmers market),
+  // rebooting won't help and just kills the Xbox controller connection
   if (wsConnected) {
     lastWsConnected = now;
   } else if (WiFi.status() == WL_CONNECTED && now - lastWsConnected > WS_WATCHDOG_TIMEOUT) {
-    Serial.println("[WATCHDOG] No WebSocket for 2min - Rebooting!");
+    // WiFi is up but WebSocket can't connect - reboot may help
+    Serial.println("[WATCHDOG] WiFi up but no WebSocket for 2min - Rebooting!");
     delay(100);
     ESP.restart();
   }
+  // No WiFi = no reboot. Xbox controller works fine without internet.
 }
 
 void onConnectedGamepad(GamepadPtr gp) {
