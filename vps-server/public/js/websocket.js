@@ -597,11 +597,13 @@ function handleSerialData(d) {
     return;
   }
 
-  // Parse COMPASS data: COMPASS,heading,x,y,z
+  // Parse COMPASS data: COMPASS,heading,x,y,z (raw serial - apply calibration offset)
   if (d.data && d.data.startsWith('COMPASS,')) {
     const parts = d.data.split(',');
     if (parts.length >= 5 && window.lidar3dModule) {
-      const heading = parseFloat(parts[1]);
+      const COMPASS_OFFSET = 32;  // Calibration: raw 96° back = 128° front (308° NW rear - 180° flip)
+      const rawHeading = parseFloat(parts[1]);
+      const heading = (rawHeading + COMPASS_OFFSET) % 360;
       const x = parseInt(parts[2]);
       const y = parseInt(parts[3]);
       const z = parseInt(parts[4]);

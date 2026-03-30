@@ -9,7 +9,7 @@ let lidar3dFrameCount = 0;
 let lidar3dWorldContainer = null;
 let lidar3dSlamPoints = [];
 let lidar3dSlamCloud = null;
-let showSlamFloorPoints = false;  // DISABLED - the "universe of dots" is useless
+let showSlamFloorPoints = false;  // Disabled - old data mixes with new and gets confusing
 
 // Persistent wall accumulation - walls stay in world coordinates
 let accumulatedWalls = [];
@@ -33,8 +33,8 @@ let autoSaveEnabled = true;
 let lastAutoSavePosition = { x: 0, y: 0 };  // Track where we last saved
 const AUTO_SAVE_MIN_DISTANCE = 200;  // Must move 2m from last save to create new fingerprint
 let lidar3dUltrasonicCones = { FL: null, FR: null, RL: null, RR: null };
-const SLAM_MAX_POINTS = 50000;
-const SLAM_POINT_SPACING = 0.03;
+const SLAM_MAX_POINTS = 500000;  // Keep lots of points - build full room map
+const SLAM_POINT_SPACING = 0.02;  // Denser points = cleaner wall lines
 let lastLidarUpdate = 0;
 const LIDAR_UPDATE_INTERVAL = 200;  // 5fps - reduces flashing and jitter from scan noise
 let animFrameCount = 0;
@@ -43,8 +43,8 @@ let animFrameCount = 0;
 let occupancyGridMesh = null;
 let lastGridUpdate = 0;
 const GRID_UPDATE_INTERVAL = 500;  // Update visualization every 500ms
-let mappingEnabled = true;  // Enabled - builds occupancy grid as robot explores
-let showOccupancyGrid = false;  // DISABLED - occupancy grid looks bad, only enable for explore mode
+let mappingEnabled = false;  // Disabled - occupancy grid is noisy
+let showOccupancyGrid = false;  // Disabled
 
 // Navigation path visualization
 let navPathLine = null;
@@ -148,7 +148,7 @@ function initLidar3D() {
   const h = container.clientHeight;
   lidar3dCamera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
   // Start with a nice elevated isometric-ish view
-  lidar3dCamera.position.set(4, 6, 4);
+  lidar3dCamera.position.set(0, 10, 0.01);  // Top-down birdseye by default (Roomba map view)
   lidar3dCamera.lookAt(0, 0, 0);
 
   lidar3dRenderer = new THREE.WebGLRenderer({
@@ -232,19 +232,7 @@ function initLidar3D() {
   lidar3dWorldContainer.add(ground);
   groundPlane = ground;
 
-  // Primary grid - subtle warm-tinted lines, 1m spacing
-  const gridMain = new THREE.GridHelper(groundSize, 50, 0x1a3a4a, 0x0d1d28);
-  gridMain.position.y = -0.02;
-  gridMain.material.opacity = 0.4;
-  gridMain.material.transparent = true;
-  lidar3dWorldContainer.add(gridMain);
-
-  // Secondary fine grid - very subtle, 0.25m spacing
-  const gridFine = new THREE.GridHelper(groundSize, 200, 0x0a1520, 0x060d14);
-  gridFine.position.y = -0.025;
-  gridFine.material.opacity = 0.15;
-  gridFine.material.transparent = true;
-  lidar3dWorldContainer.add(gridFine);
+  // Ground grids removed - clean dark floor only
 
   // Distance rings around robot - thin elegant arcs
   for (let r = 1; r <= 6; r++) {
@@ -293,18 +281,18 @@ function initLidar3D() {
   lidar3dRobot.rotation.y = Math.PI;  // Rotate 180° so front faces forward (up the screen)
   lidar3dScene.add(lidar3dRobot);
 
-  // Trail line - DISABLED (was cluttering the view)
-  // lidar3dTrailGeom = new THREE.BufferGeometry();
-  // const trailMat = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8 });
+  // Trail line - DISABLED (odometry noise creates messy squiggles)
+  lidar3dTrailGeom = new THREE.BufferGeometry();
+  // const trailMat = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.6, linewidth: 2 });
   // lidar3dTrailLine = new THREE.Line(lidar3dTrailGeom, trailMat);
   // lidar3dWorldContainer.add(lidar3dTrailLine);
 
-  // SLAM point cloud - DISABLED (was cluttering the view)
-  // lidar3dSlamCloud = new THREE.Points(
-  //   new THREE.BufferGeometry(),
-  //   new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, opacity: 0.8 })
-  // );
-  // lidar3dWorldContainer.add(lidar3dSlamCloud);
+  // SLAM point cloud - persistent wall map that builds as robot moves
+  lidar3dSlamCloud = new THREE.Points(
+    new THREE.BufferGeometry(),
+    new THREE.PointsMaterial({ size: 0.06, vertexColors: true, transparent: true, opacity: 0.85, sizeAttenuation: true })
+  );
+  lidar3dWorldContainer.add(lidar3dSlamCloud);
 
   lidar3dInitialized = true;
   animateLidar3D();
@@ -760,23 +748,27 @@ function getLidarPointTexture() {
 
 // Modern cyan-to-magenta gradient for distance coloring
 function getDistanceColor3D(dist) {
-  // Bright visible colors: close = bright green, mid = bright cyan, far = bright blue
+  // Warm-to-cool: close = red/orange, mid = yellow/green, far = cyan/blue
   const minDist = 200, maxDist = 5000;
   const t = Math.max(0, Math.min(1, (dist - minDist) / (maxDist - minDist)));
 
   const color = new THREE.Color();
-  if (t < 0.4) {
-    // Close: bright green-cyan
-    const t2 = t / 0.4;
-    color.setRGB(0.1, 1.0 - t2 * 0.2, 0.4 + t2 * 0.6);
-  } else if (t < 0.7) {
-    // Mid: bright cyan-blue
-    const t2 = (t - 0.4) / 0.3;
-    color.setRGB(0.1, 0.8 - t2 * 0.4, 1.0);
+  if (t < 0.25) {
+    // Very close: red -> orange
+    const t2 = t / 0.25;
+    color.setRGB(1.0, t2 * 0.5, 0.0);
+  } else if (t < 0.5) {
+    // Close-mid: orange -> yellow
+    const t2 = (t - 0.25) / 0.25;
+    color.setRGB(1.0, 0.5 + t2 * 0.5, 0.0);
+  } else if (t < 0.75) {
+    // Mid-far: yellow -> green/cyan
+    const t2 = (t - 0.5) / 0.25;
+    color.setRGB(1.0 - t2 * 0.8, 1.0, t2 * 0.5);
   } else {
-    // Far: bright blue-purple
-    const t2 = (t - 0.7) / 0.3;
-    color.setRGB(0.3 + t2 * 0.4, 0.4 - t2 * 0.2, 1.0);
+    // Far: cyan -> blue
+    const t2 = (t - 0.75) / 0.25;
+    color.setRGB(0.2 - t2 * 0.1, 1.0 - t2 * 0.5, 0.5 + t2 * 0.5);
   }
   return color;
 }
@@ -812,190 +804,84 @@ function updateLidar3D(points) {
     }
   }
 
-  // Clear old walls and point cloud (realtime walls are in scene, not worldContainer)
+  // Clean up old walls
   lidar3dWalls.forEach(m => {
     if (m.geometry) m.geometry.dispose();
     if (m.material) m.material.dispose();
-    if (lidar3dScene) lidar3dScene.remove(m);
+    lidar3dScene.remove(m);
   });
   lidar3dWalls = [];
   if (lidar3dPointCloud) {
-    if (lidar3dPointCloud.geometry) lidar3dPointCloud.geometry.dispose();
-    if (lidar3dPointCloud.material) lidar3dPointCloud.material.dispose();
-    if (lidar3dScene) lidar3dScene.remove(lidar3dPointCloud);
+    lidar3dPointCloud.geometry.dispose();
+    lidar3dPointCloud.material.dispose();
+    lidar3dScene.remove(lidar3dPointCloud);
+    lidar3dPointCloud = null;
   }
 
   points.sort((a, b) => a[0] - b[0]);
 
+  // === STEP 1: Calculate all LIDAR hit positions ===
   const positions = [], colors = [];
-  const slamNewPoints = [];
+  for (const [angle, dist] of points) {
+    if (dist < 100 || dist > 8000) continue;  // Skip invalid
+    const rad = (angle - 90) * Math.PI / 180;
+    const x = (dist / 1000) * Math.cos(rad);
+    const z = (dist / 1000) * Math.sin(rad);
+    positions.push(x, 0.15, z);
+    // Sparkling white dots
+    colors.push(1.0, 1.0, 1.0);
+  }
+
+  // === STEP 2: Tiny sparkly dots at every LIDAR hit ===
+  if (positions.length > 0) {
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    lidar3dPointCloud = new THREE.Points(geom, new THREE.PointsMaterial({
+      size: 0.08,
+      map: getLidarPointTexture(),
+      vertexColors: true,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 1.0,
+      alphaTest: 0.02,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    lidar3dScene.add(lidar3dPointCloud);
+  }
+
+  // === STEP 3: Distance-colored sparkly dots above the white ones ===
+  const colorPositions = [];
+  const colorColors = [];
 
   for (const [angle, dist] of points) {
+    if (dist < 100 || dist > 8000) continue;
     const rad = (angle - 90) * Math.PI / 180;
-    const localX = (dist / 1000) * Math.cos(rad);
-    const localZ = (dist / 1000) * Math.sin(rad);
-
-    positions.push(localX, 0.24, localZ);
+    const x = (dist / 1000) * Math.cos(rad);
+    const z = (dist / 1000) * Math.sin(rad);
+    colorPositions.push(x, 0.25, z);  // Above the white dots
     const c = getDistanceColor3D(dist);
-    colors.push(c.r, c.g, c.b);
-
-    // SLAM accumulation
-    const worldX = robotX + localX * Math.cos(robotHeading) - localZ * Math.sin(robotHeading);
-    const worldZ = -robotZ + localX * Math.sin(robotHeading) + localZ * Math.cos(robotHeading);
-
-    if (dist > 350 && dist < 5000) {  // 350mm min = skip robot body
-      slamNewPoints.push({ x: worldX, z: worldZ, color: c });
-    }
+    colorColors.push(c.r, c.g, c.b);
   }
 
-  // Update occupancy grid if enabled
-  if (mappingEnabled && window.OccupancyGrid) {
-    window.OccupancyGrid.processLidarScan(robotX, -robotZ, robotHeading, points);
-  }
-
-  // Check for recognized area (fingerprint matching)
-  checkForRecognizedArea(points);
-
-  // Auto-save fingerprint when we have good data
-  autoSaveFingerprint(points);
-
-  // Add SLAM points with spacing filter
-  for (const np of slamNewPoints) {
-    let tooClose = false;
-    const checkStart = Math.max(0, lidar3dSlamPoints.length - 500);
-    for (let i = checkStart; i < lidar3dSlamPoints.length; i++) {
-      const sp = lidar3dSlamPoints[i];
-      const dx = np.x - sp.x, dz = np.z - sp.z;
-      if (dx * dx + dz * dz < SLAM_POINT_SPACING * SLAM_POINT_SPACING) {
-        tooClose = true;
-        break;
-      }
-    }
-    if (!tooClose) lidar3dSlamPoints.push(np);
-  }
-
-  while (lidar3dSlamPoints.length > SLAM_MAX_POINTS) {
-    lidar3dSlamPoints.shift();
-  }
-
-  // Update SLAM cloud - only if enabled (disabled by default - shows "universe of dots")
-  if (showSlamFloorPoints && lidar3dSlamCloud && lidar3dSlamPoints.length > 0) {
-    const slamPos = [], slamCol = [];
-    for (const sp of lidar3dSlamPoints) {
-      slamPos.push(sp.x, 0.01, sp.z);
-      slamCol.push(sp.color.r * 0.6, sp.color.g * 0.6, sp.color.b * 0.6);
-    }
-    const slamGeom = new THREE.BufferGeometry();
-    slamGeom.setAttribute('position', new THREE.Float32BufferAttribute(slamPos, 3));
-    slamGeom.setAttribute('color', new THREE.Float32BufferAttribute(slamCol, 3));
-    lidar3dSlamCloud.geometry.dispose();
-    lidar3dSlamCloud.geometry = slamGeom;
-  } else if (lidar3dSlamCloud) {
-    // Clear the SLAM cloud when disabled
-    lidar3dSlamCloud.geometry.dispose();
-    lidar3dSlamCloud.geometry = new THREE.BufferGeometry();
-  }
-
-  // Big bright dots at each LIDAR wall hit point
-  const pointGeom = new THREE.BufferGeometry();
-  pointGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  pointGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  lidar3dPointCloud = new THREE.Points(pointGeom, new THREE.PointsMaterial({
-    size: 0.3,
-    map: getLidarPointTexture(),
-    vertexColors: true,
-    sizeAttenuation: true,
-    transparent: true,
-    opacity: 1.0,
-    alphaTest: 0.02,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending
-  }));
-  lidar3dScene.add(lidar3dPointCloud);
-
-  // Solid wall outline - connects adjacent scan points on the same wall
-  for (let i = 0; i < points.length - 1; i++) {
-    const [a1, d1] = points[i], [a2, d2] = points[i + 1];
-    let diff = a2 - a1; if (diff < 0) diff += 360;
-    if (diff > 5) continue;  // Scan gap
-
-    // Only connect points on the SAME wall (similar distance)
-    if (Math.abs(d1 - d2) > 400) continue;
-
-    const r1 = (a1 - 90) * Math.PI / 180, r2 = (a2 - 90) * Math.PI / 180;
-    const x1 = (d1 / 1000) * Math.cos(r1), z1 = (d1 / 1000) * Math.sin(r1);
-    const x2 = (d2 / 1000) * Math.cos(r2), z2 = (d2 / 1000) * Math.sin(r2);
-
-    const dx = x2 - x1, dz = z2 - z1;
-    const len = Math.sqrt(dx*dx + dz*dz);
-    if (len < 0.01 || len > 0.4) continue;
-
-    const avgDist = (d1 + d2) / 2;
-    const distColor = getDistanceColor3D(avgDist);
-
-    // Thick wall strip — 12cm wide, solid and bright
-    const wallWidth = 0.12;
-    const nx = -dz / len * wallWidth, nz = dx / len * wallWidth;
-
-    const stripGeom = new THREE.BufferGeometry();
-    stripGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-      x1 - nx, 0.04, z1 - nz,  x2 - nx, 0.04, z2 - nz,  x2 + nx, 0.04, z2 + nz,
-      x1 - nx, 0.04, z1 - nz,  x2 + nx, 0.04, z2 + nz,  x1 + nx, 0.04, z1 + nz
-    ]), 3));
-    const stripMat = new THREE.MeshBasicMaterial({
-      color: distColor,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.95
-    });
-    const strip = new THREE.Mesh(stripGeom, stripMat);
-    lidar3dScene.add(strip);
-    lidar3dWalls.push(strip);
-
-    // No 3D wall extrusion — clean flat outline only
-    continue;
-    // (Legacy 3D wall code below — disabled)
-    const wallH = 0.3;  // 30cm - short enough to see over, tall enough to look 3D
-    const wallThickness = 0.06;  // 6cm thick walls
-    // Offset both sides for wall thickness
-    const tnx = -dz / len * wallThickness, tnz = dx / len * wallThickness;
-
-    const wallGeom = new THREE.BufferGeometry();
-    // Front face
-    const wallVerts = new Float32Array([
-      // Front face
-      x1 - tnx, 0, z1 - tnz,  x2 - tnx, 0, z2 - tnz,  x2 - tnx, wallH, z2 - tnz,
-      x1 - tnx, 0, z1 - tnz,  x2 - tnx, wallH, z2 - tnz,  x1 - tnx, wallH, z1 - tnz,
-      // Back face
-      x2 + tnx, 0, z2 + tnz,  x1 + tnx, 0, z1 + tnz,  x1 + tnx, wallH, z1 + tnz,
-      x2 + tnx, 0, z2 + tnz,  x1 + tnx, wallH, z1 + tnz,  x2 + tnx, wallH, z2 + tnz,
-      // Top face
-      x1 - tnx, wallH, z1 - tnz,  x2 - tnx, wallH, z2 - tnz,  x2 + tnx, wallH, z2 + tnz,
-      x1 - tnx, wallH, z1 - tnz,  x2 + tnx, wallH, z2 + tnz,  x1 + tnx, wallH, z1 + tnz
-    ]);
-    wallGeom.setAttribute('position', new THREE.BufferAttribute(wallVerts, 3));
-    // Shade faces differently for depth: front bright, back darker, top brightest
-    const wallColors = new Float32Array([
-      r*0.8, g*0.8, b*0.8,  r*0.8, g*0.8, b*0.8,  r*0.9, g*0.9, b*0.9,
-      r*0.8, g*0.8, b*0.8,  r*0.9, g*0.9, b*0.9,  r*0.9, g*0.9, b*0.9,
-      r*0.6, g*0.6, b*0.6,  r*0.6, g*0.6, b*0.6,  r*0.7, g*0.7, b*0.7,
-      r*0.6, g*0.6, b*0.6,  r*0.7, g*0.7, b*0.7,  r*0.7, g*0.7, b*0.7,
-      r, g, b,  r, g, b,  r, g, b,
-      r, g, b,  r, g, b,  r, g, b
-    ]);
-    wallGeom.setAttribute('color', new THREE.BufferAttribute(wallColors, 3));
-    wallGeom.computeVertexNormals();
-    const wallMat = new THREE.MeshStandardMaterial({
+  if (colorPositions.length > 0) {
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(colorPositions, 3));
+    geom.setAttribute('color', new THREE.Float32BufferAttribute(colorColors, 3));
+    const colorCloud = new THREE.Points(geom, new THREE.PointsMaterial({
+      size: 0.08,
+      map: getLidarPointTexture(),
       vertexColors: true,
-      roughness: 0.75,
-      metalness: 0.05,
-      side: THREE.DoubleSide,
+      sizeAttenuation: true,
       transparent: true,
-      opacity: 0.45
-    });
-    const wall = new THREE.Mesh(wallGeom, wallMat);
-    lidar3dScene.add(wall);
-    lidar3dWalls.push(wall);
+      opacity: 0.9,
+      alphaTest: 0.02,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    lidar3dScene.add(colorCloud);
+    lidar3dWalls.push(colorCloud);
   }
 }
 
@@ -1268,12 +1154,17 @@ function updateOccupancyGridVisualization() {
   const floorColors = [];
   const wallPositions = [];
   const wallColors = [];
-  const wallHeight = 0.25;  // 25cm tall solid wall blocks
+
+  // Aggressive filtering — Roomba-style clean map
+  const MIN_WALL_VISITS = 10;      // Wall must be hit 10+ times
+  const MIN_WALL_CONFIDENCE = 0.9; // Very high confidence only
+  const MIN_FREE_CONFIDENCE = 0.6;
 
   for (const cell of cells) {
     const isServer = cell.s !== undefined;
     const cellState = isServer ? cell.s : cell.state;
     const confidence = isServer ? (cell.c || 0.5) : (cell.confidence || 0.5);
+    const visits = cell.visits || 1;
     const worldX = isServer ? cell.x / 1000 : cell.x;
     const worldY = isServer ? cell.y / 1000 : cell.y;
 
@@ -1282,39 +1173,34 @@ function updateOccupancyGridVisualization() {
     const hs = cellSizeM / 2;
 
     if (cellState === 1) {
-      // FREE - clean light floor (like a blueprint)
-      if (confidence < 0.4) continue;
-      const bright = 0.6 + confidence * 0.4;
-      const r = 0.15 * bright, g = 0.2 * bright, b = 0.15 * bright;
-      const y = 0.015;
-      const pad = cellSizeM * 0.05;  // Overlap to fill gaps
+      // FREE — bright white floor (Roomba-style)
+      if (confidence < MIN_FREE_CONFIDENCE) continue;
+      const y = 0.005;
 
       floorPositions.push(
-        x - hs - pad, y, z - hs - pad, x + hs + pad, y, z - hs - pad, x + hs + pad, y, z + hs + pad,
-        x - hs - pad, y, z - hs - pad, x + hs + pad, y, z + hs + pad, x - hs - pad, y, z + hs + pad
+        x - hs, y, z - hs, x + hs, y, z - hs, x + hs, y, z + hs,
+        x - hs, y, z - hs, x + hs, y, z + hs, x - hs, y, z + hs
       );
-      for (let i = 0; i < 6; i++) floorColors.push(r, g, b);
+      for (let i = 0; i < 6; i++) floorColors.push(0.85, 0.9, 0.95);
 
     } else if (cellState === 2) {
-      // OCCUPIED - flat dark wall marker (no 3D blocks - just clean floor plan)
-      if (confidence < 0.5) continue;  // Higher threshold = less noise
-      const bright = 0.4 + confidence * 0.6;
-      const r = 0.6 * bright, g = 0.15 * bright, b = 0.1 * bright;
-      const y = 0.04;  // Just above floor, flat
-      const pad = cellSizeM * 0.05;
+      // WALL — flat dark marker, only if very confident
+      if (confidence < MIN_WALL_CONFIDENCE) continue;
+      if (!isServer && visits < MIN_WALL_VISITS) continue;
 
-      // Flat wall marker — just a colored quad on the ground (clean floor plan look)
+      const y = 0.02;
+
       wallPositions.push(
-        x - hs - pad, y, z - hs - pad, x + hs + pad, y, z - hs - pad, x + hs + pad, y, z + hs + pad,
-        x - hs - pad, y, z - hs - pad, x + hs + pad, y, z + hs + pad, x - hs - pad, y, z + hs + pad
+        x - hs, y, z - hs, x + hs, y, z - hs, x + hs, y, z + hs,
+        x - hs, y, z - hs, x + hs, y, z + hs, x - hs, y, z + hs
       );
-      for (let i = 0; i < 6; i++) wallColors.push(r, g, b);
+      for (let i = 0; i < 6; i++) wallColors.push(0.15, 0.15, 0.2);
     } else {
       continue;
     }
   }
 
-  // Floor mesh - flat translucent tiles
+  // Floor mesh — bright solid
   if (floorPositions.length > 0) {
     const floorGeom = new THREE.BufferGeometry();
     floorGeom.setAttribute('position', new THREE.Float32BufferAttribute(floorPositions, 3));
@@ -1323,7 +1209,7 @@ function updateOccupancyGridVisualization() {
     const floorMat = new THREE.MeshBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.65,
+      opacity: 0.9,
       side: THREE.DoubleSide,
       depthWrite: false
     });
@@ -1331,7 +1217,7 @@ function updateOccupancyGridVisualization() {
     lidar3dWorldContainer.add(occupancyGridMesh);
   }
 
-  // Wall markers - flat quads on ground (floor plan style)
+  // Wall mesh — flat dark lines on floor
   if (wallPositions.length > 0) {
     const wallGeom = new THREE.BufferGeometry();
     wallGeom.setAttribute('position', new THREE.Float32BufferAttribute(wallPositions, 3));
@@ -1339,10 +1225,8 @@ function updateOccupancyGridVisualization() {
 
     const wallMat = new THREE.MeshBasicMaterial({
       vertexColors: true,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide,
-      depthWrite: false
+      transparent: false,
+      side: THREE.DoubleSide
     });
     window._occWallMesh = new THREE.Mesh(wallGeom, wallMat);
     lidar3dWorldContainer.add(window._occWallMesh);

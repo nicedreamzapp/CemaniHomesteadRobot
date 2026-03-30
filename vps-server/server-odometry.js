@@ -38,8 +38,15 @@ let odometry = {
 // Process encoder values and update odometry
 // Returns telemetry data object to broadcast
 function processEncoders(posL, posR) {
-  const deltaL = posL - odometry.prevPosL;
-  const deltaR = posR - odometry.prevPosR;
+  // Handle 16-bit encoder wraparound (0-65535)
+  let deltaL = posL - odometry.prevPosL;
+  let deltaR = posR - odometry.prevPosR;
+
+  // Fix 16-bit wraparound: if delta is huge, it wrapped
+  if (deltaL > 32768) deltaL -= 65536;
+  if (deltaL < -32768) deltaL += 65536;
+  if (deltaR > 32768) deltaR -= 65536;
+  if (deltaR < -32768) deltaR += 65536;
 
   // DEBUG: Log encoder values every 50 TELEM messages (~10 sec)
   odometry.telemCount++;
@@ -47,14 +54,14 @@ function processEncoders(posL, posR) {
     console.log('[ENC] posL=' + posL + ' posR=' + posR + ' prevL=' + odometry.prevPosL + ' prevR=' + odometry.prevPosR + ' dL=' + deltaL + ' dR=' + deltaR);
   }
 
-  // Validate delta - reject jumps (encoder reset, noise, etc.)
+  // Validate delta - reject truly invalid jumps (noise)
   const deltaValid = Math.abs(deltaL) < MAX_DELTA && Math.abs(deltaR) < MAX_DELTA;
   if (!deltaValid) {
     console.log('[ODOM] Rejected jump: deltaL=' + deltaL + ' deltaR=' + deltaR);
   }
 
-  // Only update if we have valid deltas (skip first reading or noise)
-  const hasMovement = deltaValid && (Math.abs(deltaL) > 5 || Math.abs(deltaR) > 5);
+  // Update if we have valid deltas
+  const hasMovement = deltaValid && (Math.abs(deltaL) > 2 || Math.abs(deltaR) > 2);
   const now = Date.now();
 
   if (hasMovement) {

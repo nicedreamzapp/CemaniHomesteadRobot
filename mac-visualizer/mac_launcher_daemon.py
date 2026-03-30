@@ -112,6 +112,18 @@ def start_mapping():
         else:
             print(f"[LAUNCHER] WARNING: {semantic_script} not found")
 
+        # Start gaussian_splat_mapper.py (photorealistic 3DGS)
+        gsplat_script = SCRIPT_DIR / "gaussian_splat_mapper.py"
+        if gsplat_script.exists():
+            proc3 = subprocess.Popen(
+                [sys.executable, "-u", str(gsplat_script)],
+                cwd=str(SCRIPT_DIR)
+            )
+            mapping_processes.append(proc3)
+            print(f"[LAUNCHER] Started gaussian_splat_mapper.py (PID {proc3.pid})")
+        else:
+            print(f"[LAUNCHER] WARNING: {gsplat_script} not found")
+
         mapping_running = True
         print("[LAUNCHER] GPU mapping started!")
         return True

@@ -8,8 +8,8 @@
 #include <Arduino.h>
 
 // Safety thresholds - more cautious to prevent crashes
-#define OBSTACLE_STOP_CM 50       // Stop if obstacle closer than 50cm (~20 inches)
-#define OBSTACLE_SLOW_CM 80       // Slow down if obstacle closer than 80cm (~32 inches)
+#define OBSTACLE_STOP_CM 20       // Stop if obstacle closer than 20cm (~8 inches) - was 50 but sonars read high
+#define OBSTACLE_SLOW_CM 40       // Slow down if obstacle closer than 40cm (~16 inches)
 #define OBSTACLE_WARN_CM 100      // Warn if obstacle closer than 100cm (~40 inches)
 
 // Tilt detection thresholds (torque in 0.1A units)

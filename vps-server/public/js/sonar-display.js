@@ -71,11 +71,11 @@ function updateSonarDisplay(sensor, distCm) {
     w.classList.remove('triggered', 'color-red', 'color-pink', 'color-orange', 'color-yellow');
   });
 
-  if (distCm > 0 && distCm < 160) {
+  if (distCm > 15 && distCm < 160) {
     let colorClass = '';
-    if (distCm < 45) colorClass = 'color-red';
-    else if (distCm < 75) colorClass = 'color-pink';
-    else if (distCm < 105) colorClass = 'color-orange';
+    if (distCm < 25) colorClass = 'color-red';
+    else if (distCm < 50) colorClass = 'color-orange';
+    else if (distCm < 80) colorClass = 'color-yellow';
     else colorClass = 'color-yellow';
 
     let triggerUpTo = Math.ceil(distCm / 15.24);
@@ -94,9 +94,9 @@ function updateSonarDisplay(sensor, distCm) {
   waveEl.className = 'sonar-wave-group ' + posMap[sensor] + ' active';
 
   let labelColor = '';
-  if (distCm <= 0) labelColor = '';
-  else if (distCm < 60) labelColor = 'danger';
-  else if (distCm < 120) labelColor = 'warning';
+  if (distCm <= 0 || distCm <= 15) labelColor = '';
+  else if (distCm < 30) labelColor = 'danger';
+  else if (distCm < 60) labelColor = 'warning';
   else labelColor = 'clear';
   labelEl.className = 'sonar-dist-label ' + posMap[sensor] + '-label' + (labelColor ? ' ' + labelColor : '');
 
@@ -112,7 +112,7 @@ function updateSonarDisplay(sensor, distCm) {
       barEl.style.background = 'rgba(100,100,100,0.3)';
       barEl.style.borderColor = '#666';
       barEl.style.boxShadow = 'none';
-    } else if (distCm < 60) {
+    } else if (distCm < 30) {
       barEl.style.background = 'linear-gradient(to top, #f33, rgba(255,50,50,0.3))';
       barEl.style.borderColor = '#f33';
       barEl.style.boxShadow = '0 0 8px #f33';
@@ -136,8 +136,8 @@ function updateUltrasonicBadges(sensor, distCm) {
   const ft = distCm > 0 ? (distCm / 30.48).toFixed(1) : '--';
   badge.textContent = sensor + ': ' + ft + 'ft';
   badge.classList.remove('danger', 'warning');
-  if (distCm > 0 && distCm < 50) badge.classList.add('danger');
-  else if (distCm > 0 && distCm < 100) badge.classList.add('warning');
+  if (distCm > 15 && distCm < 30) badge.classList.add('danger');
+  else if (distCm > 0 && distCm < 60) badge.classList.add('warning');
 }
 
 // Test function for console
