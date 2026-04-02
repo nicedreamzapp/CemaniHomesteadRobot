@@ -15,6 +15,127 @@ let scanMatchOdometry = { x: 0, y: 0, heading: 0 };  // Accumulated position
 let matchCount = 0;
 let skipCount = 0;
 
+// ============ LOOP CLOSURE VIA LIDAR FINGERPRINTS ============
+// Store compact LIDAR signatures at key positions
+// When robot returns to a known area, correct accumulated drift
+const FINGERPRINT_INTERVAL_MM = 2000;  // Save fingerprint every 2m traveled
+const FINGERPRINT_MATCH_THRESHOLD = 0.65;  // 65% similarity = match
+const FINGERPRINT_MIN_DISTANCE = 3000;  // Don't match fingerprints < 3m apart (too close = not a loop)
+let fingerprints = [];  // [{x, y, heading, signature, distanceTraveled}, ...]
+let lastFingerprintDistance = 0;
+let loopClosureCount = 0;
+
+// Create compact signature from LIDAR scan (360 bins, 1° each, normalized distances)
+function createFingerprint(scanXY) {
+  const bins = new Float32Array(360).fill(0);
+  const counts = new Float32Array(360).fill(0);
+  for (const p of scanXY) {
+    const angle = Math.atan2(p.y, p.x);
+    const dist = Math.sqrt(p.x * p.x + p.y * p.y);
+    let bin = Math.round((angle * 180 / Math.PI + 180) % 360);
+    if (bin < 0) bin += 360;
+    if (bin >= 360) bin = 359;
+    bins[bin] += dist;
+    counts[bin]++;
+  }
+  // Average distance per bin, normalize to 0-1
+  let maxDist = 1;
+  for (let i = 0; i < 360; i++) {
+    bins[i] = counts[i] > 0 ? bins[i] / counts[i] : 0;
+    if (bins[i] > maxDist) maxDist = bins[i];
+  }
+  for (let i = 0; i < 360; i++) bins[i] /= maxDist;
+  return bins;
+}
+
+// Compare two fingerprints (rotation-invariant via circular cross-correlation)
+function compareFingerprints(fp1, fp2) {
+  let bestScore = 0;
+  // Try rotations in 5° steps for speed, then refine
+  for (let rot = 0; rot < 360; rot += 5) {
+    let score = 0;
+    let validBins = 0;
+    for (let i = 0; i < 360; i++) {
+      const j = (i + rot) % 360;
+      if (fp1[i] > 0 && fp2[j] > 0) {
+        const diff = Math.abs(fp1[i] - fp2[j]);
+        score += 1 - diff;  // Higher = more similar
+        validBins++;
+      }
+    }
+    if (validBins > 30) {  // Need enough overlap
+      score /= validBins;
+      if (score > bestScore) bestScore = score;
+    }
+  }
+  return bestScore;
+}
+
+// Check for loop closure and correct position if found
+function checkLoopClosure(currentXY) {
+  const currentFP = createFingerprint(currentXY);
+  const currentDist = scanMatchOdometry.x * scanMatchOdometry.x + scanMatchOdometry.y * scanMatchOdometry.y;
+
+  // Save fingerprint periodically
+  const distTraveled = Math.sqrt(
+    Math.pow(scanMatchOdometry.x - (fingerprints.length > 0 ? fingerprints[fingerprints.length-1].x : 0), 2) +
+    Math.pow(scanMatchOdometry.y - (fingerprints.length > 0 ? fingerprints[fingerprints.length-1].y : 0), 2)
+  );
+  if (distTraveled > FINGERPRINT_INTERVAL_MM || fingerprints.length === 0) {
+    fingerprints.push({
+      x: scanMatchOdometry.x,
+      y: scanMatchOdometry.y,
+      heading: scanMatchOdometry.heading,
+      signature: currentFP,
+      matchCount: matchCount
+    });
+    if (fingerprints.length > 200) fingerprints.shift();  // Keep last 200
+    console.log(`[LOOP] Saved fingerprint #${fingerprints.length} at (${scanMatchOdometry.x.toFixed(0)}, ${scanMatchOdometry.y.toFixed(0)})`);
+  }
+
+  // Compare against old fingerprints (skip recent ones)
+  let bestMatch = null;
+  let bestScore = 0;
+  for (let i = 0; i < fingerprints.length - 5; i++) {
+    const fp = fingerprints[i];
+    // Must be far enough away in odometry space (otherwise it's not a loop)
+    const odomDist = Math.sqrt(
+      Math.pow(scanMatchOdometry.x - fp.x, 2) +
+      Math.pow(scanMatchOdometry.y - fp.y, 2)
+    );
+    if (odomDist < FINGERPRINT_MIN_DISTANCE) continue;
+
+    const score = compareFingerprints(currentFP, fp.signature);
+    if (score > bestScore && score > FINGERPRINT_MATCH_THRESHOLD) {
+      bestScore = score;
+      bestMatch = fp;
+    }
+  }
+
+  if (bestMatch) {
+    loopClosureCount++;
+    const correctionX = bestMatch.x - scanMatchOdometry.x;
+    const correctionY = bestMatch.y - scanMatchOdometry.y;
+    const correctionDist = Math.sqrt(correctionX * correctionX + correctionY * correctionY);
+
+    console.log(`[LOOP CLOSURE #${loopClosureCount}] Match score=${bestScore.toFixed(2)} correction=${correctionDist.toFixed(0)}mm`);
+    console.log(`[LOOP CLOSURE] Correcting position: (${scanMatchOdometry.x.toFixed(0)}, ${scanMatchOdometry.y.toFixed(0)}) → (${bestMatch.x.toFixed(0)}, ${bestMatch.y.toFixed(0)})`);
+
+    // Apply gradual correction (50% of error) to avoid jarring jumps
+    scanMatchOdometry.x += correctionX * 0.5;
+    scanMatchOdometry.y += correctionY * 0.5;
+
+    return {
+      corrected: true,
+      correctionX: correctionX * 0.5,
+      correctionY: correctionY * 0.5,
+      matchScore: bestScore,
+      closureCount: loopClosureCount
+    };
+  }
+  return { corrected: false };
+}
+
 // Convert polar LIDAR scan to XY points (mm)
 function polarToXY(points) {
   const xy = [];
@@ -237,6 +358,12 @@ function matchScans(newScanPolar, compassHeading) {
   // Update reference scan every match for responsive tracking
   referenceScan = newXY;
 
+  // Check for loop closure every 20 matches (not every scan - expensive)
+  let loopResult = { corrected: false };
+  if (matchCount % 20 === 0 && fingerprints.length > 5) {
+    loopResult = checkLoopClosure(newXY);
+  }
+
   return {
     dx: worldDx,
     dy: worldDy,
@@ -244,7 +371,8 @@ function matchScans(newScanPolar, compassHeading) {
     x: scanMatchOdometry.x,
     y: scanMatchOdometry.y,
     heading: scanMatchOdometry.heading,
-    confidence
+    confidence,
+    loopClosure: loopResult
   };
 }
 

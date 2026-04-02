@@ -743,20 +743,29 @@ function stopExploration() {
 function exploreNextFrontier() {
   if (!exploreActive) return;
 
-  // Simple reactive exploration: drive forward, turn when obstacle detected
-  // Much more reliable than A* pathfinding with noisy LIDAR data
-  if (exploreInterval) clearInterval(exploreInterval);
-  exploreInterval = setInterval(reactiveExplore, 300);
-  console.log('[EXPLORE] Starting reactive exploration (drive + avoid)');
-  return;
-
-  // --- A* frontier exploration below (disabled - too fragile with noisy grid) ---
+  // Try A* frontier exploration first - uses occupancy grid for intelligent mapping
+  // Falls back to reactive exploration if no frontiers found or path planning fails
   const frontier = pickBestFrontier();
 
   if (!frontier) {
-    console.log('[EXPLORE] No frontiers found - area fully explored!');
-    state.broadcast({ type: 'explore_status', active: false, reason: 'complete' });
-    exploreActive = false;
+    // No frontiers yet (grid too sparse) or fully explored - use reactive exploration
+    // Reactive mode drives forward and turns on obstacles, building up the grid
+    // Once enough grid exists, frontiers will appear and A* takes over
+    console.log('[EXPLORE] No frontiers found - using reactive exploration to build grid');
+    if (exploreInterval) clearInterval(exploreInterval);
+    exploreInterval = setInterval(() => {
+      reactiveExplore();
+      // Periodically check if frontiers have appeared (every 10s)
+      if (Date.now() % 10000 < 300) {
+        const newFrontier = pickBestFrontier();
+        if (newFrontier && exploreActive) {
+          console.log('[EXPLORE] Frontiers appeared! Switching to A* navigation');
+          clearInterval(exploreInterval);
+          exploreInterval = null;
+          exploreNextFrontier();
+        }
+      }
+    }, 300);
     return;
   }
 
@@ -873,7 +882,20 @@ function reactiveExplore() {
     return;
   }
 
-  // Encoders work - no stall detection needed
+  // Encoder intelligence: react to bumps and wheel slip
+  const encoderData = odometry.getEncoderIntelligence ? odometry.getEncoderIntelligence() : null;
+  if (encoderData) {
+    // If wheel slip detected, slow down - we're on bad terrain
+    if (encoderData.slipDetected) {
+      rs.send(JSON.stringify({ type: "serial_cmd", cmd: "AUTO_FWD,1" }));  // Crawl speed
+      if (shouldLog) console.log(`[EXPLORE] Wheel slip - reducing speed`);
+      return;
+    }
+    // After a bump, pause briefly to reassess
+    if (encoderData.terrainQuality < 0.3) {
+      if (shouldLog) console.log(`[EXPLORE] Rough terrain (quality=${encoderData.terrainQuality.toFixed(2)}) - cautious mode`);
+    }
+  }
 
   // Check LIDAR for obstacles
   const odom = odometry.getOdometry();
