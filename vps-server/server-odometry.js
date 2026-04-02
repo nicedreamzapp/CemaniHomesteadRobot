@@ -32,7 +32,15 @@ let odometry = {
   // Motion detection for MAP 1
   lastMovementTime: 0,
   isMoving: false,
-  settledCallbacks: []  // Callbacks to fire when motion settles
+  settledCallbacks: [],  // Callbacks to fire when motion settles
+  // Encoder intelligence
+  velocityHistory: [],     // Last 10 velocity readings for bump/slip detection
+  terrainQuality: 1.0,     // 0-1, lower = rougher terrain
+  bumpCount: 0,            // Bumps detected this trip
+  slipDetected: false,     // Wheel slip in progress
+  lastVelocityL: 0,        // mm/s
+  lastVelocityR: 0,
+  lastEncoderTime: Date.now()
 };
 
 // Process encoder values and update odometry
@@ -63,11 +71,58 @@ function processEncoders(posL, posR) {
   // Update if we have valid deltas
   const hasMovement = deltaValid && (Math.abs(deltaL) > 2 || Math.abs(deltaR) > 2);
   const now = Date.now();
+  const dt = (now - odometry.lastEncoderTime) / 1000;  // seconds
+  odometry.lastEncoderTime = now;
 
   if (hasMovement) {
     // Convert to mm
     const distL = deltaL * MM_PER_COUNT;
     const distR = deltaR * MM_PER_COUNT;
+
+    // ============ ENCODER INTELLIGENCE ============
+    // Calculate wheel velocities (mm/s)
+    const velL = dt > 0 ? Math.abs(distL / dt) : 0;
+    const velR = dt > 0 ? Math.abs(distR / dt) : 0;
+
+    // Bump detection: sudden velocity change indicates hitting something
+    const accelL = Math.abs(velL - odometry.lastVelocityL);
+    const accelR = Math.abs(velR - odometry.lastVelocityR);
+    const BUMP_THRESHOLD = 200;  // mm/s² change = bump
+    if ((accelL > BUMP_THRESHOLD || accelR > BUMP_THRESHOLD) && odometry.lastVelocityL > 50) {
+      odometry.bumpCount++;
+      console.log(`[ENCODER] BUMP #${odometry.bumpCount} detected! accelL=${accelL.toFixed(0)} accelR=${accelR.toFixed(0)} mm/s²`);
+      state.broadcast({ type: 'encoder_event', event: 'bump', count: odometry.bumpCount, severity: Math.max(accelL, accelR) });
+    }
+
+    // Wheel slip detection: one wheel spinning much faster than the other
+    const velDiff = Math.abs(velL - velR);
+    const velAvg = (velL + velR) / 2;
+    if (velAvg > 50 && velDiff > velAvg * 0.8) {
+      if (!odometry.slipDetected) {
+        odometry.slipDetected = true;
+        console.log(`[ENCODER] WHEEL SLIP! velL=${velL.toFixed(0)} velR=${velR.toFixed(0)} mm/s`);
+        state.broadcast({ type: 'encoder_event', event: 'slip', velL: Math.round(velL), velR: Math.round(velR) });
+      }
+    } else {
+      odometry.slipDetected = false;
+    }
+
+    // Terrain quality: smooth = consistent velocity, rough = erratic
+    odometry.velocityHistory.push({ velL, velR, t: now });
+    if (odometry.velocityHistory.length > 10) odometry.velocityHistory.shift();
+    if (odometry.velocityHistory.length >= 3) {
+      let variance = 0;
+      for (let i = 1; i < odometry.velocityHistory.length; i++) {
+        const dv = Math.abs(odometry.velocityHistory[i].velL - odometry.velocityHistory[i-1].velL);
+        variance += dv * dv;
+      }
+      variance /= odometry.velocityHistory.length;
+      // Map variance to 0-1 quality (low variance = smooth = high quality)
+      odometry.terrainQuality = Math.max(0, Math.min(1, 1 - (variance / 40000)));
+    }
+
+    odometry.lastVelocityL = velL;
+    odometry.lastVelocityR = velR;
 
     // Average distance moved
     const distAvg = (distL + distR) / 2;
@@ -121,7 +176,10 @@ function processEncoders(posL, posR) {
       odomHeadingDeg: Math.round(odometry.heading * 180 / Math.PI),
       odomDistance: Math.round(odometry.totalDistance),
       odomTrail: odometry.trail,
-      source: "encoder"
+      source: "encoder",
+      terrainQuality: Math.round(odometry.terrainQuality * 100) / 100,
+      slipDetected: odometry.slipDetected,
+      bumpCount: odometry.bumpCount
     });
   }
 
@@ -241,6 +299,17 @@ function isMoving() {
   return odometry.isMoving;
 }
 
+// Get encoder intelligence data
+function getEncoderIntelligence() {
+  return {
+    terrainQuality: odometry.terrainQuality,
+    slipDetected: odometry.slipDetected,
+    bumpCount: odometry.bumpCount,
+    velocityL: odometry.lastVelocityL,
+    velocityR: odometry.lastVelocityR
+  };
+}
+
 module.exports = {
   processEncoders,
   resetOdometry,
@@ -248,6 +317,7 @@ module.exports = {
   getOdometry,
   markMoving,
   isMoving,
+  getEncoderIntelligence,
   // Constants for reference
   WHEEL_CIRCUMFERENCE_MM,
   WHEEL_BASE_MM,

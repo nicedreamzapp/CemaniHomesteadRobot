@@ -832,6 +832,20 @@ function handleMessage(ws, data) {
             source: "scan_match",
             confidence: matchResult.confidence
           });
+
+          // Loop closure detected - broadcast correction event
+          if (matchResult.loopClosure && matchResult.loopClosure.corrected) {
+            console.log(`[LOOP CLOSURE] Position corrected! Score: ${matchResult.loopClosure.matchScore.toFixed(2)}`);
+            state.broadcast({
+              type: "loop_closure",
+              correctionX: matchResult.loopClosure.correctionX,
+              correctionY: matchResult.loopClosure.correctionY,
+              matchScore: matchResult.loopClosure.matchScore,
+              closureCount: matchResult.loopClosure.closureCount
+            });
+            // Also update the encoder odometry module with corrected position
+            odometry.setPosition(matchResult.x, matchResult.y, matchResult.heading);
+          }
         }
       } catch (e) {
         console.log(`[SLAM-ERROR] scanMatch failed: ${e.message}`);
@@ -1053,44 +1067,20 @@ function handleMessage(ws, data) {
           }
         });
 
-        // If no autonomous.py AND no Mac processors, start direct control loop
-        // Mac processors handle their own robot movement via move_command
+        // If no autonomous.py AND no Mac processors, use frontier exploration
+        // This uses the occupancy grid + A* for intelligent mapping
         if (autoCount === 0 && processorCount === 0) {
-          console.log(`[AUTONOMOUS] No Jetson navigator or Mac processor - starting direct control loop`);
+          console.log(`[AUTONOMOUS] No Jetson navigator or Mac processor - starting frontier exploration`);
 
           // Clear any existing interval
           if (global.autoInterval) clearInterval(global.autoInterval);
 
-          // Send commands every 300ms (Teensy timeout is 500ms)
-          global.autoDirection = "FWD";  // Track current direction
-          global.autoCmdCount = 0;
-          global.autoInterval = setInterval(() => {
-            // Check manual override - Xbox/joystick ALWAYS wins
-            if (isManualOverrideActive()) {
-              // Don't spam logs - just skip
-              return;  // Skip this tick, don't send command
-            }
-
-            const robotSock = state.getRobotSocket();
-            if (robotSock && robotSock.readyState === WebSocket.OPEN) {
-              // Send current direction command at 25 RPM (about 6 inches/sec)
-              const cmd = `AUTO_${global.autoDirection},25`;
-              robotSock.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
-              global.autoCmdCount++;
-              // Log every 10th command to avoid spam
-              if (global.autoCmdCount % 10 === 0) {
-                console.log(`[AUTO-DRIVE] Sent ${global.autoCmdCount} cmds, current: ${cmd}`);
-              }
-            } else {
-              console.log(`[AUTONOMOUS] Robot disconnected - stopping auto loop`);
-              clearInterval(global.autoInterval);
-              global.autoInterval = null;
-            }
-          }, 300);
-
-          // Send first command immediately at 25 RPM
-          rs.send(JSON.stringify({ type: "serial_cmd", cmd: "AUTO_FWD,25" }));
-          state.broadcast({ type: "autonomous_status", running: true, mode: "direct" });
+          // Use the navigation module's frontier exploration for MAP 1
+          // This builds an occupancy grid from LIDAR, finds frontiers (unexplored edges),
+          // and uses A* to plan paths to them - much smarter than blind forward driving
+          navigation.startExploration();
+          state.broadcast({ type: "autonomous_status", running: true, mode: "frontier_explore" });
+          console.log(`[MAP1] Started frontier-based exploration with occupancy grid + A*`);
         } else if (processorCount > 0) {
           console.log(`[AUTONOMOUS] ${processorCount} Mac processor(s) connected - they will handle robot movement`);
           state.broadcast({ type: "autonomous_status", running: true, mode: "mac_processor" });
@@ -1126,6 +1116,12 @@ function handleMessage(ws, data) {
         clearInterval(global.autoInterval);
         global.autoInterval = null;
         console.log(`[AUTONOMOUS] Stopped auto command loop`);
+      }
+
+      // Stop frontier exploration if running
+      if (navigation.isExploreActive()) {
+        navigation.stopExploration();
+        console.log(`[AUTONOMOUS] Stopped frontier exploration`);
       }
 
       // ====== STOP MAC GPU MAPPER ======
