@@ -121,6 +121,7 @@ void setup() {
   wifiMulti.addAP(WIFI_SSID_1, WIFI_PASS_1);
   wifiMulti.addAP(WIFI_SSID_2, WIFI_PASS_2);
   wifiMulti.addAP(WIFI_SSID_3, WIFI_PASS_3);
+  wifiMulti.addAP(WIFI_SSID_4, WIFI_PASS_4);
 
   int attempts = 0;
   while (wifiMulti.run() != WL_CONNECTED && attempts < 20) {
