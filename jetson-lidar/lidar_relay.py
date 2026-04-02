@@ -3,15 +3,52 @@
 Lidar Relay Service
 Reads RPLIDAR data and sends to VPS server via WebSocket
 Runs as a background service on Jetson
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║  SAFETY RULES - HARDCODED:                                                    ║
+║  1. Xbox controller ALWAYS has priority over autonomous commands              ║
+║  2. Claude Code is NEVER allowed to initiate robot movement or MAP 1          ║
+║  3. Only the USER can start mapping by clicking buttons in the web UI         ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
 import json
 import time
 import math
 import threading
+import os
+import sys
+import atexit
 from rplidar import RPLidar
 import websocket
 import ssl
+
+# SINGLETON: Prevent multiple instances
+LOCKFILE = '/tmp/lidar-relay.lock'
+
+def check_singleton():
+    """Ensure only one instance runs"""
+    if os.path.exists(LOCKFILE):
+        try:
+            with open(LOCKFILE, 'r') as f:
+                old_pid = int(f.read().strip())
+            # Check if process is still running
+            os.kill(old_pid, 0)
+            print(f"[ERROR] Another LIDAR relay is running (PID {old_pid}). Exiting.")
+            sys.exit(1)
+        except (ProcessLookupError, ValueError):
+            # Process not running, remove stale lock
+            print("[INFO] Removing stale lock file")
+            os.remove(LOCKFILE)
+
+    # Write our PID
+    with open(LOCKFILE, 'w') as f:
+        f.write(str(os.getpid()))
+
+    # Clean up on exit
+    atexit.register(lambda: os.remove(LOCKFILE) if os.path.exists(LOCKFILE) else None)
+
+check_singleton()
 
 # Configuration
 LIDAR_PORT = '/dev/ttyUSB0'
@@ -62,19 +99,30 @@ class LidarRelay:
                 print("LIDAR motor started, scanning...")
                 consecutive_errors = 0  # Reset on successful start
 
-                for scan in self.lidar.iter_scans(max_buf_meas=2000, min_len=50):
+                for scan in self.lidar.iter_scans(max_buf_meas=2000, min_len=20):
                     if not self.running:
                         break
 
                     # Process scan - filter and convert
+                    # RPLIDAR A1M8: Accept all quality levels, range 50mm-12000mm
                     points = []
+                    raw_count = len(scan)
                     for quality, angle, dist in scan:
-                        if quality > 0 and 100 < dist < 6000:
+                        # Accept any quality with valid distance (50mm to 12m)
+                        if 50 < dist < 12000:
                             # Skip excluded zone (mounted camera)
                             if EXCLUDE_MIN <= angle <= EXCLUDE_MAX and dist < EXCLUDE_DIST:
                                 continue
                             # Store as [angle, distance_mm]
                             points.append([round(angle, 1), int(dist)])
+
+                    # Log occasionally to help debug sparse scans
+                    if hasattr(self, '_log_counter'):
+                        self._log_counter += 1
+                    else:
+                        self._log_counter = 0
+                    if self._log_counter % 30 == 0:  # Every ~1 second at 30fps
+                        print(f"[LIDAR] Raw: {raw_count} -> Valid: {len(points)} points")
 
                     with self.lock:
                         self.current_scan = points

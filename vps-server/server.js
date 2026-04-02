@@ -10,6 +10,8 @@ const path = require("path");
 // Import modules
 const state = require('./server-state');
 const odometry = require('./server-odometry');
+const navigation = require('./server-navigation');
+const scanMatcher = require('./server-scan-matcher');
 const ptzServer = require('./ptz-server');
 const compile = require('./compile');
 const agent = require('./server-agent');
@@ -378,13 +380,73 @@ wss.on("connection", (ws, req) => {
     }
 
     // Handle binary frames from camera relay
-    if (isBinary && ws.isCamera) {
-      handleCameraFrame(ws, msg);
-      return;
+    // Markers: 0x00=cam1 video, 0x01=cam1 audio, 0x02=cam2 video, 0x03=cam2 audio
+    // Note: Also detect binary by content if isBinary flag is wrong
+    const data = Buffer.isBuffer(msg) ? msg : Buffer.from(msg);
+    const firstByte = data[0];
+
+    // Debug: Log messages that look like binary camera data being sent as text
+    if (!isBinary && data.length > 100 && firstByte <= 0x10) {
+      console.log(`[DEBUG-BINARY-MISMATCH] Client ${ws.clientIP}: isBinary=false but firstByte=0x${firstByte?.toString(16)}, len=${data.length}, first10=[${data.slice(0,10).join(',')}]`);
+    }
+
+    // Detect camera frames by marker (0x00-0x03) followed by JPEG magic (FFD8)
+    // Also detect by looking for JPEG marker anywhere in first 5 bytes
+    const hasJpegMagic = (data[1] === 0xFF && data[2] === 0xD8) ||
+                         (data[0] === 0xFF && data[1] === 0xD8) ||
+                         (data.length > 5 && data.slice(0, 5).includes(0xFF) && data.indexOf(0xD8) === data.indexOf(0xFF) + 1);
+    const isLikelyCameraFrame = data.length > 100 && (
+      (firstByte <= 0x03 && hasJpegMagic) ||
+      (firstByte === 0xFF && data[1] === 0xD8)  // Raw JPEG without marker
+    );
+
+    if (isBinary || isLikelyCameraFrame) {
+      if (isLikelyCameraFrame) {
+        // Auto-register as camera if not already
+        if (!ws.isCamera) {
+          console.log('[CAMERA] ★ Auto-registering camera relay from frame (marker:', firstByte, ', size:', data.length, ')');
+          state.setCameraSocket(ws);
+          ws.isCamera = true;
+          ws.isBrowser = false;
+          state.cameraStatus.connected = true;
+          state.broadcast({ type: "camera_status", connected: true });
+        }
+        handleCameraFrame(ws, msg);
+        return;
+      }
+
+      // Handle talkback audio from browser (marker 0x10)
+      if (firstByte === 0x10 && ws.isBrowser) {
+        const cameraSocket = state.getCameraSocket();
+        if (cameraSocket && cameraSocket.readyState === WebSocket.OPEN) {
+          cameraSocket.send(msg);
+        }
+        return;
+      }
+
+      // Other binary data - try to detect and handle
+      if (isBinary) {
+        if (firstByte <= 0x03) {
+          handleCameraFrame(ws, msg);
+          return;
+        }
+        // Check if binary data is actually JSON (large messages from Python)
+        // JSON starts with '{' (0x7B)
+        if (firstByte === 0x7B) {
+          // Fall through to JSON parsing below
+          console.log(`[BINARY-JSON] Binary message looks like JSON, size=${data.length}`);
+        } else {
+          return;  // Unknown binary, ignore
+        }
+      }
     }
 
     try {
       const msgStr = msg.toString();
+      // Log ALL text messages from all clients (brief)
+      if (msgStr.length < 500 && msgStr.startsWith('{')) {
+        console.log(`[WS-IN] ${ws.clientIP}: ${msgStr.substring(0, 120)}`);
+      }
       // Debug: log first chars of ALL messages to catch issues
       if (msgStr.startsWith('{"type":')) {
         const typeMatch = msgStr.match(/"type"\s*:\s*"([^"]+)"/);
@@ -396,6 +458,14 @@ wss.on("connection", (ws, req) => {
       }
       if (msgStr.includes('ptz') || msgStr.includes('PTZ')) {
         console.log("[RAW PTZ]", msgStr.substring(0, 150));
+      }
+      // DEBUG: Explicitly log serial_cmd for spin debugging
+      if (msgStr.includes('serial_cmd')) {
+        console.log("[RAW SERIAL_CMD]", msgStr.substring(0, 200));
+      }
+      // DEBUG: Log large messages that might be SHARP splats
+      if (msgStr.length > 100000) {
+        console.log(`[LARGE-MSG] Size=${msgStr.length}, first100=${msgStr.substring(0, 100)}`);
       }
       const data = JSON.parse(msg);
 
@@ -428,6 +498,9 @@ wss.on("connection", (ws, req) => {
       const rawMsg = typeof msg === 'string' ? msg : msg.toString();
       if (rawMsg.includes('ptz') || rawMsg.includes('PTZ') || rawMsg.includes('DPAD')) {
         console.error("[WS] PTZ Parse Error:", err.message, "RAW:", rawMsg.substring(0, 200));
+      } else if (rawMsg.length > 100000) {
+        // Log errors for large messages (likely SHARP splats)
+        console.error(`[WS-LARGE] Parse error for ${rawMsg.length} byte message: ${err.message}, start: ${rawMsg.substring(0, 100)}`);
       } else {
         console.error("[WS] Error:", err.message);
       }
@@ -519,68 +592,114 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Discrete movement commands
-  if (data.type === "move_command") {
+  // UI drive controls — ALWAYS WORKS. Human pressing buttons = robot moves. No blocking.
+  if (data.type === "serial_cmd_relay") {
+    // Clear any e-stop or override — human is driving
+    if (global.emergencyStopActive) {
+      clearEmergencyStop();
+      console.log("[RELAY] Cleared e-stop for UI drive");
+    }
+    // Set manual override so autonomous doesn't fight the human
+    setManualOverride();
+
     const rs = state.getRobotSocket();
     if (rs && rs.readyState === WebSocket.OPEN) {
-      rs.send(JSON.stringify({
-        type: "move_command",
-        turn: data.turn || 0,
-        distance: data.distance || 0,
-        direction: data.direction || "N"
-      }));
-      console.log("[MOVE] Command:", data.direction, data.distance + "m", "turn:", data.turn + "°");
+      // Send MODE_MANUAL for UI drive — no safety override, human has full control
+      if (data.cmd && data.cmd.startsWith('MOVEDIR')) {
+        rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MANUAL" }));
+        console.log("[RELAY] Sent MODE_MANUAL (human drive - no safety override)");
+        // Send MOVEDIR after brief delay for motor init
+        setTimeout(() => {
+          rs.send(JSON.stringify({ type: "serial_cmd", cmd: data.cmd }));
+          console.log("[RELAY] Sent:", data.cmd);
+        }, 300);
+      } else {
+        rs.send(JSON.stringify({ type: "serial_cmd", cmd: data.cmd }));
+        console.log("[RELAY] Sent:", data.cmd);
+      }
+    } else {
+      console.log("[RELAY] Robot not connected!");
+      ws.send(JSON.stringify({ type: "move_status", status: "error", reason: "Robot not connected" }));
+    }
+  }
+
+  // Discrete movement commands (3-step safety: direction → distance → GO)
+  if (data.type === "move_command") {
+    // SAFETY: Xbox/manual control ALWAYS overrides UI drive commands
+    if (isManualOverrideActive()) {
+      console.log("[MOVE] BLOCKED - Manual override active (Xbox has priority)");
+      ws.send(JSON.stringify({ type: "move_status", status: "blocked", reason: "Xbox override active" }));
+      return;
+    }
+
+    const rs = state.getRobotSocket();
+    if (rs && rs.readyState === WebSocket.OPEN) {
+      const distanceCm = Math.round((data.distance || 0) * 100);  // meters to cm
+      const direction = data.direction || "F";
+
+      // Step 1: Enable motors
+      rs.send(JSON.stringify({ type: "serial_cmd", cmd: "MODE_MAPPING" }));
+      console.log("[MOVE] Step 1: MODE_MAPPING sent");
+
+      // Step 2: Send MOVEDIR command after motor init (same as /drive endpoint)
+      setTimeout(() => {
+        // Re-check override before moving
+        if (isManualOverrideActive()) {
+          console.log("[MOVE] BLOCKED before move - Manual override became active");
+          return;
+        }
+        const dir = direction === 'F' ? 'F' : direction === 'B' ? 'B' :
+                    direction === 'L' ? 'L' : direction === 'R' ? 'R' : direction.charAt(0);
+        const cmd = `MOVEDIR,${dir},${distanceCm}`;
+        rs.send(JSON.stringify({ type: "serial_cmd", cmd: cmd }));
+        console.log("[MOVE] Step 2: Sent", cmd);
+      }, 300);
+    } else {
+      console.log("[MOVE] Robot not connected!");
+      ws.send(JSON.stringify({ type: "move_status", status: "error", reason: "Robot not connected" }));
     }
   }
 
   // Click-to-navigate target from UI - HUMAN INPUT, overrides autonomous
   if (data.type === "nav_target") {
-    // Set manual override - human is navigating
-    setManualOverride();
-
-    // PAUSE autonomous if running - will auto-resume after navigation
-    if (global.autoInterval) {
-      clearInterval(global.autoInterval);
-      global.autoInterval = null;
-      console.log("[OVERRIDE] Click-to-navigate - PAUSING autonomous (will auto-resume)");
-      state.broadcast({ type: "autonomous_status", running: true, paused: true, reason: "manual_override" });
+    // Stop any current exploration
+    if (navigation.isExploreActive()) {
+      navigation.stopExploration();
     }
 
-    const rs = state.getRobotSocket();
-    if (rs && rs.readyState === WebSocket.OPEN) {
-      // Calculate angle and distance to target
-      const odom = state.getOdometry();
-      const dx = data.x - odom.x;
-      const dy = data.y - odom.y;
-      const distance = Math.sqrt(dx * dx + dy * dy) / 1000;  // mm to m
-      const targetAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-      const turn = targetAngle - odom.heading;
+    // Use A* pathfinding on occupancy grid
+    console.log(`[NAV] Click-to-navigate target: (${data.x.toFixed(0)}, ${data.y.toFixed(0)}) mm`);
+    const success = navigation.startNavigation(data.x, data.y);
 
-      // Normalize turn angle to -180 to 180
-      let normalizedTurn = turn;
-      while (normalizedTurn > 180) normalizedTurn -= 360;
-      while (normalizedTurn < -180) normalizedTurn += 360;
-
-      console.log(`[NAV] Target: (${data.x.toFixed(0)}, ${data.y.toFixed(0)}) mm, dist=${distance.toFixed(2)}m, turn=${normalizedTurn.toFixed(1)}°`);
-
-      // Send as move command
-      rs.send(JSON.stringify({
-        type: "nav_goto",
-        targetX: data.x,
-        targetY: data.y,
-        distance: distance,
-        turn: normalizedTurn
-      }));
+    if (!success) {
+      console.log("[NAV] A* pathfinding failed - no safe path to target");
+      state.broadcast({ type: "nav_status", status: "no_path" });
     }
   }
 
   // Cancel navigation
   if (data.type === "nav_cancel") {
-    const rs = state.getRobotSocket();
-    if (rs && rs.readyState === WebSocket.OPEN) {
-      rs.send(JSON.stringify({ type: "nav_cancel" }));
-      console.log("[NAV] Cancelled");
+    navigation.stopNavigation('cancelled');
+    console.log("[NAV] Cancelled");
+  }
+
+  // Start autonomous exploration - STOPS any old mapping first
+  if (data.type === "explore_start") {
+    // Stop old MAP mode if running
+    if (global.mappingActive) {
+      global.mappingActive = false;
+      if (global.autoInterval) { clearInterval(global.autoInterval); global.autoInterval = null; }
+      state.broadcast({ type: "autonomous_status", running: false });
+      console.log("[EXPLORE] Stopped old MAP mode first");
     }
+    console.log("[EXPLORE] User requested autonomous exploration");
+    navigation.startExploration();
+  }
+
+  // Stop autonomous exploration
+  if (data.type === "explore_stop") {
+    console.log("[EXPLORE] User stopped exploration");
+    navigation.stopExploration();
   }
 
   // Serial command to Teensy (via ESP32) - OVERRIDES autonomous mode for movement commands
@@ -634,10 +753,16 @@ function handleMessage(ws, data) {
     }
   }
 
-  // Emergency stop - STICKY: blocks autonomous until explicitly cleared
+  // Emergency stop - sends STOP to robot but auto-clears after 3 seconds
   if (data.type === "emergency_stop") {
-    // Set sticky E-stop flag - autonomous CANNOT resume until cleared
     setEmergencyStop();
+    // Auto-clear after 3 seconds so the robot isn't permanently stuck
+    setTimeout(() => {
+      if (global.emergencyStopActive) {
+        clearEmergencyStop();
+        console.log("[E-STOP] Auto-cleared after 3 seconds");
+      }
+    }, 3000);
 
     // Stop autonomous loop immediately
     if (global.autoInterval) {
@@ -684,9 +809,37 @@ function handleMessage(ws, data) {
   if (data.type === "lidar" && ws.isJetsonLidar) {
     state.broadcast({ type: "lidar", points: data.points, count: data.count }, ws);
 
-    // LIDAR SAFETY: Check for obstacles in MAP mode
-    // Only active when robot is in mapping mode
-    if (state.robotStatus.mode === "mapping") {
+      // Feed LIDAR data to server-side navigation occupancy grid
+      try {
+        navigation.processLidarScan(data.points);
+      } catch (e) {
+        console.log(`[NAV-ERROR] processLidarScan failed: ${e.message}`);
+      }
+
+      // SCAN MATCHING: Use LIDAR to determine robot position (replaces broken encoders)
+      try {
+        const compassHeading = state.robotStatus.compassHeading !== undefined
+          ? state.robotStatus.compassHeading * Math.PI / 180  // deg to rad
+          : undefined;
+        const matchResult = scanMatcher.matchScans(data.points, compassHeading);
+        if (matchResult) {
+          // Broadcast updated position to all browsers
+          state.broadcast({
+            type: "dead_reckoning",
+            x: matchResult.x,
+            y: matchResult.y,
+            heading: matchResult.heading * 180 / Math.PI,
+            source: "scan_match",
+            confidence: matchResult.confidence
+          });
+        }
+      } catch (e) {
+        console.log(`[SLAM-ERROR] scanMatch failed: ${e.message}`);
+      }
+
+      // LIDAR SAFETY: Check for obstacles in MAP mode
+      // Only active when robot is in mapping mode
+      if (state.robotStatus.mode === "mapping") {
       const LIDAR_STOP_CM = 40;  // 16 inches = stop distance
       const points = data.points || [];
 
@@ -807,6 +960,28 @@ function handleMessage(ws, data) {
     state.broadcast(data, ws);
   }
 
+  // OCR request from browser -> Jetson
+  if (data.type === "ocr_request") {
+    console.log(`[OCR] Request from browser, forwarding to Jetson`);
+    let sent = false;
+    wss.clients.forEach(client => {
+      if (client.isJetsonDetection && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "OCR_REQUEST", camera: data.camera || 1 }));
+        sent = true;
+      }
+    });
+    if (!sent) {
+      console.log(`[OCR] ERROR: No Jetson detection client connected!`);
+      ws.send(JSON.stringify({ type: "ocr_result", error: "Jetson detection not connected", words: [] }));
+    }
+  }
+
+  // OCR result from Jetson -> browser
+  if (data.type === "OCR_RESULT") {
+    console.log(`[OCR] Result: ${JSON.stringify(data.words || data.error)}`);
+    state.broadcast({ type: "ocr_result", words: data.words, error: data.error, camera: data.camera }, ws);
+  }
+
   // Autonomous commands from Jetson -> Robot
   // BLOCKED when manual override is active (Xbox/drive system is KING)
   if (data.type === "autonomous_cmd") {
@@ -842,6 +1017,12 @@ function handleMessage(ws, data) {
     const rs = state.getRobotSocket();
 
     if (data.cmd === "START") {
+      // Stop EXPLORE if running - MAP and EXPLORE are mutually exclusive
+      if (navigation.isExploreActive()) {
+        navigation.stopExploration();
+        console.log("[AUTONOMOUS] Stopped EXPLORE - MAP takes priority");
+      }
+
       // Clear E-stop when user explicitly starts autonomous - they're ready to go
       if (global.emergencyStopActive) {
         clearEmergencyStop();
@@ -1132,6 +1313,65 @@ function handleMessage(ws, data) {
     console.log("[3D MAP] Clear command sent to processor");
   }
 
+  // LIDAR wall colors from Mac camera fusion -> broadcast to browsers
+  if (data.type === "lidar_colors") {
+    const colorCount = data.colors ? Object.keys(data.colors).length : 0;
+    if (colorCount > 0) {
+      state.broadcast(data, ws);
+      if (Math.random() < 0.1) {
+        console.log(`[LIDAR-COLORS] Broadcast ${colorCount} angle colors to browsers`);
+      }
+    }
+  }
+
+  // ==================== GAUSSIAN SPLATTING ====================
+  // Trained 3DGS model from Mac GPU processor
+
+  // Gaussian splats data from Mac -> broadcast to browsers
+  if (data.type === "gaussian_splats") {
+    const numSplats = data.num_splats || 0;
+    console.log(`[GSPLAT] Received ${numSplats} splats from Mac processor`);
+    state.broadcast(data, ws);
+  }
+
+  // DEBUG: Log ALL messages from processors
+  if (ws.isProcessor && data.type) {
+    console.log(`[PROC-MSG] ${ws.processorName}: type=${data.type}, keys=${Object.keys(data).join(',')}`);
+  }
+
+  // Apple SHARP splats (photorealistic single-image 3DGS)
+  if (data.type === "sharp_splats") {
+    const numSplats = data.num_splats || 0;
+    console.log(`[SHARP] ★★★ RECEIVED ${numSplats} splats ★★★`);
+    state.broadcast(data, ws);
+    console.log(`[SHARP] Broadcast done`);
+  }
+
+  // Gaussian splat mapper status -> broadcast to browsers
+  if (data.type === "gsplat_status") {
+    console.log(`[GSPLAT] Status: ${data.num_frames} frames, training=${data.is_training}, model=${data.has_model}`);
+    state.broadcast(data, ws);
+  }
+
+  // Gaussian splat train command from browser -> Mac processor
+  if (data.type === "gsplat_train") {
+    wss.clients.forEach(client => {
+      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "gsplat_train" }));
+      }
+    });
+    console.log("[GSPLAT] Train command sent to processor");
+  }
+
+  // Gaussian splat status request from browser -> Mac processor
+  if (data.type === "gsplat_status_request") {
+    wss.clients.forEach(client => {
+      if (client.isProcessor && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "gsplat_status_request" }));
+      }
+    });
+  }
+
   // Mapping status from Mac processor -> broadcast to browsers
   if (data.type === "mapping_status" && ws.isProcessor) {
     console.log(`[MAPPING] Mac mapper status: active=${data.active}, msg=${data.message}`);
@@ -1333,8 +1573,12 @@ function handleSerialData(data, ws) {
     const parts = data.data.split(",");
     if (parts.length >= 5) {
       const heading = parseFloat(parts[1]);
-      console.log(`[COMPASS] Heading: ${heading.toFixed(1)}°`);
-      state.broadcast({ type: "compass", heading: heading, x: parseInt(parts[2]), y: parseInt(parts[3]), z: parseInt(parts[4]) });
+      // Calibration: raw 96° = actual 128° (308° NW rear - 180° flip = 128° SE front)
+      const COMPASS_OFFSET = 32;
+      const calibrated = (heading + COMPASS_OFFSET) % 360;
+      state.robotStatus.compassHeading = calibrated;  // Store for scan matcher
+      console.log(`[COMPASS] Heading: ${calibrated.toFixed(1)}° (raw: ${heading.toFixed(1)}°)`);
+      state.broadcast({ type: "compass", heading: calibrated, raw: heading, x: parseInt(parts[2]), y: parseInt(parts[3]), z: parseInt(parts[4]) });
     }
   }
 
@@ -1349,6 +1593,8 @@ function handleSerialData(data, ws) {
     const parts = data.data.split(",");
     const safetyType = parts[1];
     console.log(`[SAFETY] ${safetyType}`);
+    // Feed safety status to navigation for tilt detection
+    navigation.updateSafety(safetyType);
 
     // If we're in autonomous mode and hit an obstacle, change direction
     if (global.autoInterval) {
@@ -1413,6 +1659,8 @@ function handleSerialData(data, ws) {
         timestamp: Date.now()
       };
       state.broadcast(sonarData, ws);
+      // Feed sonar to navigation for obstacle avoidance
+      navigation.updateSonar(sonarData.fl, sonarData.fr, sonarData.rl, sonarData.rr);
       // Log occasionally for debugging
       if (Math.random() < 0.1) {
         console.log(`[SONAR] FL:${sonarData.fl} FR:${sonarData.fr} RL:${sonarData.rl} RR:${sonarData.rr} cm`);
@@ -1430,8 +1678,9 @@ function handleSerialData(data, ws) {
       const posL = parseInt(parts[13]) || 0;
       const posR = parseInt(parts[14]) || 0;
 
-      // Process encoders for odometry
+      // Process encoders for odometry + stall detection
       const odomData = odometry.processEncoders(posL, posR);
+      navigation.updateEncoders(posL, posR);
 
       // Build telemetry data
       const telemData = {

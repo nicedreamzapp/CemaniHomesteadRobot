@@ -1,10 +1,11 @@
 // ===== ULTRASONIC SENSOR MODULE =====
 // JSN-SR04T waterproof ultrasonic sensors (4x)
+// Moving average filter for noise reduction
 // =====================================
 
 #include "ultrasonic.h"
 
-// Global distance readings (cm)
+// Global distance readings (cm) - smoothed
 float distFL = 0;
 float distFR = 0;
 float distRL = 0;
@@ -16,6 +17,35 @@ static int currentSensor = 0;
 
 // Previous values for change detection
 static float prevFL = 0, prevFR = 0, prevRL = 0, prevRR = 0;
+
+// === MOVING AVERAGE FILTER ===
+#define US_FILTER_SIZE 5  // Average last 5 readings (reduces noise significantly)
+static float filterFL[US_FILTER_SIZE] = {0};
+static float filterFR[US_FILTER_SIZE] = {0};
+static float filterRL[US_FILTER_SIZE] = {0};
+static float filterRR[US_FILTER_SIZE] = {0};
+static int filterIdx[4] = {0, 0, 0, 0};  // Current index for each sensor
+
+// Compute moving average (ignores zero values = out of range readings)
+static float movingAverage(float* buffer, float newVal, int sensorIdx) {
+  // If valid reading, add to buffer
+  if (newVal > 0) {
+    buffer[filterIdx[sensorIdx]] = newVal;
+    filterIdx[sensorIdx] = (filterIdx[sensorIdx] + 1) % US_FILTER_SIZE;
+  }
+
+  // Calculate average of non-zero values
+  float sum = 0;
+  int count = 0;
+  for (int i = 0; i < US_FILTER_SIZE; i++) {
+    if (buffer[i] > 0) {
+      sum += buffer[i];
+      count++;
+    }
+  }
+
+  return (count > 0) ? (sum / count) : 0;
+}
 
 void ultrasonicInit() {
   // Front-Left
@@ -81,18 +111,23 @@ bool ultrasonicUpdate() {
   if (now - lastReadTime[currentSensor] >= US_MIN_INTERVAL_MS) {
     lastReadTime[currentSensor] = now;
 
+    float rawReading;
     switch (currentSensor) {
       case 0:
-        distFL = readSensor(US_FL_TRIG, US_FL_ECHO);
+        rawReading = readSensor(US_FL_TRIG, US_FL_ECHO);
+        distFL = movingAverage(filterFL, rawReading, 0);
         break;
       case 1:
-        distFR = readSensor(US_FR_TRIG, US_FR_ECHO);
+        rawReading = readSensor(US_FR_TRIG, US_FR_ECHO);
+        distFR = movingAverage(filterFR, rawReading, 1);
         break;
       case 2:
-        distRL = readSensor(US_RL_TRIG, US_RL_ECHO);
+        rawReading = readSensor(US_RL_TRIG, US_RL_ECHO);
+        distRL = movingAverage(filterRL, rawReading, 2);
         break;
       case 3:
-        distRR = readSensor(US_RR_TRIG, US_RR_ECHO);
+        rawReading = readSensor(US_RR_TRIG, US_RR_ECHO);
+        distRR = movingAverage(filterRR, rawReading, 3);
         break;
     }
 
@@ -100,6 +135,7 @@ bool ultrasonicUpdate() {
   }
 
   // Check if any reading changed significantly (> 5cm)
+  // The filter smooths readings so changes are more reliable
   bool changed = false;
   if (abs(distFL - prevFL) > 5) { prevFL = distFL; changed = true; }
   if (abs(distFR - prevFR) > 5) { prevFR = distFR; changed = true; }

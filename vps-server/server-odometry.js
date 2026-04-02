@@ -28,14 +28,25 @@ let odometry = {
   // Trail history for mini-map - start at origin (red dot)
   trail: [{ x: 0, y: 0 }],
   // Debug counter
-  telemCount: 0
+  telemCount: 0,
+  // Motion detection for MAP 1
+  lastMovementTime: 0,
+  isMoving: false,
+  settledCallbacks: []  // Callbacks to fire when motion settles
 };
 
 // Process encoder values and update odometry
 // Returns telemetry data object to broadcast
 function processEncoders(posL, posR) {
-  const deltaL = posL - odometry.prevPosL;
-  const deltaR = posR - odometry.prevPosR;
+  // Handle 16-bit encoder wraparound (0-65535)
+  let deltaL = posL - odometry.prevPosL;
+  let deltaR = posR - odometry.prevPosR;
+
+  // Fix 16-bit wraparound: if delta is huge, it wrapped
+  if (deltaL > 32768) deltaL -= 65536;
+  if (deltaL < -32768) deltaL += 65536;
+  if (deltaR > 32768) deltaR -= 65536;
+  if (deltaR < -32768) deltaR += 65536;
 
   // DEBUG: Log encoder values every 50 TELEM messages (~10 sec)
   odometry.telemCount++;
@@ -43,14 +54,17 @@ function processEncoders(posL, posR) {
     console.log('[ENC] posL=' + posL + ' posR=' + posR + ' prevL=' + odometry.prevPosL + ' prevR=' + odometry.prevPosR + ' dL=' + deltaL + ' dR=' + deltaR);
   }
 
-  // Validate delta - reject jumps (encoder reset, noise, etc.)
+  // Validate delta - reject truly invalid jumps (noise)
   const deltaValid = Math.abs(deltaL) < MAX_DELTA && Math.abs(deltaR) < MAX_DELTA;
   if (!deltaValid) {
     console.log('[ODOM] Rejected jump: deltaL=' + deltaL + ' deltaR=' + deltaR);
   }
 
-  // Only update if we have valid deltas (skip first reading or noise)
-  if (deltaValid && (deltaL !== 0 || deltaR !== 0)) {
+  // Update if we have valid deltas
+  const hasMovement = deltaValid && (Math.abs(deltaL) > 2 || Math.abs(deltaR) > 2);
+  const now = Date.now();
+
+  if (hasMovement) {
     // Convert to mm
     const distL = deltaL * MM_PER_COUNT;
     const distR = deltaR * MM_PER_COUNT;
@@ -73,6 +87,13 @@ function processEncoders(posL, posR) {
 
     // Update total distance
     odometry.totalDistance += Math.abs(distAvg);
+
+    // Track motion state
+    odometry.lastMovementTime = now;
+    if (!odometry.isMoving) {
+      odometry.isMoving = true;
+      console.log('[MOTION] Robot started moving');
+    }
 
     // DEBUG: Log significant odometry changes
     if (Math.abs(distAvg) > 10) {  // More than 1cm movement
@@ -101,6 +122,20 @@ function processEncoders(posL, posR) {
       odomDistance: Math.round(odometry.totalDistance),
       odomTrail: odometry.trail,
       source: "encoder"
+    });
+  }
+
+  // Motion settled detection - if we were moving but haven't moved for 500ms
+  const SETTLE_TIME_MS = 500;
+  if (odometry.isMoving && (now - odometry.lastMovementTime) > SETTLE_TIME_MS) {
+    odometry.isMoving = false;
+    console.log('[MOTION] Robot motion settled (heading=' + Math.round(odometry.heading * 180 / Math.PI) + '°)');
+    state.broadcast({
+      type: "motion_settled",
+      odomX: Math.round(odometry.x),
+      odomY: Math.round(odometry.y),
+      odomHeading: odometry.heading,
+      odomHeadingDeg: Math.round(odometry.heading * 180 / Math.PI)
     });
   }
 
@@ -161,10 +196,58 @@ function getOdometry() {
   return odometry;
 }
 
+// SET POSITION (for relocalization without full reset)
+// Keeps heading and encoder baseline, just moves the origin
+function setPosition(newX, newY, newHeading) {
+  const oldX = odometry.x;
+  const oldY = odometry.y;
+
+  odometry.x = newX;
+  odometry.y = newY;
+  if (newHeading !== undefined) {
+    odometry.heading = newHeading;
+  }
+
+  // Add to trail
+  odometry.trail.push({ x: newX, y: newY });
+  if (odometry.trail.length > 1000) {
+    odometry.trail = odometry.trail.slice(-500);
+  }
+
+  console.log(`[RELOCALIZE] Position set: (${oldX.toFixed(0)}, ${oldY.toFixed(0)}) → (${newX.toFixed(0)}, ${newY.toFixed(0)})`);
+
+  // Broadcast updated position
+  state.broadcast({
+    type: "dead_reckoning",
+    odomX: Math.round(odometry.x),
+    odomY: Math.round(odometry.y),
+    odomHeading: odometry.heading,
+    odomHeadingDeg: Math.round(odometry.heading * 180 / Math.PI),
+    odomDistance: Math.round(odometry.totalDistance),
+    odomTrail: odometry.trail,
+    source: "relocalization"
+  });
+}
+
+// Mark robot as moving (call when sending move command)
+function markMoving() {
+  odometry.isMoving = true;
+  odometry.lastMovementTime = Date.now();
+  console.log('[MOTION] Robot marked as moving (command sent)');
+}
+
+// Check if robot is currently moving
+function isMoving() {
+  return odometry.isMoving;
+}
+
 module.exports = {
   processEncoders,
   resetOdometry,
+  setPosition,
   getOdometry,
+  markMoving,
+  isMoving,
   // Constants for reference
   WHEEL_CIRCUMFERENCE_MM,
   WHEEL_BASE_MM,
