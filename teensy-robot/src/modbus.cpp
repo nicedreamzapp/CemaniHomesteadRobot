@@ -91,7 +91,7 @@ bool sendModbusWrite(uint8_t id, uint16_t reg, int16_t value) {
 
   Serial3.write(frame, 8);
   Serial3.flush();
-  delay(15);  // Longer delay for reliable Modbus communication
+  delay(8);  // Balanced: was 15ms (too slow) then 3ms (too fast for drivers)
   // Drain any response bytes
   while (Serial3.available()) Serial3.read();
   return true;
@@ -118,7 +118,7 @@ bool sendModbusSyncVelocity(uint8_t id, int16_t leftVel, int16_t rightVel) {
 
   Serial3.write(frame, 13);
   Serial3.flush();
-  delay(15);  // Longer delay for reliable Modbus communication
+  delay(8);  // Balanced: was 15ms (too slow) then 3ms (too fast for drivers)
   // Drain any response bytes
   while (Serial3.available()) Serial3.read();
   return true;

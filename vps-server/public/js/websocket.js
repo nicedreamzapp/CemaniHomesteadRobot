@@ -62,9 +62,74 @@ ws.onmessage = function(e) {
     if (window.lidar2dModule) window.lidar2dModule.drawLidarPoints(d.points);
   }
 
+  // Navigation path from server A* pathfinding
+  if (d.type === 'nav_path') {
+    if (window.lidar3dModule && window.lidar3dModule.updateNavPath) {
+      window.lidar3dModule.updateNavPath(d);
+    }
+  }
+
+  // Navigation status updates
+  if (d.type === 'nav_status') {
+    const navEl = document.getElementById('navStatus');
+    if (navEl) {
+      if (d.status === 'navigating') {
+        navEl.textContent = `NAV: ${d.waypointIndex || 0}/${d.waypointTotal || 0} | ${((d.distanceRemaining || 0) / 1000).toFixed(1)}m`;
+        navEl.style.color = '#00ffcc';
+      } else if (d.status === 'arrived') {
+        navEl.textContent = 'NAV: Arrived!';
+        navEl.style.color = '#44ff44';
+        setTimeout(() => { navEl.textContent = ''; }, 3000);
+      } else if (d.status === 'no_path') {
+        navEl.textContent = 'NAV: No path!';
+        navEl.style.color = '#ff4444';
+        setTimeout(() => { navEl.textContent = ''; }, 3000);
+      } else {
+        navEl.textContent = '';
+      }
+    }
+  }
+
+  // Frontier exploration data
+  if (d.type === 'frontiers') {
+    if (window.lidar3dModule && window.lidar3dModule.updateFrontiers) {
+      window.lidar3dModule.updateFrontiers(d);
+    }
+  }
+
+  // Exploration status
+  if (d.type === 'explore_status') {
+    const exploreBtn = document.getElementById('exploreBtn');
+    if (exploreBtn) {
+      if (d.active) {
+        exploreBtn.textContent = 'STOP EXPLORE';
+        exploreBtn.classList.add('active');
+      } else {
+        exploreBtn.textContent = 'EXPLORE';
+        exploreBtn.classList.remove('active');
+        if (d.reason === 'complete') {
+          const navEl = document.getElementById('navStatus');
+          if (navEl) { navEl.textContent = 'EXPLORE: Complete!'; navEl.style.color = '#44ff44'; }
+        }
+      }
+    }
+  }
+
+  // Server-side occupancy grid updates
+  if (d.type === 'grid_update') {
+    if (window.lidar3dModule && window.lidar3dModule.handleGridUpdate) {
+      window.lidar3dModule.handleGridUpdate(d);
+    }
+  }
+
   // Object detection from Jetson
   if (d.type === 'detections') {
     handleDetections(d.camera, d.detections, d.timestamp);
+  }
+
+  // OCR result from Jetson
+  if (d.type === 'ocr_result') {
+    if (typeof handleOCRResult === 'function') handleOCRResult(d);
   }
 
   // Depth frames from Mac Mini processor
@@ -316,15 +381,62 @@ ws.onmessage = function(e) {
     console.log(`[PROCESSOR] ${d.name} connected:`, d.connected);
   }
 
-  // Accumulated 3D map from Mac processor (textured point cloud)
+  // Accumulated 3D map from Mac processor — DISABLED (splat/GPU mapping removed)
   if (d.type === 'accumulated_map') {
-    if (window.lidar3dModule && window.lidar3dModule.updateAccumulatedMap) {
+    if (false && window.lidar3dModule && window.lidar3dModule.updateAccumulatedMap) {
       window.lidar3dModule.updateAccumulatedMap(d);
     }
     // Log occasionally
     if (Math.random() < 0.05) {
       const pts = d.total || (d.points ? d.points.length : 0);
       console.log(`[3D MAP] Received ${pts} textured points from Mac processor`);
+    }
+  }
+
+  // LIDAR wall colors from Mac camera fusion
+  if (d.type === 'lidar_colors') {
+    if (window.lidarWallColors !== undefined) {
+      // Merge new colors into existing
+      Object.assign(window.lidarWallColors, d.colors);
+      console.log(`[LIDAR COLORS] Received ${Object.keys(d.colors).length} angle colors from Mac`);
+    }
+  }
+
+  // ==================== GAUSSIAN SPLATTING ====================
+  // Trained 3DGS model from Mac GPU processor
+
+  // Gaussian/SHARP splats — DISABLED (removed, never worked on Mac GPU)
+  if (d.type === 'gaussian_splats' || d.type === 'sharp_splats') {
+    // Ignore — splat rendering removed
+  }
+
+  // Gaussian splat mapper status (capture progress, training status)
+  if (d.type === 'gsplat_status') {
+    console.log(`[GSPLAT] Status: ${d.num_frames} frames, training=${d.is_training}, model=${d.has_model}`);
+    if (window.lidar3dModule && window.lidar3dModule.updateGsplatStatus) {
+      window.lidar3dModule.updateGsplatStatus(d);
+    }
+    // Update Mac GPU indicator if Gaussian Splatting is active
+    const macStatus = document.getElementById('macGpuStatus');
+    if (macStatus && d.is_training) {
+      macStatus.textContent = `Training: ${Math.round((d.training_progress || 0) * 100)}%`;
+      macStatus.style.color = '#fa0';
+    } else if (macStatus && d.has_model) {
+      macStatus.textContent = 'GS Model Ready';
+      macStatus.style.color = '#0f8';
+    }
+  }
+
+  // Room planes from RANSAC detection (solid wall/floor/ceiling surfaces)
+  if (d.type === 'room_planes') {
+    if (window.lidar3dModule && window.lidar3dModule.updateRoomPlanes) {
+      window.lidar3dModule.updateRoomPlanes(d);
+    }
+    if (d.planes && d.planes.length > 0) {
+      const walls = d.planes.filter(p => p.type === 'wall').length;
+      const floors = d.planes.filter(p => p.type === 'floor').length;
+      const ceilings = d.planes.filter(p => p.type === 'ceiling').length;
+      console.log(`[PLANES] Received ${d.planes.length} planes: ${walls} walls, ${floors} floor, ${ceilings} ceiling`);
     }
   }
 
@@ -433,6 +545,10 @@ ws.onclose = () => {
     window.camerasPtzModule.updateCam1Status(false, false);
     window.camerasPtzModule.updateJetsonStatus(false);
   }
+
+  // Auto-reconnect after 2 seconds
+  console.log('[WS] Disconnected - reconnecting in 2s...');
+  setTimeout(() => { location.reload(); }, 2000);
 };
 
 // ============ BINARY DATA HANDLER ============
@@ -481,11 +597,13 @@ function handleSerialData(d) {
     return;
   }
 
-  // Parse COMPASS data: COMPASS,heading,x,y,z
+  // Parse COMPASS data: COMPASS,heading,x,y,z (raw serial - apply calibration offset)
   if (d.data && d.data.startsWith('COMPASS,')) {
     const parts = d.data.split(',');
     if (parts.length >= 5 && window.lidar3dModule) {
-      const heading = parseFloat(parts[1]);
+      const COMPASS_OFFSET = 32;  // Calibration: raw 96° back = 128° front (308° NW rear - 180° flip)
+      const rawHeading = parseFloat(parts[1]);
+      const heading = (rawHeading + COMPASS_OFFSET) % 360;
       const x = parseInt(parts[2]);
       const y = parseInt(parts[3]);
       const z = parseInt(parts[4]);
@@ -877,14 +995,14 @@ function drawDetectionOverlay(cameraId, detections) {
     const labelWidth = ctx.measureText(label).width + 12;
     const labelHeight = 18;
 
-    // Find best label position (try multiple positions like iOS)
+    // Position label INSIDE the bounding box (top-center)
     let textX = cx - labelWidth / 2;
-    let textY = y1 - labelHeight - 4;  // Above the box
+    let textY = y1 + 4;  // Inside the box, near the top
 
     // Keep in bounds
     textX = Math.max(4, Math.min(textX, w - labelWidth - 4));
-    if (textY < labelHeight) {
-      textY = y2 + 4;  // Below if not enough room above
+    if (textY + labelHeight > y2) {
+      textY = y2 - labelHeight - 4;  // Push up if box is too small
     }
 
     // Collision avoidance

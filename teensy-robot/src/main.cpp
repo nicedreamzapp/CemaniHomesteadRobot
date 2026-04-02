@@ -2,6 +2,14 @@
 // Teensy 4.1 + 2x ZLAC8015D Motor Drivers
 // V3.68 - Safety system (obstacle avoidance + tilt detection)
 // =====================================================
+//
+// ╔═══════════════════════════════════════════════════════════════════════════════╗
+// ║  SAFETY RULES:                                                                ║
+// ║  1. Xbox controller ALWAYS has priority over autonomous commands              ║
+// ║  2. Claude Code is NEVER allowed to initiate robot movement                   ║
+// ║  3. Only the USER can start MAP 1 or movement via the web UI                  ║
+// ║  4. Watchdog stops motors if no commands received for 2 seconds               ║
+// ╚═══════════════════════════════════════════════════════════════════════════════╝
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -35,7 +43,10 @@ float lastValidLat = 0, lastValidLon = 0;
 
 // Compass data
 float compassHeading = 0;
+float compassHeadingFiltered = 0;  // Smoothed heading to reduce jitter
+bool compassFilterInitialized = false;
 int16_t compassX = 0, compassY = 0, compassZ = 0;
+#define COMPASS_FILTER_ALPHA 0.15f  // Lower = more smoothing (0.1-0.3 typical)
 
 // Compass AUTO-calibration - runs continuously while driving!
 int16_t compassOffsetX = 0;
@@ -60,6 +71,14 @@ bool motorsEnabled = false;
 int16_t lastLeftSpeed = 0;
 int16_t lastRightSpeed = 0;
 int16_t rightTriggerValue = 0;  // Right trigger for turbo mode (0-1023)
+
+// ╔═══════════════════════════════════════════════════════════════════════════════╗
+// ║  XBOX SAFETY TRACKING - CRITICAL: Separate from general KEEPALIVE             ║
+// ║  INCIDENT: Jan 25, 2026 - KEEPALIVE masked Xbox disconnect, causing crash     ║
+// ╚═══════════════════════════════════════════════════════════════════════════════╝
+static uint32_t lastXboxActive = 0;      // Last time we received XBOX_ACTIVE
+static bool xboxIsActive = false;        // Is Xbox controller currently active?
+static bool xboxWatchdogTriggered = false;  // Did Xbox watchdog stop motors?
 
 // Control modes: MANUAL = Xbox control (no auto-stop), MAPPING = slow autonomous with safety
 enum ControlMode { MODE_MANUAL = 0, MODE_MAPPING = 1 };
@@ -339,7 +358,7 @@ void readCompass() {
     bus->write(0x01);  // Single measurement mode
     bus->endTransmission();
 
-    delay(10);  // Wait for measurement
+    delayMicroseconds(1000);  // 1ms instead of 10ms - IST8310 is fast enough
 
     // Read data from register 0x03
     bus->beginTransmission(0x0E);
@@ -435,13 +454,34 @@ void readCompass() {
 
   // Calculate magnetic heading (0-360 degrees)
   // Negate both X and Y to correct orientation for IST8310 mounting
-  compassHeading = atan2((float)-compassY, (float)-compassX) * 180.0 / PI;
-  if (compassHeading < 0) compassHeading += 360;
+  float rawHeading = atan2((float)-compassY, (float)-compassX) * 180.0 / PI;
+  if (rawHeading < 0) rawHeading += 360;
 
   // Apply mounting offset (arrow on GPS/compass points to BACK of robot)
   // Then apply magnetic declination to get TRUE north heading
   // Result: 0°=True North, 90°=East, 180°=South, 270°=West
-  compassHeading = fmod(compassHeading + COMPASS_MOUNTING_OFFSET + MAGNETIC_DECLINATION + 360.0f, 360.0f);
+  rawHeading = fmod(rawHeading + COMPASS_MOUNTING_OFFSET + MAGNETIC_DECLINATION + 360.0f, 360.0f);
+
+  // Apply low-pass filter to reduce jitter (handle 0°/360° wraparound)
+  if (!compassFilterInitialized) {
+    compassHeadingFiltered = rawHeading;
+    compassFilterInitialized = true;
+  } else {
+    // Calculate shortest angular difference (handles wraparound)
+    float diff = rawHeading - compassHeadingFiltered;
+    if (diff > 180.0f) diff -= 360.0f;
+    if (diff < -180.0f) diff += 360.0f;
+
+    // Apply exponential moving average filter
+    compassHeadingFiltered += COMPASS_FILTER_ALPHA * diff;
+
+    // Keep in 0-360 range
+    if (compassHeadingFiltered < 0) compassHeadingFiltered += 360.0f;
+    if (compassHeadingFiltered >= 360.0f) compassHeadingFiltered -= 360.0f;
+  }
+
+  // Use filtered value for output (raw still available in compassHeading)
+  compassHeading = compassHeadingFiltered;
 }
 
 // ===== MAIN LOOP =====
@@ -595,6 +635,12 @@ void loop() {
         safetyReset();  // Clear any safety override
         Serial1.println("RESUMED");
       }
+      // Motor reset command - full driver reset without power cycle
+      else if (strcmp(buf, "MOTOR_RESET") == 0) {
+        Serial.println("[CMD] MOTOR_RESET received - doing full reset");
+        fullReset();
+        Serial1.println("MOTORS_RESET");
+      }
       // Mode switching: MANUAL (Xbox) vs MAPPING (slow autonomous)
       else if (strcmp(buf, "MODE_MANUAL") == 0) {
         currentMode = MODE_MANUAL;
@@ -667,10 +713,41 @@ void loop() {
         autoRightSpeed = 0;
         Serial.println("[AUTO] Stopped");
       }
-      // Keepalive from ESP32 - just resets the watchdog timer (lastComm already updated)
+      // Keepalive from ESP32 - resets general watchdog but NOT Xbox watchdog
       else if (strcmp(buf, "KEEPALIVE") == 0) {
-        // Keepalive received - watchdog timer reset by lastComm = now above
-        // Don't print anything to avoid spamming serial output
+        // General keepalive - ESP32 is alive
+        // NOTE: This does NOT reset Xbox watchdog - that requires XBOX_ACTIVE
+        lastComm = now;  // Reset general watchdog so motors don't stop when joystick is held steady
+      }
+      // ╔═══════════════════════════════════════════════════════════════════════════════╗
+      // ║  XBOX HEARTBEAT - CRITICAL SAFETY: This is how we know Xbox is responsive    ║
+      // ╚═══════════════════════════════════════════════════════════════════════════════╝
+      else if (strcmp(buf, "XBOX_ACTIVE") == 0) {
+        // Xbox controller is connected and being polled - reset Xbox watchdog
+        lastXboxActive = now;
+        lastComm = now;  // Also reset general watchdog
+        xboxIsActive = true;
+        if (xboxWatchdogTriggered) {
+          Serial.println("[XBOX] Controller active - recovering from watchdog");
+          xboxWatchdogTriggered = false;
+        }
+      }
+      else if (strcmp(buf, "XBOX_INACTIVE") == 0) {
+        // Xbox controller not connected - be extra careful
+        xboxIsActive = false;
+        Serial.println("[XBOX] Controller INACTIVE - autonomous commands only");
+      }
+      else if (strcmp(buf, "XBOX_DISCONNECTED") == 0) {
+        // Xbox just disconnected - EMERGENCY STOP!
+        xboxIsActive = false;
+        Serial.println("[XBOX] DISCONNECTED - EMERGENCY STOPPING MOTORS!");
+        emergencyStopMotors();
+        autonomousActive = false;
+        autoLeftSpeed = 0;
+        autoRightSpeed = 0;
+        discreteMoveActive = false;
+        discreteMovePhase = 0;
+        Serial1.println("XBOX_ESTOP");
       }
       // Compass calibration commands
       else if (strcmp(buf, "COMPASS_CAL_START") == 0) {
@@ -751,7 +828,18 @@ void loop() {
     }
   }
   // ===== JOYSTICK MOTOR CONTROL =====
-  else if (controllerConnected && !emergencyStop && motorsEnabled && !discreteMoveActive && !autonomousActive) {
+  // XBOX IS KING - joystick ALWAYS overrides autonomous/mapping mode
+  // Check for any joystick input first and cancel autonomous if detected
+  if (controllerConnected && (abs(currentLX) > 50 || abs(currentLY) > 50)) {
+    if (autonomousActive) {
+      Serial.println("[XBOX] Joystick override - CANCELING autonomous mode");
+      autonomousActive = false;
+      autoLeftSpeed = 0;
+      autoRightSpeed = 0;
+    }
+  }
+
+  if (controllerConnected && !emergencyStop && motorsEnabled && !discreteMoveActive) {
     if (now - lastMotorUpdate >= MOTOR_UPDATE_INTERVAL) {
       lastMotorUpdate = now;
 
@@ -840,13 +928,35 @@ void loop() {
     Serial.println("[TIMEOUT] No Xbox data - joystick zeroed");
   }
 
-  // ===== SAFETY: Watchdog - auto-stop if no communication =====
-  // This is the CRITICAL safety feature - motors MUST stop if we lose contact
+  // ╔═══════════════════════════════════════════════════════════════════════════════╗
+  // ║  XBOX WATCHDOG - CRITICAL: Separate from general communication watchdog       ║
+  // ║  INCIDENT: Jan 25, 2026 - KEEPALIVE masked Xbox disconnect, causing crash     ║
+  // ║  This watchdog ONLY resets when we receive XBOX_ACTIVE from ESP32             ║
+  // ╚═══════════════════════════════════════════════════════════════════════════════╝
+  uint32_t timeSinceXbox = now - lastXboxActive;
+  if (lastXboxActive > 0 && timeSinceXbox > XBOX_TIMEOUT_MS && !xboxWatchdogTriggered && motorsEnabled) {
+    // Xbox controller was active but we haven't heard from it - STOP!
+    Serial.printf("[XBOX WATCHDOG] No XBOX_ACTIVE for %lums - STOPPING MOTORS!\n", timeSinceXbox);
+    setDriverSpeed(1, 0);
+    setDriverSpeed(2, 0);
+    lastLeftSpeed = 0;
+    lastRightSpeed = 0;
+    currentLX = 0;
+    currentLY = 0;
+    autonomousActive = false;
+    autoLeftSpeed = 0;
+    autoRightSpeed = 0;
+    xboxWatchdogTriggered = true;
+    Serial1.println("XBOX_WATCHDOG,STOP");
+  }
+
+  // ===== SAFETY: General Watchdog - auto-stop if no communication =====
+  // This is a backup - Xbox watchdog should catch most issues
   uint32_t timeSinceComm = now - lastComm;
   if (timeSinceComm > WATCHDOG_TIMEOUT_MS && !watchdogTriggered && motorsEnabled) {
     // First threshold - zero the motors gracefully
     if (lastLeftSpeed != 0 || lastRightSpeed != 0) {
-      Serial.println("[WATCHDOG] No commands for 2s - zeroing motors");
+      Serial.printf("[WATCHDOG] No commands for %dms - zeroing motors\n", WATCHDOG_TIMEOUT_MS);
       setDriverSpeed(1, 0);
       setDriverSpeed(2, 0);
       lastLeftSpeed = 0;
@@ -858,7 +968,7 @@ void loop() {
 
     // Second threshold - full emergency stop
     if (timeSinceComm > WATCHDOG_STOP_TIMEOUT) {
-      Serial.println("[WATCHDOG] No commands for 5s - EMERGENCY STOP!");
+      Serial.printf("[WATCHDOG] No commands for %dms - EMERGENCY STOP!\n", WATCHDOG_STOP_TIMEOUT);
       emergencyStopMotors();
       discreteMoveActive = false;
       discreteMovePhase = 0;
@@ -867,10 +977,12 @@ void loop() {
     }
   }
 
-  // Reset watchdog flag when we receive new data
+  // Reset watchdog flag AND re-enable motors when communication is restored
   if (timeSinceComm < 500 && watchdogTriggered) {
     watchdogTriggered = false;
-    Serial.println("[WATCHDOG] Communication restored");
+    Serial.println("[WATCHDOG] Communication restored - doing full reset!");
+    fullReset();  // Actually re-enable motors!
+    Serial1.println("WATCHDOG,RECOVERED");
   }
 
   // ===== TELEMETRY UPDATE =====

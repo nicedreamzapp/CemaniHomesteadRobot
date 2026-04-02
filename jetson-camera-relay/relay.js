@@ -8,6 +8,13 @@
  * - FFmpeg uses system path (not homebrew)
  * - Can use Jetson hardware acceleration (NVENC/NVDEC)
  * - Cameras are local to robot network
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════════╗
+ * ║  SAFETY RULES - HARDCODED:                                                    ║
+ * ║  1. Xbox controller ALWAYS has priority over autonomous commands              ║
+ * ║  2. Claude Code is NEVER allowed to initiate robot movement or MAP 1          ║
+ * ║  3. Only the USER can start mapping by clicking buttons in the web UI         ║
+ * ╚═══════════════════════════════════════════════════════════════════════════════╝
  */
 
 const WebSocket = require('ws');
@@ -206,11 +213,13 @@ function connectToVPS() {
     console.log('[VPS] Connected!');
     if (vpsSocket._socket) vpsSocket._socket.setNoDelay(true);
 
-    vpsSocket.send(JSON.stringify({
+    const helloMsg = JSON.stringify({
       type: 'camera_hello',
       source: 'jetson',  // Identify as Jetson relay
       cameras: CONFIG.cameras.map(c => ({ id: c.id, name: c.name, ip: c.ip }))
-    }));
+    });
+    console.log('[VPS] Sending camera_hello:', helloMsg);
+    vpsSocket.send(helloMsg);
 
     // Stop existing streams and start fresh
     CONFIG.cameras.forEach(cam => {
@@ -290,6 +299,173 @@ function connectToVPS() {
 
       if (msg.type === 'v380_talk_stop') {
         handleV380Talk('stop');
+      }
+
+      // WiFi scanning and management (via Alfa adapter)
+      if (msg.type === 'wifi_scan') {
+        console.log('[WIFI] Scan requested');
+        try {
+          // Rescan using Alfa adapter (no sudo needed for nmcli)
+          execSync('nmcli device wifi rescan ifname wlx00c0caab495d 2>/dev/null || true', { timeout: 5000 });
+
+          // Wait for scan to complete
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          // Get network list
+          const output = execSync('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list ifname wlx00c0caab495d 2>/dev/null || nmcli -t -f SSID,SIGNAL,SECURITY device wifi list', {
+            encoding: 'utf8',
+            timeout: 10000
+          });
+
+          // Get known connections
+          const knownOutput = execSync('nmcli -t -f NAME,TYPE connection show 2>/dev/null || true', { encoding: 'utf8' });
+          const knownNetworks = knownOutput.split('\n')
+            .filter(line => line.includes(':wifi') || line.includes(':802-11-wireless'))
+            .map(line => line.split(':')[0]);
+
+          // Get current connection
+          const statusOutput = execSync('nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null || true', { encoding: 'utf8' });
+          let currentNetwork = null;
+          statusOutput.split('\n').forEach(line => {
+            const parts = line.split(':');
+            if (parts[1] && parts[1].includes('wlx')) {
+              currentNetwork = parts[0];
+            }
+          });
+
+          // Parse networks
+          const networks = [];
+          const seen = new Set();
+          output.split('\n').forEach(line => {
+            if (!line.trim()) return;
+            const parts = line.split(':');
+            const ssid = parts[0];
+            if (!ssid || seen.has(ssid)) return;
+            seen.add(ssid);
+
+            networks.push({
+              ssid: ssid,
+              signal: parseInt(parts[1]) || 0,
+              security: parts[2] || 'Open',
+              known: knownNetworks.includes(ssid),
+              connected: ssid === currentNetwork
+            });
+          });
+
+          // Sort: connected first, then known, then by signal
+          networks.sort((a, b) => {
+            if (a.connected !== b.connected) return b.connected ? 1 : -1;
+            if (a.known !== b.known) return b.known ? 1 : -1;
+            return b.signal - a.signal;
+          });
+
+          console.log('[WIFI] Found', networks.length, 'networks');
+          if (vpsSocket && vpsSocket.readyState === 1) {
+            vpsSocket.send(JSON.stringify({
+              type: 'wifi_networks',
+              networks: networks
+            }));
+          }
+        } catch (err) {
+          console.error('[WIFI] Scan error:', err.message);
+          if (vpsSocket && vpsSocket.readyState === 1) {
+            vpsSocket.send(JSON.stringify({
+              type: 'wifi_error',
+              error: 'Scan failed: ' + err.message
+            }));
+          }
+        }
+      }
+
+      if (msg.type === 'wifi_connect') {
+        const ssid = msg.ssid;
+        const password = msg.password;
+        console.log('[WIFI] Connect requested:', ssid);
+
+        try {
+          let cmd;
+          if (password) {
+            // Connect with password
+            cmd = `nmcli device wifi connect "${ssid}" password "${password}" ifname wlx00c0caab495d`;
+          } else {
+            // Connect to known network
+            cmd = `nmcli connection up "${ssid}"`;
+          }
+
+          execSync(cmd, { timeout: 30000 });
+          console.log('[WIFI] Connected to', ssid);
+
+          if (vpsSocket && vpsSocket.readyState === 1) {
+            vpsSocket.send(JSON.stringify({
+              type: 'wifi_connected',
+              ssid: ssid
+            }));
+          }
+        } catch (err) {
+          console.error('[WIFI] Connect error:', err.message);
+          if (vpsSocket && vpsSocket.readyState === 1) {
+            vpsSocket.send(JSON.stringify({
+              type: 'wifi_error',
+              error: 'Connection failed: ' + err.message
+            }));
+          }
+        }
+      }
+
+      if (msg.type === 'wifi_status') {
+        try {
+          const output = execSync('nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null || true', { encoding: 'utf8' });
+          let currentNetwork = null;
+          output.split('\n').forEach(line => {
+            const parts = line.split(':');
+            if (parts[1] && parts[1].includes('wlx')) {
+              currentNetwork = parts[0];
+            }
+          });
+
+          if (vpsSocket && vpsSocket.readyState === 1) {
+            vpsSocket.send(JSON.stringify({
+              type: 'wifi_status',
+              connected: !!currentNetwork,
+              ssid: currentNetwork
+            }));
+          }
+        } catch (err) {
+          console.error('[WIFI] Status error:', err.message);
+        }
+      }
+
+      // Remote service control (start/restart LIDAR, etc)
+      if (msg.type === 'jetson_service') {
+        const service = msg.service;
+        const action = msg.action || 'restart';
+        const allowed = ['robot-lidar', 'robot-detection', 'robot-camera'];
+        if (allowed.includes(service)) {
+          console.log(`[JETSON] Service command: ${action} ${service}`);
+          try {
+            execSync(`sudo systemctl ${action} ${service}`, { timeout: 10000 });
+            console.log(`[JETSON] ${service} ${action} SUCCESS`);
+            if (vpsSocket && vpsSocket.readyState === 1) {
+              vpsSocket.send(JSON.stringify({
+                type: 'jetson_service_result',
+                service: service,
+                action: action,
+                success: true
+              }));
+            }
+          } catch (err) {
+            console.error(`[JETSON] ${service} ${action} FAILED:`, err.message);
+            if (vpsSocket && vpsSocket.readyState === 1) {
+              vpsSocket.send(JSON.stringify({
+                type: 'jetson_service_result',
+                service: service,
+                action: action,
+                success: false,
+                error: err.message
+              }));
+            }
+          }
+        }
       }
     } catch (err) {}
   });

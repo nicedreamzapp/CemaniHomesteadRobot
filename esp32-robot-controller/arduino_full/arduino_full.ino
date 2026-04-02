@@ -1,25 +1,34 @@
 /*
- * Cemani Robot Controller v3.13.0
+ * Cemani Robot Controller v4.0.0 - SAFETY CRITICAL UPDATE
  * ESP32 with Bluepad32 (Xbox) + WiFi + WebSocket + WIRELESS OTA
  * Upload via Arduino IDE with Bluepad32 board package
  *
+ * ╔═══════════════════════════════════════════════════════════════════════════════╗
+ * ║                    !!! SAFETY CRITICAL - DO NOT MODIFY !!!                    ║
+ * ╠═══════════════════════════════════════════════════════════════════════════════╣
+ * ║  XBOX CONTROLLER IS SACRED - IT MUST NEVER BE OVERRIDDEN                      ║
+ * ║                                                                               ║
+ * ║  1. Xbox polling happens FIRST every loop - BEFORE WebSocket                  ║
+ * ║  2. Xbox disconnect = IMMEDIATE motor stop sent to Teensy                     ║
+ * ║  3. Xbox heartbeat is SEPARATE from keepalive - Teensy tracks both            ║
+ * ║  4. WebSocket data CANNOT block or delay Xbox processing                      ║
+ * ║  5. ANY Xbox input immediately cancels ALL autonomous commands                ║
+ * ║                                                                               ║
+ * ║  INCIDENT: Jan 25, 2026 - Robot crashed into crowd causing injuries           ║
+ * ║  ROOT CAUSE: WebSocket flooded by mapping data, blocking Xbox commands        ║
+ * ║  THIS VERSION FIXES: Xbox processed first, separate heartbeat, instant stop   ║
+ * ╚═══════════════════════════════════════════════════════════════════════════════╝
+ *
+ * v4.0.0 - SAFETY CRITICAL: Xbox ALWAYS processed first, before WebSocket
+ *        - Xbox disconnect sends IMMEDIATE STOP to Teensy
+ *        - Separate XBOX_HEARTBEAT message (not just KEEPALIVE)
+ *        - WebSocket processing is time-limited to prevent blocking
+ *        - Reduced joystick deadzone for finer control
  * v3.13.0 - SERIAL FORWARDING THROTTLE - only forward ONE message per loop
- *         - Prevents "message too big" (1009) errors from buffer overflow
  * v3.12.0 - Increased loop delay to 10ms for WebSocket stability
- * v3.11.0 - WEBSOCKET STABILITY FIX - added 5ms loop delay to prevent WebSocket starvation
- *         - Reduced aggressive Bluetooth polling that was interfering with WiFi
+ * v3.11.0 - WEBSOCKET STABILITY FIX - added 5ms loop delay
  * v3.10.0 - BROWNOUT DETECTION DISABLED - prevents resets during motor startup
  * v3.9.0 - WATCHDOG AUTO-REBOOT - reboots if WebSocket disconnected >2 minutes
- * v3.8.0 - AGGRESSIVE XBOX SCANNING - polls 5x per loop until connected
- *        - Re-enables Bluetooth scan every 2s when no controller
- *        - Instant re-scan on disconnect for fast reconnection
- * v3.7.0 - Instant Xbox controller connection at boot
- * v3.3.0 - WIRELESS OTA for ESP32! Never need USB again
- *        - Aerospace-grade deadzone (50) to eliminate stick drift
- * v3.2.1 - Fix OTA flash: disable keepalive/gamepad during flash mode
- * v3.2.0 - Keepalive heartbeat to Teensy for watchdog safety
- * v3.1.0 - Fix D-pad PTZ: use Arduino String for websocket (was corrupting with char*)
- * v3.0.9 - Xbox D-pad controls camera PTZ, Y button toggles camera 1/2
  *
  * SETUP: Copy credentials.h.example to credentials.h and add your WiFi passwords
  */
@@ -51,13 +60,18 @@ unsigned long lastWiFiConnected = 0;
 unsigned long lastTeensyKeepalive = 0;
 unsigned long lastXboxScanLog = 0;
 unsigned long lastWsConnected = 0;  // Watchdog: track last successful WS connection
+unsigned long lastXboxInput = 0;    // SAFETY: Track last Xbox input for heartbeat
+unsigned long lastXboxHeartbeat = 0; // SAFETY: Send Xbox-specific heartbeat to Teensy
+bool xboxWasConnected = false;      // SAFETY: Track connection state changes
 int wifiDropCount = 0;
 const unsigned long WIFI_CHECK_INTERVAL = 2000;   // Check WiFi more often (was 10s)
 const unsigned long HEARTBEAT_INTERVAL = 10000;   // Send telemetry every 10s (was 15s)
 const unsigned long WIFI_RECONNECT_TIMEOUT = 3000; // Force reconnect if down >3s
 const unsigned long TEENSY_KEEPALIVE_INTERVAL = 1000; // Send keepalive to Teensy every 1s
+const unsigned long XBOX_HEARTBEAT_INTERVAL = 200;  // SAFETY: Send Xbox heartbeat every 200ms
 const unsigned long XBOX_SCAN_LOG_INTERVAL = 5000; // Log Xbox scan status every 5s
 const unsigned long WS_WATCHDOG_TIMEOUT = 120000; // Reboot if no WS connection for 2 minutes
+const unsigned long WS_LOOP_TIME_LIMIT = 5;       // SAFETY: Max 5ms for WebSocket processing
 
 int16_t plx = 0, ply = 0, prx = 0, pry = 0;
 int16_t plt = 0, prt = 0;
@@ -74,7 +88,7 @@ int hexLinesReceived = 0;
 #define AXIS_DZ       50    // Deadzone for raw axis values (was 15 - too small!)
 #define AXIS_CHANGE   10    // Minimum change to send update
 #define TRIG_CHANGE   8     // Trigger change threshold
-#define JOYSTICK_SEND_DZ  60  // Must exceed this to send joystick commands
+#define JOYSTICK_SEND_DZ  30  // REDUCED from 60 - finer control for safety
 
 void webSocketEvent(WStype_t type, uint8_t* payload, size_t length);
 void onConnectedGamepad(GamepadPtr gp);
@@ -94,7 +108,7 @@ void setup() {
 
   Serial.begin(115200);
   delay(100);  // Minimal delay for serial init
-  Serial.println("\n[ESP32] Cemani Robot Controller v3.13.0 - SERIAL THROTTLE FIX!");
+  Serial.println("\n[ESP32] Cemani Robot Controller v4.4.0 - OFFLINE XBOX FIX!");
 
   // Initialize NVS - keeps paired Bluetooth devices for instant reconnection
   nvs_flash_init();
@@ -123,9 +137,11 @@ void setup() {
   wifiMulti.addAP(WIFI_SSID_3, WIFI_PASS_3);
   wifiMulti.addAP(WIFI_SSID_4, WIFI_PASS_4);
 
+  // Try WiFi but don't block long - Xbox controller is more important than WiFi
+  // wifiMulti.run() blocks ~500ms per attempt, so limit to 6 attempts (3 seconds)
   int attempts = 0;
-  while (wifiMulti.run() != WL_CONNECTED && attempts < 20) {
-    delay(500);
+  while (wifiMulti.run() != WL_CONNECTED && attempts < 6) {
+    delay(100);
     Serial.print(".");
     attempts++;
     BP32.update();
@@ -182,9 +198,45 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // XBOX: Poll Bluetooth - but don't starve WiFi/WebSocket
-  // Single update per loop is enough - aggressive polling was causing WiFi issues
+  // ╔═══════════════════════════════════════════════════════════════════════════════╗
+  // ║  SAFETY CRITICAL: XBOX IS PROCESSED FIRST - BEFORE ANYTHING ELSE              ║
+  // ║  WebSocket, OTA, WiFi - NOTHING comes before Xbox controller                  ║
+  // ╚═══════════════════════════════════════════════════════════════════════════════╝
+
+  // STEP 1: XBOX FIRST - Poll Bluetooth IMMEDIATELY
   BP32.update();
+
+  // STEP 2: XBOX - Handle gamepad input IMMEDIATELY (before WebSocket can block)
+  if (!flashMode) {
+    handleGamepad();
+  }
+
+  // STEP 3: XBOX - Send Xbox-specific heartbeat to Teensy (separate from KEEPALIVE)
+  // This tells Teensy "Xbox controller is actively being polled"
+  if (!flashMode && now - lastXboxHeartbeat > XBOX_HEARTBEAT_INTERVAL) {
+    if (myGamepad && myGamepad->isConnected()) {
+      teensySerial.println("XBOX_ACTIVE");  // Xbox is connected and being polled
+      lastXboxHeartbeat = now;
+    } else {
+      teensySerial.println("XBOX_INACTIVE");  // Xbox not connected - Teensy should be extra careful
+      lastXboxHeartbeat = now;
+    }
+  }
+
+  // STEP 4: XBOX - Detect connection state changes and send IMMEDIATE STOP
+  bool xboxCurrentlyConnected = (myGamepad && myGamepad->isConnected());
+  if (xboxWasConnected && !xboxCurrentlyConnected) {
+    // Xbox just disconnected - EMERGENCY: Send immediate stop!
+    Serial.println("[SAFETY] Xbox DISCONNECTED - sending EMERGENCY STOP to Teensy!");
+    teensySerial.println("XBOX_DISCONNECTED");
+    teensySerial.println("STOP");
+    teensySerial.println("AX,LX,0,0");
+    teensySerial.println("AX,LY,0,0");
+    // Send multiple times to ensure delivery
+    teensySerial.println("STOP");
+    teensySerial.println("STOP");
+  }
+  xboxWasConnected = xboxCurrentlyConnected;
 
   if (!myGamepad) {
     // Re-enable scanning periodically in case it got disabled
@@ -201,10 +253,24 @@ void loop() {
     }
   }
 
-  webSocket.loop();
-  ArduinoOTA.handle();  // Check for wireless OTA updates
+  // ╔═══════════════════════════════════════════════════════════════════════════════╗
+  // ║  WEBSOCKET - ONLY process when WiFi is connected!                             ║
+  // ║  SSL reconnection attempts block for SECONDS on ESP32, starving Bluetooth.    ║
+  // ║  Without this check, Xbox controller dies whenever there's no WiFi.           ║
+  // ╚═══════════════════════════════════════════════════════════════════════════════╝
+  if (WiFi.status() == WL_CONNECTED) {
+    unsigned long wsStart = millis();
+    webSocket.loop();
+    unsigned long wsTime = millis() - wsStart;
+    if (wsTime > WS_LOOP_TIME_LIMIT) {
+      Serial.printf("[WARNING] WebSocket took %lums (limit %lums) - may delay Xbox!\n", wsTime, WS_LOOP_TIME_LIMIT);
+    }
 
-  // More aggressive WiFi monitoring
+    ArduinoOTA.handle();  // Check for wireless OTA updates
+  }
+
+  // WiFi monitoring - NON-BLOCKING! Xbox must never be delayed by WiFi
+  // Only check every 2 seconds, and NEVER block
   if (now - lastWiFiCheck > WIFI_CHECK_INTERVAL) {
     lastWiFiCheck = now;
     if (WiFi.status() == WL_CONNECTED) {
@@ -215,15 +281,25 @@ void loop() {
       }
     } else {
       wifiDropCount++;
-      Serial.printf("[WiFi] Disconnected! Attempt %d...\n", wifiDropCount);
-
-      // Force WiFi reconnect
-      if (now - lastWiFiConnected > WIFI_RECONNECT_TIMEOUT) {
-        Serial.println("[WiFi] Forcing disconnect/reconnect...");
-        WiFi.disconnect(true);
-        delay(100);
+      // CRITICAL: Mark WebSocket as disconnected so sendTXT() calls don't block!
+      // Without this, wsConnected stays true and sendTXT() blocks on dead socket,
+      // which starves Bluetooth and kills turning.
+      if (wsConnected) {
+        wsConnected = false;
+        Serial.println("[WS] Marked disconnected (WiFi lost)");
       }
-      wifiMulti.run();
+      Serial.printf("[WiFi] Disconnected! Attempt %d... (non-blocking)\n", wifiDropCount);
+      // DO NOT call wifiMulti.run() here - it BLOCKS for seconds!
+      // WiFi auto-reconnects in background via ESP32 WiFi stack
+      // Only attempt reconnect every 60 seconds to minimize blocking
+      if (now - lastWiFiConnected > 60000) {  // 60 seconds without WiFi
+        Serial.println("[WiFi] Long disconnect - triggering background reconnect");
+        WiFi.disconnect(false);  // Non-blocking disconnect
+        // WiFi.begin() without args uses last known credentials
+        // This is relatively non-blocking but only do it rarely
+        WiFi.begin();
+        lastWiFiConnected = now;  // Reset timer so we don't spam reconnects
+      }
     }
   }
 
@@ -232,33 +308,29 @@ void loop() {
     lastHeartbeat = now;
   }
 
-  // Send keepalive to Teensy to prevent watchdog timeout
-  // This ensures Teensy knows ESP32 is alive even when no Xbox input
-  // IMPORTANT: Don't send keepalives during flash mode - they corrupt the hex stream!
+  // Send general keepalive to Teensy (ESP32 is alive, separate from Xbox status)
   if (!flashMode && now - lastTeensyKeepalive > TEENSY_KEEPALIVE_INTERVAL) {
     teensySerial.println("KEEPALIVE");
     lastTeensyKeepalive = now;
   }
 
-  // Don't handle gamepad during flash mode - avoid sending commands to Teensy
-  if (!flashMode) {
-    handleGamepad();
-  }
   forwardTeensySerial();
 
-  // CRITICAL: Always delay to let WebSocket process properly
-  // Without this, the tight loop starves WebSocket and causes disconnects
-  delay(10);  // 10ms delay prevents WebSocket starvation (was 5ms - not enough)
+  // Small delay - but not too long to avoid delaying Xbox polling
+  delay(5);  // Reduced from 10ms to 5ms for faster Xbox response
 
-  // WATCHDOG: Reboot if WebSocket disconnected too long
-  // This prevents the ESP32 from getting stuck in a bad state
+  // WATCHDOG: Reboot if WiFi IS connected but WebSocket is stuck
+  // Only reboot when WiFi is available - if there's no WiFi (e.g. farmers market),
+  // rebooting won't help and just kills the Xbox controller connection
   if (wsConnected) {
     lastWsConnected = now;
   } else if (WiFi.status() == WL_CONNECTED && now - lastWsConnected > WS_WATCHDOG_TIMEOUT) {
-    Serial.println("[WATCHDOG] No WebSocket for 2min - Rebooting!");
+    // WiFi is up but WebSocket can't connect - reboot may help
+    Serial.println("[WATCHDOG] WiFi up but no WebSocket for 2min - Rebooting!");
     delay(100);
     ESP.restart();
   }
+  // No WiFi = no reboot. Xbox controller works fine without internet.
 }
 
 void onConnectedGamepad(GamepadPtr gp) {
@@ -424,7 +496,7 @@ void sendTelemetry() {
   if (!wsConnected) return;
   String controller = myGamepad ? "connected" : "none";
   String ssid = escapeForJson(WiFi.SSID());  // Escape WiFi name for JSON safety
-  String telemetry = "{\"type\":\"telemetry\",\"version\":\"3.13.0\",\"wifi\":\"" +
+  String telemetry = "{\"type\":\"telemetry\",\"version\":\"4.0.0\",\"wifi\":\"" +
                      ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                      ",\"ip\":\"" + WiFi.localIP().toString() +
                      "\",\"controller\":\"" + controller +

@@ -75,44 +75,24 @@ function setStatus(text, type) {
 function selectDirection(dir) {
   currentDir = dir;
   updateDisplay();
-
-  // INSTANT DRIVE: Send immediate short move command when clicking direction
-  const INSTANT_DRIVE_DISTANCE = 0.3;  // 0.3 meters (~1 foot)
-  if (window.ws && window.ws.readyState === 1) {
-    // For L/R, send turn commands instead
-    if (dir === 'L' || dir === 'R') {
-      const turnAngle = dir === 'L' ? -30 : 30;
-      window.ws.send(JSON.stringify({
-        type: 'serial_cmd',
-        cmd: `TURN,${turnAngle}`
-      }));
-      console.log('[DRIVE] Turning', turnAngle, 'degrees');
-    } else {
-      // FWD/BACK - send serial_cmd for immediate response
-      const cmd = dir === 'F' ? 'FWD,30' : 'BACK,30';  // 30 RPM speed
-      window.ws.send(JSON.stringify({
-        type: 'serial_cmd',
-        cmd: cmd
-      }));
-      console.log('[DRIVE] Sent', cmd);
-      // Auto-stop after 0.5 seconds
-      setTimeout(() => {
-        if (window.ws && window.ws.readyState === 1) {
-          window.ws.send(JSON.stringify({ type: 'serial_cmd', cmd: 'STOP' }));
-        }
-      }, 500);
-    }
-  }
+  // Direction only selects - movement happens when user presses GO
 }
 
 function selectDistance(distance) {
   currentDist = distance;
   updateDisplay();
+  // SAFETY: Distance selection NEVER triggers movement
+  // User MUST press GO button to execute
 }
 
+let goButtonPressed = false;  // SAFETY: Only true when GO button is physically clicked
+
 function executeQueue() {
+  goButtonPressed = true;  // Mark that GO was explicitly pressed
+
   if (!currentDir || !currentDist) {
     setStatus('Select direction and distance first!', 'error');
+    goButtonPressed = false;
     return;
   }
 
@@ -128,17 +108,24 @@ function executeQueue() {
   const boxEl = document.getElementById('ctrlQueueDisplay');
   if (boxEl) boxEl.classList.add('executing');
 
-  const distanceMeters = cmd.dist * FEET_TO_METERS;
+  // SAFETY: Triple-check that GO was explicitly pressed before sending ANY movement
+  if (!goButtonPressed) {
+    console.error('[SAFETY] Movement blocked - GO button was not pressed!');
+    setStatus('Press GO to move!', 'error');
+    return;
+  }
+  goButtonPressed = false;  // Reset immediately after use
+
+  const distanceCm = Math.round(cmd.dist * FEET_TO_METERS * 100);
+
+  // Send drive command via WebSocket — server handles MODE_MAPPING + motor init
   if (window.ws && window.ws.readyState === 1) {
-    window.ws.send(JSON.stringify({
-      type: 'move_command',
-      distance: distanceMeters,
-      direction: cmd.dir
-    }));
-    console.log('[CONTROLS] Sent move_command:', cmd.dir, distanceMeters + 'm');
+    const moveCmd = 'MOVEDIR,' + cmd.dir + ',' + distanceCm;
+    window.ws.send(JSON.stringify({ type: 'serial_cmd_relay', cmd: moveCmd }));
+    console.log('[CONTROLS] Sent ' + moveCmd);
   } else {
     console.error('[CONTROLS] WebSocket not connected!');
-    setStatus('WebSocket not connected!', 'error');
+    setStatus('Not connected!', 'error');
   }
 
   const movePixels = cmd.dist * PIXELS_PER_FOOT;
@@ -308,6 +295,7 @@ function makeDraggable(popupId, headerId) {
 // Initialize draggable popups
 makeDraggable('codePopup', 'codePopupHeader');
 makeDraggable('serialPopup', 'serialPopupHeader');
+makeDraggable('wifiPopup', 'wifiPopupHeader');
 
 function clearQueue() {
   currentDir = null;
@@ -423,6 +411,197 @@ if (flashBtn) {
   };
 }
 
+// ============ WIFI MANAGER ============
+let wifiRelayConnected = false;
+let selectedWifiSSID = '';
+
+let wifiScanInterval = null;
+
+function toggleWifiPopup() {
+  const popup = document.getElementById('wifiPopup');
+  if (popup) {
+    popup.classList.toggle('open');
+    if (popup.classList.contains('open')) {
+      // Start auto-scanning when popup opens
+      scanWifi();
+      wifiScanInterval = setInterval(scanWifi, 10000); // Refresh every 10 seconds
+    } else {
+      // Stop scanning when popup closes
+      if (wifiScanInterval) {
+        clearInterval(wifiScanInterval);
+        wifiScanInterval = null;
+      }
+    }
+  }
+}
+
+function updateWifiRelayStatus(connected) {
+  wifiRelayConnected = connected;
+  const statusEl = document.getElementById('wifiRelayStatus');
+  const noRelayEl = document.getElementById('wifiNoRelay');
+  const scanBtn = document.getElementById('wifiScanBtn');
+
+  if (statusEl) {
+    statusEl.textContent = connected ? 'ON' : 'OFF';
+    statusEl.style.color = connected ? '#0f8' : '#f44';
+  }
+  if (noRelayEl) {
+    noRelayEl.style.display = connected ? 'none' : 'block';
+  }
+  if (scanBtn) {
+    scanBtn.disabled = !connected;
+    scanBtn.style.opacity = connected ? '1' : '0.5';
+  }
+}
+
+function scanWifi() {
+  // WiFi scan via WebSocket to Jetson camera relay
+  console.log('[WIFI-UI] Scanning via WebSocket...');
+  const scanningEl = document.getElementById('wifiScanning');
+
+  // Show scanning message
+  if (scanningEl) scanningEl.style.display = 'block';
+
+  if (window.ws && window.ws.readyState === WebSocket.OPEN) {
+    window.ws.send(JSON.stringify({ type: 'wifi_scan' }));
+    // Response handled by websocket.js -> displayWifiNetworks
+    // Set timeout to hide scanning indicator if no response
+    setTimeout(() => {
+      if (scanningEl && scanningEl.style.display === 'block') {
+        scanningEl.style.display = 'none';
+        console.log('[WIFI-UI] Scan timeout - no response');
+      }
+    }, 15000);
+  } else {
+    console.error('[WIFI-UI] WebSocket not connected');
+    if (scanningEl) scanningEl.style.display = 'none';
+    alert('WebSocket not connected');
+  }
+}
+
+function displayWifiNetworks(networks) {
+  const scanningEl = document.getElementById('wifiScanning');
+  const knownList = document.getElementById('wifiKnownNetworks');
+  const otherList = document.getElementById('wifiOtherNetworks');
+  const currentNetworkEl = document.getElementById('wifiCurrentNetwork');
+  const currentDetailEl = document.getElementById('wifiSignalStrength');
+
+  if (scanningEl) scanningEl.style.display = 'none';
+
+  // Clear existing items
+  if (knownList) knownList.innerHTML = '';
+  if (otherList) otherList.innerHTML = '';
+
+  if (!networks || networks.length === 0) {
+    if (otherList) otherList.innerHTML = '<div class="wifi-scanning">No networks found</div>';
+    return;
+  }
+
+  // Sort by signal strength
+  networks.sort((a, b) => (b.signal || 0) - (a.signal || 0));
+
+  // Update current connection display
+  const connected = networks.find(n => n.connected);
+  if (connected && currentNetworkEl) {
+    currentNetworkEl.textContent = connected.ssid;
+    if (currentDetailEl) currentDetailEl.textContent = 'Connected • ' + connected.signal + ' dBm';
+  }
+
+  networks.forEach(network => {
+    if (network.connected) return; // Skip connected network (shown at top)
+
+    const item = document.createElement('div');
+    item.className = 'wifi-network-item';
+
+    const signal = network.signal || 0;
+    const bars = signal > 70 ? '▂▄▆█' : signal > 50 ? '▂▄▆_' : signal > 30 ? '▂▄__' : '▂___';
+    const security = network.security || 'Open';
+    const lockIcon = security !== 'Open' ? '🔒 ' : '';
+
+    item.innerHTML = `
+      <div class="wifi-network-info">
+        <span class="wifi-ssid">${lockIcon}${escapeHtml(network.ssid)}</span>
+        <span class="wifi-details">${signal}%</span>
+      </div>
+      <span class="wifi-signal">${bars}</span>
+    `;
+
+    item.onclick = () => selectWifiNetwork(network.ssid, security === 'Open');
+
+    // Put known/saved networks in known list, others in other list
+    if (network.known && knownList) {
+      knownList.appendChild(item);
+    } else if (otherList) {
+      otherList.appendChild(item);
+    }
+  });
+
+  // Show message if no other networks
+  if (otherList && otherList.children.length === 0) {
+    otherList.innerHTML = '<div class="wifi-scanning" style="padding:10px;color:#666;">Searching for networks...</div>';
+  }
+}
+
+function selectWifiNetwork(ssid, isOpen) {
+  selectedWifiSSID = ssid;
+
+  const connectForm = document.getElementById('wifiConnectForm');
+  const selectedSSID = document.getElementById('wifiSelectedSSID');
+  const passwordInput = document.getElementById('wifiPassword');
+
+  if (selectedSSID) selectedSSID.textContent = ssid;
+  if (passwordInput) {
+    passwordInput.value = '';
+    passwordInput.style.display = isOpen ? 'none' : 'block';
+  }
+  if (connectForm) connectForm.style.display = 'block';
+}
+
+function cancelWifiConnect() {
+  const connectForm = document.getElementById('wifiConnectForm');
+  if (connectForm) connectForm.style.display = 'none';
+  selectedWifiSSID = '';
+}
+
+function connectWifi() {
+  if (!selectedWifiSSID) return;
+
+  const passwordInput = document.getElementById('wifiPassword');
+  const password = passwordInput ? passwordInput.value : '';
+
+  if (window.ws && window.ws.readyState === WebSocket.OPEN) {
+    window.ws.send(JSON.stringify({
+      type: 'wifi_connect',
+      ssid: selectedWifiSSID,
+      password: password
+    }));
+  }
+
+  cancelWifiConnect();
+
+  // Show connecting feedback
+  const statusEl = document.getElementById('wifiCurrentNetwork');
+  if (statusEl) statusEl.textContent = 'Connecting...';
+}
+
+function updateWifiStatus(status) {
+  const networkEl = document.getElementById('wifiCurrentNetwork');
+  const signalEl = document.getElementById('wifiSignalStrength');
+
+  if (networkEl) {
+    networkEl.textContent = status.ssid || '--';
+  }
+  if (signalEl && status.signal) {
+    signalEl.textContent = status.signal + ' dBm';
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Export functions needed by other modules
 window.controlsModule = {
   selectDirection,
@@ -434,7 +613,14 @@ window.controlsModule = {
   toggleLight,
   toggleStrobe,
   toggleCodePopup,
-  toggleSerialPopup
+  toggleSerialPopup,
+  toggleWifiPopup,
+  updateWifiRelayStatus,
+  displayWifiNetworks,
+  updateWifiStatus,
+  scanWifi,
+  connectWifi,
+  cancelWifiConnect
 };
 
 // For backwards compatibility, also expose updateXboxStatus from gamepad module
