@@ -3,55 +3,18 @@
 Lidar Relay Service
 Reads RPLIDAR data and sends to VPS server via WebSocket
 Runs as a background service on Jetson
-
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║  SAFETY RULES - HARDCODED:                                                    ║
-║  1. Xbox controller ALWAYS has priority over autonomous commands              ║
-║  2. Claude Code is NEVER allowed to initiate robot movement or MAP 1          ║
-║  3. Only the USER can start mapping by clicking buttons in the web UI         ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
 import json
 import time
 import math
 import threading
-import os
-import sys
-import atexit
 from rplidar import RPLidar
 import websocket
 import ssl
 
-# SINGLETON: Prevent multiple instances
-LOCKFILE = '/tmp/lidar-relay.lock'
-
-def check_singleton():
-    """Ensure only one instance runs"""
-    if os.path.exists(LOCKFILE):
-        try:
-            with open(LOCKFILE, 'r') as f:
-                old_pid = int(f.read().strip())
-            # Check if process is still running
-            os.kill(old_pid, 0)
-            print(f"[ERROR] Another LIDAR relay is running (PID {old_pid}). Exiting.")
-            sys.exit(1)
-        except (ProcessLookupError, ValueError):
-            # Process not running, remove stale lock
-            print("[INFO] Removing stale lock file")
-            os.remove(LOCKFILE)
-
-    # Write our PID
-    with open(LOCKFILE, 'w') as f:
-        f.write(str(os.getpid()))
-
-    # Clean up on exit
-    atexit.register(lambda: os.remove(LOCKFILE) if os.path.exists(LOCKFILE) else None)
-
-check_singleton()
-
 # Configuration
-LIDAR_PORT = '/dev/ttyUSB0'
+LIDAR_PORT = '/dev/ttyUSB1'
 VPS_WS_URL = 'wss://robot.marijuanaunion.com'
 
 # Exclusion zone for mounted camera at 7 o'clock
@@ -78,7 +41,12 @@ class LidarRelay:
         try:
             print("Connecting to LIDAR...")
             self.lidar = RPLidar(LIDAR_PORT)
+            # Flush any stale data in serial buffer before requesting info
+            self.lidar._serial.flushInput()
+            time.sleep(0.1)
             info = self.lidar.get_info()
+            if isinstance(info, str):
+                raise Exception(f"LIDAR buffer not clean: {info}")
             print(f"LIDAR connected - Model {info['model']}")
             return True
         except Exception as e:
