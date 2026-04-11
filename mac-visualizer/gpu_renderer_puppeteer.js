@@ -26,7 +26,7 @@ const RENDER_WIDTH = 1280;
 const RENDER_HEIGHT = 720;
 const TARGET_FPS = 30;
 const MJPEG_PORT = 8089;
-const VPS_WS = 'ws://72.60.124.34:3001';
+const VPS_WS = 'ws://YOUR_VPS_IP:3001';
 
 // State
 let browser = null;

@@ -17,7 +17,7 @@ from transformers import pipeline
 import math
 
 # VPS WebSocket
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 
 # Depth estimation pipeline (will be initialized)
 depth_pipe = None

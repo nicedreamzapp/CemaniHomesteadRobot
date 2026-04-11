@@ -244,6 +244,46 @@ CemaniHomesteadRobot/
 
 ---
 
+## 🛠️ Setup — Configure These Before Running
+
+This repo was scrubbed of secrets before being made public. If you clone it and try to run it as-is, you'll see placeholder values where real network addresses and credentials used to be. **You need to replace them with your own before anything actually connects to anything.**
+
+### Placeholders in the repo
+
+| Placeholder | What it is | Where to find |
+|---|---|---|
+| `YOUR_VPS_IP` | Public IP / hostname of the VPS running `vps-server/` (Node.js + pm2) | Every `.py` / `.js` / `.md` / `.sh` with a `ws://` or `http://` URL |
+| `YOUR_JETSON_IP` | LAN IP of your Jetson Orin Nano running `jetson-lidar/` and `jetson-object-detection/` | `launch_map1.sh` and a couple of Python files |
+| `YOUR_CAMERA_PASSWORD` | RTSP password for your ONVIF PTZ cameras | `mac-visualizer/hybrid_3d_mapper.py`, `jetson-object-detection/*.py`, `mac-camera-relay/README.md` |
+| `config.example.json` files | Per-service config (camera IPs, VPS auth, etc.) | Copy each `config.example.json` to `config.json` and fill in. `config.json` is gitignored so your real values never get committed. |
+
+### The launcher script
+
+`launch_map1.sh` now reads `VPS_HOST` and `JETSON_HOST` from environment variables. Set them before running:
+
+```bash
+export VPS_HOST="root@1.2.3.4"
+export JETSON_HOST="jetson@192.168.1.31"
+bash launch_map1.sh
+```
+
+And set up SSH key authentication for both hosts — the original script shipped with `sshpass -p 'jetson'` (NVIDIA's default Jetson password), which is exactly the kind of pattern that should never be in a public repo. Generate SSH keys and `ssh-copy-id` them to both hosts before running anything.
+
+### 🔒 What's *not* in this repo (on purpose)
+
+The `.gitignore` already excludes real secret files — you'll see `*.example` stubs for each of these but never the real thing:
+
+- `**/credentials.h` (ESP32 WiFi credentials)
+- `mac-camera-relay/config.json`, `jetson-camera-relay/config.json`, `jetson-lidar/config.json`, `jetson-object-detection/config.json` (camera passwords)
+- `vps-server/auth.json` (VPS login)
+- `.env`, `.env.*`
+- `*.pem`, `*.key`, `id_rsa*` (SSH keys)
+- `private/`, `secrets/`
+
+If you add new secrets while working on your fork, put them in a file that matches one of those patterns — or add a new line to `.gitignore` — so they stay out of git.
+
+---
+
 ## Roadmap
 
 ### Working Now

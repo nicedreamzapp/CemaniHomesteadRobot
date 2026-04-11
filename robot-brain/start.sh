@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 KEY_CACHE="$HOME/.robot-brain-env"
 if [ ! -f "$KEY_CACHE" ] || [ "$(find "$KEY_CACHE" -mtime +7 2>/dev/null)" ]; then
     echo "[BRAIN] Fetching API key from VPS..."
-    KEY=$(ssh -o ConnectTimeout=5 root@72.60.124.34 "grep ANTHROPIC_API_KEY /root/.env" 2>/dev/null)
+    KEY=$(ssh -o ConnectTimeout=5 root@YOUR_VPS_IP "grep ANTHROPIC_API_KEY /root/.env" 2>/dev/null)
     if [ -n "$KEY" ]; then
         echo "$KEY" > "$KEY_CACHE"
         chmod 600 "$KEY_CACHE"

@@ -17,8 +17,8 @@ from collections import deque
 # Configuration
 LOCAL_WS_PORT = 8765
 RTSP_CAMERAS = {
-    1: "rtsp://admin:kookster1@192.168.1.79:554/onvif1",  # Front
-    2: "rtsp://admin:kookster1@192.168.1.34:554/onvif1"    # Rear
+    1: "rtsp://admin:YOUR_CAMERA_PASSWORD@192.168.1.79:554/onvif1",  # Front
+    2: "rtsp://admin:YOUR_CAMERA_PASSWORD@192.168.1.34:554/onvif1"    # Rear
 }
 FRAME_RATE = 10  # Frames per second per camera
 JPEG_QUALITY = 80  # JPEG compression quality

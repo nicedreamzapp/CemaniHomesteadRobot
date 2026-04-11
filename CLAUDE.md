@@ -3,10 +3,19 @@
 ## ╔═══════════════════════════════════════════════════════════════════════════════╗
 ## ║                    !!! CRITICAL SAFETY - READ FIRST !!!                       ║
 ## ║═══════════════════════════════════════════════════════════════════════════════║
-## ║  INCIDENT: January 25, 2026 - Robot crashed into crowd, people were INJURED  ║
-## ║  ROOT CAUSE: Mapping processes flooded WebSocket, blocking Xbox controller    ║
-## ║  THE XBOX CONTROLLER IS THE PRIMARY SAFETY MECHANISM - IT MUST NEVER FAIL    ║
+## ║  INCIDENT: January 25, 2026 — Robot's mapping override moved the robot while  ║
+## ║  the builder was standing close to it during testing, catching his hand.      ║
+## ║  Dog-bite-style laceration, no stitches, but close. ROOT CAUSE: mapping       ║
+## ║  processes flooded WebSocket and blocked the Xbox controller override from    ║
+## ║  getting through in time. THE XBOX CONTROLLER IS THE PRIMARY SAFETY           ║
+## ║  MECHANISM — IT MUST NEVER FAIL.                                              ║
 ## ╚═══════════════════════════════════════════════════════════════════════════════╝
+
+> 📢 **Note from the builder:** This is a hobbyist garage robot, not a commercial
+> product. I'm leaving the full incident postmortem below because robot safety
+> matters — the failure modes here are generic to anyone building a PC/SBC +
+> microcontroller robot with network-bridged control, and they're easy to miss
+> until they bite you. Learn from this so you don't repeat it.
 
 ## ABSOLUTE SAFETY RULES - XBOX CONTROLLER IS SACRED
 
@@ -17,8 +26,8 @@
 2. ESP32 got blocked processing camera frames, couldn't poll Xbox
 3. Teensy watchdog was kept alive by KEEPALIVE (not Xbox-specific)
 4. Manual override expired after only 5 seconds
-5. Mapping sent robot_spin command that moved robot into crowd
-6. People were injured
+5. Mapping sent robot_spin command that moved the robot while I was standing close to it
+6. My hand got caught before I could trigger the stop — dog-bite-style laceration, no stitches needed but close
 
 ### What was fixed:
 1. Xbox is now polled FIRST in ESP32 loop, BEFORE WebSocket
@@ -49,7 +58,7 @@
 
 This rule exists because the robot is a physical machine that can cause damage or injury if moved unexpectedly. The user must always have the opportunity to ensure the robot is in a safe position before any movement occurs.
 
-**NEVER FORGET: PEOPLE WERE INJURED WHEN THESE RULES WERE NOT FOLLOWED.**
+**NEVER FORGET: SOMEONE GOT HURT WHEN THESE RULES WERE NOT FOLLOWED.**
 
 ---
 
@@ -83,7 +92,7 @@ When robot moves, you should see:
 
 ## Deployment Note
 Server runs from `/opt/robot-server/` (not /opt/robot/)
-Deploy with: `scp server.js root@72.60.124.34:/opt/robot-server/server.js && ssh root@72.60.124.34 "pm2 restart robot"`
+Deploy with: `scp server.js root@YOUR_VPS_IP:/opt/robot-server/server.js && ssh root@YOUR_VPS_IP "pm2 restart robot"`
 
 ---
 
@@ -116,7 +125,7 @@ nohup python3 lidar_relay.py > /tmp/lidar.log 2>&1 &
 ```
 
 ## Verify LIDAR is Working
-1. Check VPS logs: `ssh root@72.60.124.34 "pm2 logs robot | grep LIDAR"`
+1. Check VPS logs: `ssh root@YOUR_VPS_IP "pm2 logs robot | grep LIDAR"`
 2. UI should show "LIDAR: XXX pts" in the top bar
 3. Colorful wall panels should surround the robot
 

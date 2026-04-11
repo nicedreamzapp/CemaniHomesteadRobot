@@ -16,7 +16,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import websocket
 
 # ===== CONFIG =====
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 API_PORT = 5000
 
 # Physical constants (must match config.h)

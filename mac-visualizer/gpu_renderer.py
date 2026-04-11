@@ -50,7 +50,7 @@ except ImportError:
 import websockets
 
 # Configuration
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 RENDER_WIDTH = 1280
 RENDER_HEIGHT = 720
 TARGET_FPS = 30

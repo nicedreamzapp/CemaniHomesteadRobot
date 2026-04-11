@@ -6,7 +6,7 @@ This relay server runs on your Mac Mini M4 Pro to bridge your local Sricam IP ca
 
 ```
 [Sricam Camera]  --RTSP-->  [Mac Mini Relay]  --HLS/WebSocket-->  [VPS Server]  --WebSocket-->  [Browser]
-  192.168.1.192              Local Network                         72.60.124.34                   User
+  192.168.1.192              Local Network                         YOUR_VPS_IP                   User
        |                          |                                     |
    ONVIF PTZ  <------------------+-------------------------------------+
 ```
@@ -39,13 +39,13 @@ const CONFIG = {
     rtspPath: '/onvif1',
     onvifPort: 5000,
     username: 'admin',
-    password: 'kookster1'
+    password: 'YOUR_CAMERA_PASSWORD'
   },
   relay: {
     port: 8080,                  // Local relay server port
   },
   vps: {
-    url: 'ws://72.60.124.34:3001'  // Your VPS WebSocket URL
+    url: 'ws://YOUR_VPS_IP:3001'  // Your VPS WebSocket URL
   }
 };
 ```
@@ -74,7 +74,7 @@ Snapshot:     http://localhost:8080/camera/snapshot
 Camera IP:    192.168.1.192
 ========================================
 [FFMPEG] Starting RTSP to HLS conversion...
-[VPS] Connecting to ws://72.60.124.34:3001
+[VPS] Connecting to ws://YOUR_VPS_IP:3001
 [VPS] Connected
 ```
 
@@ -160,7 +160,7 @@ The relay connects to the VPS and responds to these message types:
 
 ### "RTSP connection failed"
 - Verify camera IP is correct: `ping 192.168.1.192`
-- Check RTSP URL in VLC: `rtsp://admin:kookster1@192.168.1.192:554/onvif1`
+- Check RTSP URL in VLC: `rtsp://admin:YOUR_CAMERA_PASSWORD@192.168.1.192:554/onvif1`
 - Ensure camera and Mac Mini are on same network
 
 ### "ONVIF commands not working"
@@ -230,7 +230,7 @@ pm2 startup
 - Consider using environment variables for production:
   ```bash
   export CAM_USER=admin
-  export CAM_PASS=kookster1
+  export CAM_PASS=YOUR_CAMERA_PASSWORD
   ```
 - The HLS stream is not encrypted - use HTTPS tunnel for remote access
 - VPS WebSocket connection should use WSS (WebSocket Secure) in production

@@ -28,7 +28,7 @@ from object_tracker import ObjectTracker
 # CONFIGURATION
 # =============================================================================
 
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 LOCAL_PORT = 9998  # TCP port for relay frames
 
 # =============================================================================

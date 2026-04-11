@@ -19,7 +19,7 @@ import base64
 from datetime import datetime
 from pathlib import Path
 
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 
 # Output directories
 BASE_DIR = Path(__file__).parent

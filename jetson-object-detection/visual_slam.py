@@ -46,7 +46,7 @@ except ImportError:
     print("[SLAM] PyTorch not available, using NumPy")
 
 # VPS Connection
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 
 # ============ 3D GAUSSIAN POINT ============
 @dataclass
