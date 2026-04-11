@@ -248,7 +248,7 @@ When user asks to move the robot → use send_robot_command
 When user asks about the codebase → use list_files then read_file
 
 KEY SYSTEM KNOWLEDGE:
-- Server: Node.js on VPS (72.60.124.34), port 3001, managed by pm2 as "robot"
+- Server: Node.js on VPS (YOUR_VPS_IP), port 3001, managed by pm2 as "robot"
 - Teensy 4.1: motor control via Modbus RS-485, config in teensy-robot/include/config.h
 - ESP32: WiFi bridge with Xbox controller support (Bluepad32)
 - Jetson Orin Nano: YOLOv8 detection, LIDAR relay, robot brain (autonomous movement)

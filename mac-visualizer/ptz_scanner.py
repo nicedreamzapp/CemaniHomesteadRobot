@@ -10,7 +10,7 @@ import websockets
 import json
 import time
 
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 
 # PTZ scan patterns - positions to visit
 # Each position is (pan, tilt) where:

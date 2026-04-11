@@ -122,8 +122,8 @@ JETSON_WS = "ws://192.168.1.31:8765"  # Jetson local WebSocket (correct IP)
 # DIRECT RTSP - disabled for now, using VPS relay
 DIRECT_RTSP_ENABLED = False  # VPS relay is more reliable
 RTSP_CAMERAS = {
-    1: "rtsp://admin:kookster1@192.168.1.191:554/onvif1",  # Front camera
-    2: "rtsp://admin:kookster1@192.168.1.27:554/onvif1"   # Rear camera
+    1: "rtsp://admin:YOUR_CAMERA_PASSWORD@192.168.1.191:554/onvif1",  # Front camera
+    2: "rtsp://admin:YOUR_CAMERA_PASSWORD@192.168.1.27:554/onvif1"   # Rear camera
 }
 RTSP_FRAME_RATE = 10  # 10 FPS for aggressive mapping
 
@@ -1785,7 +1785,7 @@ class Hybrid3DMapper:
         import urllib.request
         import urllib.error
 
-        spin_url = f"http://72.60.124.34:3001/spin/{direction}/{turn_degrees}"
+        spin_url = f"http://YOUR_VPS_IP:3001/spin/{direction}/{turn_degrees}"
         print(f"[ROBOT] HTTP request: {spin_url}", flush=True)
 
         try:

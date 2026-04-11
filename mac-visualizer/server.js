@@ -6,7 +6,7 @@
 const WebSocket = require('ws');
 
 // VPS WebSocket URL
-const VPS_WS = 'ws://72.60.124.34:3001';
+const VPS_WS = 'ws://YOUR_VPS_IP:3001';
 
 // State
 let vpsConnection = null;

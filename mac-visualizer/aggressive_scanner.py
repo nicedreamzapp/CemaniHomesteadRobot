@@ -14,7 +14,7 @@ import json
 import time
 import math
 
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 
 # Scanning parameters
 PAN_POSITIONS = [-150, -100, -50, 0, 50, 100, 150]  # Pan angles to scan

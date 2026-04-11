@@ -1,12 +1,22 @@
 # CRITICAL SAFETY FAILURE DIAGNOSTIC
 ## Xbox Controller Failsafe Failure Analysis
-### Date: January 25, 2026 - INCIDENT RESULTED IN INJURIES
+### Date: January 25, 2026 — operator hand injury during testing (no stitches, close call)
 
 ---
 
 ## EXECUTIVE SUMMARY
 
-The Xbox controller failsafe system failed, causing the robot to crash into people. This document identifies **20 failure points** in the control chain that could have caused delayed or lost Xbox controller commands.
+The Xbox controller failsafe failed, causing the robot to move unexpectedly while
+I was working on it during a mapping test. My hand got caught before I could
+trigger the stop — a dog-bite-style laceration that didn't need stitches, but
+close enough to prompt a full audit of the failsafe chain. This document
+identifies **20 failure points** in the control chain that could have caused
+delayed or lost Xbox controller commands, and the fixes applied.
+
+This is documentation from a hobbyist garage project, shared publicly because the
+failure modes here are generic to anyone building a PC/SBC + microcontroller
+robot with network-bridged control — not exotic, not uncommon, and critically
+important to understand *before* you build one.
 
 ---
 

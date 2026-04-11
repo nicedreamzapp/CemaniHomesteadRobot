@@ -33,7 +33,7 @@ except ImportError as e:
     SEMANTIC_MAPPING_AVAILABLE = False
 
 # VPS WebSocket
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 
 # Navigation parameters - 16 inches = 40cm stop distance
 SAFE_DISTANCE_CM = 50      # Start slowing down (~20 inches)

@@ -33,15 +33,15 @@ DEFAULT_CONFIG = {
         {
             "id": 1,
             "name": "Front",
-            "rtsp_url": "rtsp://admin:kookster1@192.168.1.79:554/onvif1"
+            "rtsp_url": "rtsp://admin:YOUR_CAMERA_PASSWORD@192.168.1.79:554/onvif1"
         },
         {
             "id": 2,
             "name": "Rear",
-            "rtsp_url": "rtsp://admin:kookster1@192.168.1.34:554/onvif1"
+            "rtsp_url": "rtsp://admin:YOUR_CAMERA_PASSWORD@192.168.1.34:554/onvif1"
         }
     ],
-    "vps_ws_url": "ws://72.60.124.34:3001",
+    "vps_ws_url": "ws://YOUR_VPS_IP:3001",
     "model_path": "yolov8n-oiv7.pt",
     "inference_size": 640,
     "confidence_threshold": 0.05,

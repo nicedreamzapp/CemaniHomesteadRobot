@@ -7,7 +7,7 @@
     "start": "node relay.js",
     "test": "echo \"No tests yet\""
   },
-  "author": "Matt Macosko",
+  "author": "nicedreamzapp",
   "license": "MIT",
   "dependencies": {
     "ws": "^8.18.0"

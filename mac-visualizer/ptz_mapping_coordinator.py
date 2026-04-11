@@ -32,7 +32,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict
 
-VPS_WS = "ws://72.60.124.34:3001"
+VPS_WS = "ws://YOUR_VPS_IP:3001"
 
 # ============ SCAN PATTERNS ============
 
