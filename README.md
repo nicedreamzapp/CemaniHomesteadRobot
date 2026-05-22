@@ -2,6 +2,15 @@
 
 # Cemani Homestead Robot
 
+<p align="center">
+  <a href="https://youtu.be/NWnGvvdvRik">
+    <img src="https://img.youtube.com/vi/NWnGvvdvRik/maxresdefault.jpg" width="640" alt="Backyard robot demo">
+  </a>
+  <br>
+  <em>▶ Watch the demo on YouTube</em>
+</p>
+
+
 ### Autonomous AI-Powered Tank Platform
 
 ![Status](https://img.shields.io/badge/Status-Robot_Brain_Live-green?style=for-the-badge)
