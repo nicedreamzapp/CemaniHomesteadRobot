@@ -1,0 +1,55 @@
+Cemani Homestead Robot — Autonomous AI-Powered Tank Platform
+Copyright (C) 2026 Matt Macosko / Nice Dreamz LLC and contributors
+
+This project is multi-licensed so that it remains free and open forever.
+Each part of the project is covered by a strongly-reciprocal ("copyleft")
+license: anyone may use, study, build, modify, and redistribute it, but
+derivatives and distributed hardware/software built from it must be shared
+back under the same terms. It cannot be taken private.
+
+SPDX-License-Identifier: CERN-OHL-S-2.0 AND GPL-3.0-or-later AND CC-BY-SA-4.0
+
+-------------------------------------------------------------------------------
+1. HARDWARE, MECHANICAL DESIGN, AND WIRING
+   (chassis geometry, drivetrain layout, power and motor-controller wiring,
+   bill of materials)
+   Licensed under CERN Open Hardware Licence Version 2 - Strongly Reciprocal
+   (CERN-OHL-S-2.0).
+   Full text: https://ohwr.org/cern_ohl_s_v2.txt
+
+   You may copy, modify, and distribute these design sources and make or
+   have made products from them, provided you pass on the complete source,
+   keep the notices, and license your modifications under CERN-OHL-S-2.0.
+
+2. SOFTWARE
+   (robot-brain, esp32-robot-controller, teensy-robot, jetson-object-detection,
+   jetson-lidar, jetson-camera-relay, mac-camera-relay, mac-visualizer,
+   vps-server, and all scripts)
+   Licensed under the GNU General Public License v3.0 or later
+   (GPL-3.0-or-later).
+   Full text: https://www.gnu.org/licenses/gpl-3.0.txt
+
+3. DOCUMENTATION AND MEDIA
+   (README, docs, diagnostic and debug notes, media)
+   Licensed under Creative Commons Attribution-ShareAlike 4.0 International
+   (CC-BY-SA-4.0).
+   Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+Vendor documentation included for reference (ZLAC8015D motor driver and
+ZLLG80ASM250-4096 hub motor manuals) remains the property of its respective
+manufacturers and is not licensed by this project.
+
+-------------------------------------------------------------------------------
+NO WARRANTY. This is an experimental self-driving vehicle carrying a 24V
+1kW battery system and capable of moving under its own power. It is provided
+WITHOUT ANY WARRANTY, to the extent permitted by law. Building, powering, or
+operating a machine from these files is done entirely at your own risk.
+Never operate it unattended around people or animals, and never rely on the
+object-detection or safety code to prevent injury. The authors accept no
+liability for any harm resulting from use of this project.
+-------------------------------------------------------------------------------
+
+To obtain the full text of any license above, see the URLs listed or run:
+  curl -L https://ohwr.org/cern_ohl_s_v2.txt          -o LICENSE-CERN-OHL-S
+  curl -L https://www.gnu.org/licenses/gpl-3.0.txt     -o LICENSE-GPL-3.0
+  curl -L https://creativecommons.org/licenses/by-sa/4.0/legalcode -o LICENSE-CC-BY-SA-4.0
