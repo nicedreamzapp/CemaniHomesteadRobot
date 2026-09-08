@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SHARP Gaussian Splat Viewer</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { 
+            background: #000; 
+            overflow: hidden;
+            font-family: system-ui;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #0f0;
+            font-size: 14px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        button:hover { background: #0a0; }
+        #canvas { width: 100vw; height: 100vh; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #0f0;
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <div>SHARP Gaussian Splat Viewer</div>
+        <div id="status">Loading...</div>
+        <div id="fps"></div>
+    </div>
+    <div id="controls">
+        <button onclick="loadLatest()">Load Latest</button>
+        <button onclick="toggleAutoUpdate()">Auto-Update: OFF</button>
+    </div>
+    <div id="loading">Loading splat file...</div>
+    <canvas id="canvas"></canvas>
+    
+    <script type="module">
+        // Using gsplat.js for Gaussian Splat rendering
+        // This is a simplified version - for full features use the gsplat library
+        
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl2');
+        const status = document.getElementById('status');
+        const loading = document.getElementById('loading');
+        
+        let autoUpdate = false;
+        let currentFrame = '';
+        
+        // Camera state
+        let camera = {
+            position: [0, 0, 5],
+            rotation: [0, 0],
+            fov: 60
+        };
+        
+        // Mouse controls
+        let isDragging = false;
+        let lastMouse = [0, 0];
+        
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouse = [e.clientX, e.clientY];
+        });
+        
+        canvas.addEventListener('mouseup', () => isDragging = false);
+        canvas.addEventListener('mouseleave', () => isDragging = false);
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastMouse[0];
+            const dy = e.clientY - lastMouse[1];
+            camera.rotation[0] += dy * 0.01;
+            camera.rotation[1] += dx * 0.01;
+            lastMouse = [e.clientX, e.clientY];
+        });
+        
+        canvas.addEventListener('wheel', (e) => {
+            camera.position[2] += e.deltaY * 0.01;
+            camera.position[2] = Math.max(0.1, Math.min(20, camera.position[2]));
+        });
+        
+        async function loadLatest() {
+            try {
+                loading.style.display = 'block';
+                status.textContent = 'Fetching latest splat...';
+                
+                const info = await fetch('http://localhost:8765/latest_splat').then(r => r.json());
+                status.textContent = `Loading ${info.frame} (${info.size_mb.toFixed(1)}MB)...`;
+                
+                if (info.frame === currentFrame) {
+                    status.textContent = `Already showing ${info.frame}`;
+                    loading.style.display = 'none';
+                    return;
+                }
+                
+                // Fetch PLY file
+                const plyUrl = `http://localhost:8765${info.path}`;
+                const response = await fetch(plyUrl);
+                const buffer = await response.arrayBuffer();
+                
+                status.textContent = `Parsing ${info.frame}...`;
+                const splats = parsePLY(buffer);
+                
+                status.textContent = `Rendering ${splats.count.toLocaleString()} splats from ${info.frame}`;
+                currentFrame = info.frame;
+                
+                renderSplats(splats);
+                loading.style.display = 'none';
+                
+            } catch (err) {
+                status.textContent = `Error: ${err.message}`;
+                loading.style.display = 'none';
+                console.error(err);
+            }
+        }
+        
+        function parsePLY(buffer) {
+            // Parse PLY header and data
+            const decoder = new TextDecoder();
+            const headerEnd = findHeaderEnd(buffer);
+            const header = decoder.decode(buffer.slice(0, headerEnd));
+            
+            const vertexMatch = header.match(/element vertex (\d+)/);
+            const vertexCount = vertexMatch ? parseInt(vertexMatch[1]) : 0;
+            
+            console.log(`PLY: ${vertexCount} vertices`);
+            
+            // Parse properties from header
+            const props = [];
+            const propRegex = /property (\w+) (\w+)/g;
+            let match;
+            while ((match = propRegex.exec(header)) !== null) {
+                props.push({ type: match[1], name: match[2] });
+            }
+            
+            // Read binary data
+            const data = new DataView(buffer, headerEnd);
+            const positions = new Float32Array(vertexCount * 3);
+            const colors = new Float32Array(vertexCount * 3);
+            const scales = new Float32Array(vertexCount * 3);
+            const opacities = new Float32Array(vertexCount);
+            
+            let offset = 0;
+            const bytesPerVertex = props.reduce((sum, p) => sum + (p.type === 'float' ? 4 : 1), 0);
+            
+            for (let i = 0; i < Math.min(vertexCount, 100000); i++) {  // Limit for performance
+                let propOffset = 0;
+                for (const prop of props) {
+                    const val = data.getFloat32(offset + propOffset, true);
+                    propOffset += 4;
+                    
+                    if (prop.name === 'x') positions[i * 3] = val;
+                    else if (prop.name === 'y') positions[i * 3 + 1] = val;
+                    else if (prop.name === 'z') positions[i * 3 + 2] = val;
+                    else if (prop.name === 'f_dc_0') colors[i * 3] = val + 0.5;
+                    else if (prop.name === 'f_dc_1') colors[i * 3 + 1] = val + 0.5;
+                    else if (prop.name === 'f_dc_2') colors[i * 3 + 2] = val + 0.5;
+                    else if (prop.name === 'opacity') opacities[i] = 1 / (1 + Math.exp(-val));
+                    else if (prop.name === 'scale_0') scales[i * 3] = Math.exp(val);
+                    else if (prop.name === 'scale_1') scales[i * 3 + 1] = Math.exp(val);
+                    else if (prop.name === 'scale_2') scales[i * 3 + 2] = Math.exp(val);
+                }
+                offset += bytesPerVertex;
+            }
+            
+            return { positions, colors, scales, opacities, count: Math.min(vertexCount, 100000) };
+        }
+        
+        function findHeaderEnd(buffer) {
+            const view = new Uint8Array(buffer);
+            const end = "end_header\n";
+            for (let i = 0; i < Math.min(view.length, 10000); i++) {
+                let match = true;
+                for (let j = 0; j < end.length; j++) {
+                    if (view[i + j] !== end.charCodeAt(j)) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return i + end.length;
+            }
+            return 0;
+        }
+        
+        let splatData = null;
+        
+        function renderSplats(splats) {
+            splatData = splats;
+        }
+        
+        // Simple point cloud renderer (for now - full splat rendering requires more code)
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        
+        window.addEventListener('resize', resize);
+        resize();
+        
+        // Create shaders
+        const vs = `#version 300 es
+            in vec3 position;
+            in vec3 color;
+            in float opacity;
+            uniform mat4 mvp;
+            out vec3 vColor;
+            out float vOpacity;
+            void main() {
+                vColor = color;
+                vOpacity = opacity;
+                gl_Position = mvp * vec4(position, 1.0);
+                gl_PointSize = 3.0;
+            }
+        `;
+        
+        const fs = `#version 300 es
+            precision highp float;
+            in vec3 vColor;
+            in float vOpacity;
+            out vec4 fragColor;
+            void main() {
+                vec2 coord = gl_PointCoord - 0.5;
+                float r2 = dot(coord, coord);
+                if (r2 > 0.25) discard;
+                float alpha = exp(-r2 * 8.0) * vOpacity;
+                fragColor = vec4(vColor, alpha);
+            }
+        `;
+        
+        function createShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+            }
+            return shader;
+        }
+        
+        const program = gl.createProgram();
+        gl.attachShader(program, createShader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(program, createShader(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(program);
+        gl.useProgram(program);
+        
+        const posLoc = gl.getAttribLocation(program, 'position');
+        const colorLoc = gl.getAttribLocation(program, 'color');
+        const opacityLoc = gl.getAttribLocation(program, 'opacity');
+        const mvpLoc = gl.getUniformLocation(program, 'mvp');
+        
+        let posBuf = gl.createBuffer();
+        let colorBuf = gl.createBuffer();
+        let opacityBuf = gl.createBuffer();
+        
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.enable(gl.DEPTH_TEST);
+        
+        function mat4Perspective(fov, aspect, near, far) {
+            const f = 1 / Math.tan(fov * Math.PI / 360);
+            return new Float32Array([
+                f / aspect, 0, 0, 0,
+                0, f, 0, 0,
+                0, 0, (far + near) / (near - far), -1,
+                0, 0, 2 * far * near / (near - far), 0
+            ]);
+        }
+        
+        function mat4Multiply(a, b) {
+            const result = new Float32Array(16);
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    result[i * 4 + j] = 0;
+                    for (let k = 0; k < 4; k++) {
+                        result[i * 4 + j] += a[k * 4 + j] * b[i * 4 + k];
+                    }
+                }
+            }
+            return result;
+        }
+        
+        function render() {
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            
+            if (!splatData) {
+                requestAnimationFrame(render);
+                return;
+            }
+            
+            // Update buffers
+            gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+            gl.bufferData(gl.ARRAY_BUFFER, splatData.positions, gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0);
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
+            gl.bufferData(gl.ARRAY_BUFFER, splatData.colors, gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(colorLoc);
+            gl.vertexAttribPointer(colorLoc, 3, gl.FLOAT, false, 0, 0);
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER, opacityBuf);
+            gl.bufferData(gl.ARRAY_BUFFER, splatData.opacities, gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(opacityLoc);
+            gl.vertexAttribPointer(opacityLoc, 1, gl.FLOAT, false, 0, 0);
+            
+            // MVP matrix
+            const aspect = canvas.width / canvas.height;
+            const proj = mat4Perspective(camera.fov, aspect, 0.1, 100);
+            
+            const cx = Math.cos(camera.rotation[0]);
+            const sx = Math.sin(camera.rotation[0]);
+            const cy = Math.cos(camera.rotation[1]);
+            const sy = Math.sin(camera.rotation[1]);
+            const z = camera.position[2];
+            
+            const view = new Float32Array([
+                cy, sx*sy, -cx*sy, 0,
+                0, cx, sx, 0,
+                sy, -sx*cy, cx*cy, 0,
+                0, 0, -z, 1
+            ]);
+            
+            const mvp = mat4Multiply(proj, view);
+            gl.uniformMatrix4fv(mvpLoc, false, mvp);
+            
+            gl.drawArrays(gl.POINTS, 0, splatData.count);
+            
+            requestAnimationFrame(render);
+        }
+        
+        render();
+        
+        // Auto-load latest on start
+        loadLatest();
+        
+        window.loadLatest = loadLatest;
+        window.toggleAutoUpdate = function() {
+            autoUpdate = !autoUpdate;
+            document.querySelector('#controls button:nth-child(2)').textContent = 
+                `Auto-Update: ${autoUpdate ? 'ON' : 'OFF'}`;
+            if (autoUpdate) {
+                setInterval(loadLatest, 5000);
+            }
+        };
+    </script>
+</body>
+</html>

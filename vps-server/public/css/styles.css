@@ -3377,6 +3377,9 @@ input[type="text"] {
   z-index: 1000;
   flex-direction: column;
   overflow: hidden;
+  resize: both;
+  min-width: 250px;
+  min-height: 150px;
 }
 .serial-popup.open {
   display: flex;
