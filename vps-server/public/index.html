@@ -962,7 +962,7 @@
 </div>
 
 <!-- Robot Agent Chat Panel -->
-<div class="serial-popup" id="agentPopup" style="display:none;width:380px;right:20px;top:60px;max-height:80vh;">
+<div class="serial-popup" id="agentPopup" style="display:none;width:380px;height:480px;left:calc(100vw - 410px);top:60px;">
   <div class="serial-popup-header" id="agentPopupHeader">
     <span>&#129504; ROBOT AGENT</span>
     <div style="display:flex;gap:6px;align-items:center;">
@@ -970,7 +970,7 @@
       <span class="serial-popup-close" onclick="toggleAgentPopup()">&times;</span>
     </div>
   </div>
-  <div id="agentMessages" style="height:350px;overflow-y:auto;padding:8px;font-size:12px;line-height:1.5;background:#0a0a0a;">
+  <div id="agentMessages" style="flex:1;overflow-y:auto;padding:8px;font-size:12px;line-height:1.5;background:#0a0a0a;">
     <div style="color:#555;font-style:italic;padding:8px;">Ask me anything about the robot. I can check sensors, run commands, help with code, plan tasks...</div>
   </div>
   <div style="display:flex;gap:4px;padding:6px 8px;background:#111;border-top:1px solid #222;">

@@ -296,6 +296,7 @@ function makeDraggable(popupId, headerId) {
 makeDraggable('codePopup', 'codePopupHeader');
 makeDraggable('serialPopup', 'serialPopupHeader');
 makeDraggable('wifiPopup', 'wifiPopupHeader');
+makeDraggable('agentPopup', 'agentPopupHeader');
 
 function clearQueue() {
   currentDir = null;

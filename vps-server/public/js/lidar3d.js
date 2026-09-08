@@ -938,10 +938,10 @@ function animateLidar3D() {
   if (lidar3dRobot) {
     lidar3dRobot.position.set(0, 0, 0);
     // Smooth interpolation to target heading
-    const targetHeading = (window.odomState && window.odomState.heading) || Math.PI;
+    const targetHeading = (window.odomState && window.odomState.heading !== undefined) ? window.odomState.heading : lidar3dRobot.rotation.y;
     const currentHeading = lidar3dRobot.rotation.y;
-    // Lerp 30% toward target each frame for smooth rotation
-    lidar3dRobot.rotation.y = currentHeading + (targetHeading - currentHeading) * 0.3;
+    // Lerp 10% toward target each frame for buttery smooth rotation
+    lidar3dRobot.rotation.y = currentHeading + (targetHeading - currentHeading) * 0.1;
   }
 
   // Keep OrbitControls centered on robot (at origin)
@@ -1681,12 +1681,12 @@ let lastStableCompassHeading = 0;
 function updateCompass(heading, x, y, z) {
   window.compassState = { heading, x, y, z };
 
-  // 2-DEGREE NOISE FILTER: Only update robot rotation if compass changed by more than 2°
-  // This filters out small noise while still responding to real turns
+  // 5-DEGREE NOISE FILTER: Only update robot rotation if compass changed by more than 5°
+  // Prevents twitching from small compass noise while still responding to real turns
   const headingDiff = Math.abs(heading - lastStableCompassHeading);
   const wrappedDiff = Math.min(headingDiff, 360 - headingDiff);  // Handle 359→1 wraparound
 
-  if (wrappedDiff > 2) {
+  if (wrappedDiff > 5) {
     // Real movement detected - update robot orientation
     lastStableCompassHeading = heading;
 

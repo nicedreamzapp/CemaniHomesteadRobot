@@ -652,12 +652,18 @@ function handleSerialData(d) {
 
 // ============ DEAD RECKONING HANDLER ============
 function handleDeadReckoning(d) {
-  console.warn('[GRID MOVE] x=' + d.odomX + 'mm, y=' + d.odomY + 'mm');
+  // Support both old property names (odomX) and scan matcher names (x)
+  const posX = d.odomX !== undefined ? d.odomX : d.x;
+  const posY = d.odomY !== undefined ? d.odomY : d.y;
+  // Only use odomHeading (radians from encoder odometry), NOT scan matcher heading
+  // Compass handles heading separately with proper deadband filtering
+  const heading = d.odomHeading;
+  console.warn('[GRID MOVE] x=' + posX + 'mm, y=' + posY + 'mm');
 
   if (window.odomState) {
-    window.odomState.x = d.odomX;
-    window.odomState.y = d.odomY;
-    window.odomState.heading = d.odomHeading;
+    if (posX !== undefined) window.odomState.x = posX;
+    if (posY !== undefined) window.odomState.y = posY;
+    if (heading !== undefined) window.odomState.heading = heading;
     window.odomState.totalDistance = d.odomDistance || 0;
     if (d.odomTrail) window.odomState.trail = d.odomTrail;
 
