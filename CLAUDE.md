@@ -104,17 +104,16 @@ Deploy with: `scp server.js root@YOUR_VPS_IP:/opt/robot-server/server.js && ssh 
 - **Connection**: USB to Jetson at `/dev/ttyUSB0`
 
 ## Jetson Connection
-- **IP Address**: `192.168.1.31` (hostname: tegra-ubuntu)
+- **IP Address**: your Jetson's LAN IP
 - **Username**: `jetson`
-- **Password**: `jetson`
-- **SSH**: `ssh jetson@192.168.1.31`
+- **SSH**: `ssh jetson@<jetson-ip>`
 
 ## Starting LIDAR Relay
 The LIDAR relay must be running on the Jetson for LIDAR panels to appear in the UI:
 
 ```bash
 # SSH to Jetson
-ssh jetson@192.168.1.31
+ssh jetson@<jetson-ip>
 
 # Start LIDAR relay
 cd ~/jetson-lidar
