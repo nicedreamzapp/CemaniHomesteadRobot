@@ -722,13 +722,14 @@ class RobotBrain:
                 f"Traveled: {st['position']['distance_ft']}ft"
             )
 
-        # Forward
-        for prefix in ["go forward", "forward", "fwd", "go ahead", "move forward", "go"]:
-            if text.startswith(prefix):
-                rest = text[len(prefix):].strip()
-                dist = self._parse_distance(rest, default=3.0)
-                result = self.go_forward(dist)
-                return "forward", result
+        # Go home
+        if text in ["go home", "home", "come back", "return"]:
+            result = self.go_home()
+            return "home", result
+
+        # Set home
+        if text in ["set home", "mark home", "home here"]:
+            return "set_home", self.set_home()
 
         # Backward
         for prefix in ["go backward", "go back", "backward", "back", "reverse", "move back"]:
@@ -737,6 +738,17 @@ class RobotBrain:
                 dist = self._parse_distance(rest, default=3.0)
                 result = self.go_backward(dist)
                 return "backward", result
+
+        # Forward
+        for prefix in ["go forward", "forward", "fwd", "go ahead", "move forward", "go"]:
+            if text.startswith(prefix):
+                rest = text[len(prefix):].strip()
+                # A bare "go" only counts as forward when nothing or a distance follows
+                if prefix == "go" and rest and not rest[0].isdigit():
+                    continue
+                dist = self._parse_distance(rest, default=3.0)
+                result = self.go_forward(dist)
+                return "forward", result
 
         # Turn
         for prefix in ["turn left", "left"]:
@@ -763,15 +775,6 @@ class RobotBrain:
         if text in ["explore", "wander", "roam", "look around"]:
             threading.Thread(target=self.explore, daemon=True).start()
             return "explore", "started exploring"
-
-        # Go home
-        if text in ["go home", "home", "come back", "return"]:
-            result = self.go_home()
-            return "home", result
-
-        # Set home
-        if text in ["set home", "mark home", "home here"]:
-            return "set_home", self.set_home()
 
         # Fall back to Claude AI for natural language
         claude_result = self.ask_claude(text)

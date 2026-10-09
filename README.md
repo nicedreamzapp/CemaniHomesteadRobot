@@ -18,11 +18,13 @@
 ![Power](https://img.shields.io/badge/Power-24V_LiFePO4_1kW-orange?style=for-the-badge)
 ![Control](https://img.shields.io/badge/Control-Text_From_Phone-blue?style=for-the-badge)
 
+**What this is:** the firmware, server, browser UI and Python code for a four-hub-motor tank robot I built for my homestead. It is for hobbyists who want a working reference for a Teensy, ESP32, Jetson and Node.js robot with network-bridged control. It is not a plug-and-play product, and you need the hardware listed below to use most of it.
+
 **Text it commands from your phone. It drives itself, avoids obstacles, detects 601 objects, builds 3D maps, and texts you back.**
 
 A 1kW, four-hub-motor tank robot for a homestead, with its own firmware, a WebSocket control server, a browser command center, and a Jetson "brain" that turns text messages into obstacle-checked moves.
 
-[Demo](#demo) | [What I Built](#what-i-built) | [Robot Brain](#robot-brain) | [3D Mapping](#3d-mapping) | [AI Vision](#ai-vision) | [Architecture](#architecture) | [Hardware](#hardware) | [Roadmap](#roadmap)
+[Demo](#demo) | [Quick Start](#quick-start) | [What I Built](#what-i-built) | [Robot Brain](#robot-brain) | [3D Mapping](#3d-mapping) | [AI Vision](#ai-vision) | [Architecture](#architecture) | [Hardware](#hardware) | [Roadmap](#roadmap)
 
 ---
 
@@ -110,8 +112,6 @@ Designed, wired and coded by **Matt Macosko**. Every layer below is original cod
 | `status` | Texts back position, battery, obstacles |
 | `check the yard` | Anything unrecognized goes to Claude, which maps it to one of the commands above |
 | `stop` | Emergency stop |
-
-> **Known issue:** the text parser matches the prefix `go` as "forward", so `go home`, `go back` or `go check the yard` currently drive forward 3 feet instead. Use `home`, `back 3`, or the HTTP `go_home` action until [`brain.py`](robot-brain/brain.py) is fixed.
 
 ### How It Works
 
@@ -255,6 +255,39 @@ Depth Anything V2        Laser Point Cloud
 | **Frame** | 2020 aluminum extrusion |
 | **Weight** | ~80 lbs, 100+ lbs payload tested |
 | **Speed** | ~4.8 mph turbo (200 RPM firmware cap), ~0.24 mph autonomous (10 RPM cap) |
+
+---
+
+## Quick Start
+
+Read [CLAUDE.md](CLAUDE.md) and the safety notes before powering the motors. Keep the Xbox controller within reach and keep your hands clear of the robot.
+
+Requirements I can confirm from the code:
+
+- **Control server:** Node.js and npm (`express` 5 and `ws` 8, see [`vps-server/package.json`](vps-server/package.json)).
+- **Teensy 4.1 and ESP32 firmware:** PlatformIO ([`teensy-robot/platformio.ini`](teensy-robot/platformio.ini), [`esp32-robot-controller/platformio.ini`](esp32-robot-controller/platformio.ini)).
+- **Robot brain:** Python 3 on the Jetson, `websocket-client`, and `ANTHROPIC_API_KEY` for the Claude fallback.
+- **Object detection:** a Jetson, set up with [`jetson-object-detection/setup.sh`](jetson-object-detection/setup.sh).
+
+Steps:
+
+```bash
+# 1. Control server (listens on port 3001)
+cd vps-server
+npm install
+cp auth.example.json auth.json   # set your own username and password
+node server.js                   # without auth.json it runs with no login
+
+# 2. Robot brain (on the Jetson)
+pip install -r robot-brain/requirements.txt
+cd robot-brain && bash start.sh
+
+# 3. Firmware: edit the placeholders in Setup below, then build with PlatformIO
+pio run -d teensy-robot
+pio run -d esp32-robot-controller
+```
+
+I have not tested these steps on a clean machine. Replace the placeholders in the Setup section before anything will connect.
 
 ---
 
