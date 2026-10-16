@@ -251,7 +251,7 @@ Depth Anything V2        Laser Point Cloud
 | **GPS** | Serial @ 38400 baud |
 | **Encoders** | 4096 counts/rev (built into ZLAC drivers) |
 | **Power** | 24V LiFePO4 8S, 720Wh |
-| **Wheels** | 10" pneumatic, direct hub motor drive |
+| **Wheels** | 8" pneumatic, direct hub motor drive |
 | **Frame** | 2020 aluminum extrusion |
 | **Weight** | ~80 lbs, 100+ lbs payload tested |
 | **Speed** | ~4.8 mph turbo (200 RPM firmware cap), ~0.24 mph autonomous (10 RPM cap) |
@@ -369,6 +369,7 @@ If you add new secrets while working on your fork, put them in a file that match
 - [x] Loop closure via LIDAR fingerprints ([`server-scan-matcher.js`](vps-server/server-scan-matcher.js))
 
 ### Building Next
+- [ ] **Rebuild in progress:** longer 2020 frame and front-wheel steering to stop the shudder in turns. Plan, measurements and parts: [docs/rebuild-2026](docs/rebuild-2026/README.md)
 - [ ] IMU upgrade (BNO085 - accelerometer + gyroscope)
 - [ ] Intel RealSense D455 depth camera
 - [ ] Auto-docking charging station
