@@ -41,24 +41,43 @@ Each side rail is a 400 and a 150 joined with a flat plate, with a 250 upright s
 
 ## Front steering
 
-![New frame with steering](new-frame-steering.png)
+![How the front steering works](how-it-steers.jpg)
 
-Each front wheel corner (black shock plate, shock, swingarm and hub motor) hangs from a 6 in steel lazy susan bolted under the frame corner, so the whole corner swivels. A steering arm on each spinning plate points in and slightly back toward the middle of the rear axle, and a tie rod with a heim joint on each end links the two arms. One linear actuator with position feedback pushes the left arm. Angling the arms that way makes the inside wheel turn a few degrees more than the outside one.
+Each black shock plate bolts under the frame into the 2020's bottom slots. At the two front corners, a 6 in square steel lazy susan goes between the frame and the black plate, so the whole corner (black plate, shock, swingarm and hub motor) swivels together. The back corners stay bolted solid.
 
-The rear corners don't change. Nothing needs welding.
+![Where the lazy susan goes](where-the-lazy-susan-goes.jpg)
+
+How each front corner stacks, top to bottom:
+
+1. **Frame.** The lazy susan's top plate bolts straight into the 2020 slots with M5 T-nuts. No extra top plate; add a short piece of 2020 if needed so all four corner holes land on a slot.
+2. **Lazy susan.** The one picked is 8 mm thick and rated 500 lb. Its two square plates sit 45° apart, and the screw heads hide in the gap between them. Steering only turns about 30° each way, so the two sets of screws always stay at least 15° apart and never touch. Use low button-head M5 screws.
+3. **Bottom plate.** A flat ¼ in aluminum plate. The lazy susan's lower plate bolts to it, and the black shock plate bolts underneath it with the holes drilled to match. This is the only adapter plate.
+4. **Black shock plate, shock, swingarm, wheel.** Unchanged.
+
+Because the lazy susan and bottom plate add a little height at the front, a spacer plate of the same thickness (about ½ in) goes under each back black plate so the robot sits level.
+
+**What makes it turn:** an actuator body bolts under the frame between the front wheels. It pushes a steering arm (a steel L-bracket) bolted to the left bottom plate. A tie rod with a heim joint on each end runs across to a matching arm on the right, so both wheels turn together. The arms angle in and slightly back toward the middle of the rear wheels, so the inside wheel turns a few degrees more than the outside one.
+
+**What keeps it from turning too far:** a 2 in stroke actuator only has enough travel for about 30° each way, so it physically can't over-turn. Two backups are a stop bolt on each side that the steering arm hits at full lock, and a software limit where the Teensy reads the actuator's position and never commands past 30°.
+
+The Teensy also sets each hub motor's speed for its turning radius, so the wheels don't fight the steering.
+
+If the lazy susan wobbles too much, a round slewing bearing about 4 in across drops into the same spot. Only the bottom plate's holes change.
 
 | Steering part | Count |
 |---|---|
-| 6 in steel lazy susan | 2 |
-| ¼ in aluminum plate, about 7 × 7 in | 4 |
-| Steering arm (steel corner brace or aluminum angle) | 2 |
-| 5/16-24 threaded rod | 1 ft |
+| 6 in square steel lazy susan, 500 lb rated | 2 |
+| ¼ in aluminum bottom plate, about 7 × 7 in | 2 |
+| Spacer plate for the back black plates, same thickness as the front stack | 2 |
+| Steering arm (heavy steel L-bracket) | 2 |
+| 5/16-24 threaded rod (tie rod) | 1 ft |
 | 5/16 female heim joints, one left-hand and one right-hand | 2 |
-| 12V linear actuator with feedback, 4 in stroke | 1 |
+| 12V linear actuator with position feedback, 2 in stroke | 1 |
 | BTS7960 motor driver | 1 |
+| Low button-head M5 screws and T-nuts | about 20 |
 
-On the software side, the Teensy reads the actuator's position, holds the steering angle, and sets each hub motor's speed for its turning radius.
+Nothing needs welding.
 
 ## Still to measure
 
-The black shock plate's size and bolt spacing. That decides whether the lazy susan bolts straight to it or needs the adapter plate.
+The lazy susan's corner hole spacing once it arrives, to line up the 2020 under it, and the exact drop of the front stack so the back spacers match.
