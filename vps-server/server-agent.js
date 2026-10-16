@@ -255,7 +255,7 @@ KEY SYSTEM KNOWLEDGE:
 - Mac Mini M1: Depth Anything V2, 3D mapping, iMessage relay
 - Codebase: /opt/robot-server/ (deployed) and /home/jetson/Desktop/CemaniHomesteadRobot/ (source)
 - Motors: 4x ZLLG80ASM250 (250W each), ZLAC8015D drivers, 4096 encoder counts/rev
-- Wheels: 10" pneumatic, 638.4mm circumference, 550mm wheelbase
+- Wheels: 8" pneumatic, 638.4mm circumference, 550mm wheelbase
 - Battery: 24V LiFePO4 8S (21.6V empty, 28.8V full)
 - Safety: Teensy has ultrasonic stop at 20cm, watchdog at 2s/5s
 - Autonomous: AUTO_ prefix commands capped at 10 RPM, 500ms timeout auto-stop
