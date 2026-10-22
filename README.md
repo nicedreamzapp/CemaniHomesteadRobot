@@ -40,15 +40,11 @@ A 1kW, four-hub-motor tank robot for a homestead, with its own firmware, a WebSo
 
 </div>
 
----
-
-## Demo
-
-### Robot Pulling Firewood Cart
+<a id="demo"></a>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s01-banner-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s01-banner-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s01-banner.svg" width="100%" alt="01. Demo. Four videos of the real robot"></picture>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s01-r1-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s01-r1-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s01-r1.svg" width="100%" alt="Firewood cart. 1kW tank platform pulling a loaded metal cart around the homestead. Four videos. A mobility test, a maneuverability test and a speed test, plus the firewood cart."></picture>
 
 https://github.com/user-attachments/assets/6a05e239-ce66-46ee-b951-474730370bfe
-
-*1kW tank platform pulling a loaded metal cart around the homestead.*
 
 ---
 
@@ -78,11 +74,12 @@ https://github.com/user-attachments/assets/fd26b6ea-948a-4a99-8cf5-652a429bc2db
 </tr>
 </table>
 
----
+<img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s01-rule.svg" width="100%" alt="">
 
-## What I Built
 
-Designed, wired and coded by **Matt Macosko**. Every layer below is original code in this repo:
+<a id="what-i-built"></a>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s02-banner-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s02-banner-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s02-banner.svg" width="100%" alt="02. What I built. Every layer is original code in this repo"></picture>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s02-r1-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s02-r1-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s02-r1.svg" width="100%" alt="Designed, wired and coded by Matt Macosko. Every layer below is original code in this repo. Credits. Upstream parts are credited in CREDITS.md."></picture>
 
 - **Motor firmware** ([`teensy-robot/src/main.cpp`](teensy-robot/src/main.cpp), [`modbus.cpp`](teensy-robot/src/modbus.cpp), [`safety.cpp`](teensy-robot/src/safety.cpp)): Teensy 4.1 drives two ZLAC8015D drivers over Modbus RS-485, caps autonomous `AUTO_*` commands at 10 RPM, and stops if commands stop arriving for 500ms.
 - **Wireless bridge** ([`esp32-robot-controller/src/main.cpp`](esp32-robot-controller/src/main.cpp)): ESP32 links the Teensy to the server over WiFi and reads the Xbox controller.
@@ -94,11 +91,12 @@ Designed, wired and coded by **Matt Macosko**. Every layer below is original cod
 
 **Upstream, not mine:** YOLOv8 and the OIV7 weights (Ultralytics), Depth Anything V2, the Claude API (Anthropic, `claude-haiku-4-5` for command parsing), Bluepad32 (Xbox on ESP32), Three.js, and the ZLAC/ZLLG vendor manuals included for reference. See [CREDITS.md](CREDITS.md).
 
----
+<img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s02-rule.svg" width="100%" alt="">
 
-## Robot Brain
 
-**Text your robot from your phone. It understands natural language, moves autonomously, and reports back.**
+<a id="robot-brain"></a>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s03-banner-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s03-banner-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s03-banner.svg" width="100%" alt="03. Robot brain. Text it commands from your phone"></picture>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s03-r1-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s03-r1-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s03-r1.svg" width="100%" alt="Natural language. It understands natural language, moves autonomously, and reports back. Unrecognized text. Anything unrecognized goes to Claude, which maps it to one of the commands. The HTTP API works alone. Phone control needs your own bridge; the HTTP API works without it."></picture>
 
 ### Phone Commands
 
@@ -156,9 +154,12 @@ curl -X POST localhost:5000/text -d '{"text":"go forward 6 feet"}'
 curl localhost:5000/status
 ```
 
----
+<img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s03-rule.svg" width="100%" alt="">
 
-## 3D Mapping
+
+<a id="3d-mapping"></a>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s04-banner-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s04-banner-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s04-banner.svg" width="100%" alt="04. 3D mapping and AI vision. Sensor fusion and 601-class detection"></picture>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s04-r1-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s04-r1-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s04-r1.svg" width="100%" alt="601 classes. Real-time object detection on Jetson Orin Nano. 1M points. Photorealistic 3D output from fused camera depth and LIDAR. ~11 ms per frame. With a TensorRT engine present."></picture>
 
 **Real-time photorealistic 3D environment mapping using sensor fusion**
 
@@ -190,9 +191,9 @@ Depth Anything V2        Laser Point Cloud
 | **Dead Reckoning** | Encoder-based odometry (4096 counts/rev) |
 | **Persistence** | Confirmed walls save to disk |
 
----
+<a id="ai-vision"></a>
 
-## AI Vision
+### AI Vision
 
 **601-class real-time object detection on Jetson Orin Nano**
 
@@ -202,9 +203,12 @@ Depth Anything V2        Laser Point Cloud
 - **Living mode:** people, animals, threats (the autonomous navigator in [`autonomous.py`](jetson-object-detection/autonomous.py) stops for these)
 - Detections overlay on live camera feeds in browser
 
----
+<img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s04-rule.svg" width="100%" alt="">
 
-## Architecture
+
+<a id="architecture"></a>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s05-banner-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s05-banner-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s05-banner.svg" width="100%" alt="05. Architecture and hardware. Five devices, one tank"></picture>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s05-r1-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s05-r1-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s05-r1.svg" width="100%" alt="4 hub motors, 1kW total. 4x ZLLG80ASM250, 250W each. 24V LiFePO4 8S. 720Wh. ~80 lbs. 100+ lbs payload tested."></picture>
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -236,9 +240,9 @@ Depth Anything V2        Laser Point Cloud
 | **Mac Mini M1** | Depth Anything V2, 3D mapping, iMessage relay |
 | **VPS** | WebSocket hub, web UI hosting, API |
 
----
+<a id="hardware"></a>
 
-## Hardware
+### Hardware
 
 | Component | Specification |
 |-----------|---------------|
@@ -256,9 +260,12 @@ Depth Anything V2        Laser Point Cloud
 | **Weight** | ~80 lbs, 100+ lbs payload tested |
 | **Speed** | ~4.8 mph turbo (200 RPM firmware cap), ~0.24 mph autonomous (10 RPM cap) |
 
----
+<img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s05-rule.svg" width="100%" alt="">
 
-## Quick Start
+
+<a id="quick-start"></a>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s06-banner-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s06-banner-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s06-banner.svg" width="100%" alt="06. Quick start and setup. Read the safety notes before powering the motors"></picture>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s06-r1-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s06-r1-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s06-r1.svg" width="100%" alt="Safety first. Read CLAUDE.md and the safety notes before powering the motors. Not tested clean. I have not tested these steps on a clean machine. Secrets scrubbed. Replace the placeholders with your own before anything connects."></picture>
 
 Read [CLAUDE.md](CLAUDE.md) and the safety notes before powering the motors. Keep the Xbox controller within reach and keep your hands clear of the robot.
 
@@ -289,9 +296,7 @@ pio run -d esp32-robot-controller
 
 I have not tested these steps on a clean machine. Replace the placeholders in the Setup section before anything will connect.
 
----
-
-## Code Structure
+### Code Structure
 
 ```
 CemaniHomesteadRobot/
@@ -306,9 +311,7 @@ CemaniHomesteadRobot/
 └── docs/                      # Diagrams, screenshots
 ```
 
----
-
-## 🛠️ Setup — Configure These Before Running
+### Setup: configure these before running
 
 This repo was scrubbed of secrets before being made public. If you clone it and try to run it as-is, you'll see placeholder values where real network addresses and credentials used to be. **You need to replace them with your own before anything actually connects to anything.**
 
@@ -347,9 +350,12 @@ The `.gitignore` already excludes real secret files — you'll see `*.example` s
 
 If you add new secrets while working on your fork, put them in a file that matches one of those patterns — or add a new line to `.gitignore` — so they stay out of git.
 
----
+<img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s06-rule.svg" width="100%" alt="">
 
-## Roadmap
+
+<a id="roadmap"></a>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s07-banner-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s07-banner-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s07-banner.svg" width="100%" alt="07. Roadmap and license. What works now and what is next"></picture>
+<picture><source media="(max-width: 610px), (min-width: 768px) and (max-width: 895px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s07-r1-m.svg"><source media="(max-width: 1149px)" srcset="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s07-r1-mid.svg"><img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s07-r1.svg" width="100%" alt="Rebuild in progress. Longer 2020 frame and front-wheel steering to stop the shudder in turns. Next. IMU upgrade, RealSense D455, auto-docking. License. Hardware CERN-OHL-S-2.0, software GPL-3.0-or-later, docs and media CC-BY-SA-4.0."></picture>
 
 ### Working Now
 - [x] Tank drive with Xbox controller + web joystick
@@ -384,13 +390,12 @@ If you add new secrets while working on your fork, put them in a file that match
 - [ ] Multi-robot coordination
 - [ ] Train engine body shell for giving kids rides
 
----
-
-## License
+### License
 
 Multi-licensed, all copyleft: hardware under CERN-OHL-S-2.0, software under GPL-3.0-or-later, docs and media under CC-BY-SA-4.0. Vendor manuals stay with their manufacturers. See [LICENSE](LICENSE). No warranty: this is a heavy machine that moves under its own power.
 
----
+<img src="https://raw.githubusercontent.com/nicedreamzapp/CemaniHomesteadRobot/main/assets/readme/s07-rule.svg" width="100%" alt="">
+
 
 <div align="center">
 
