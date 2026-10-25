@@ -162,7 +162,7 @@ async function initBrowser() {
   console.log('[GPU] Launching headless Chrome with GPU acceleration...');
 
   browser = await puppeteer.launch({
-    headless: 'new',
+    headless: true,
     args: [
       '--use-gl=metal',  // Use Metal on macOS
       '--enable-gpu',
