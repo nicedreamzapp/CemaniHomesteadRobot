@@ -5,7 +5,7 @@ None of this starts from scratch. Here's whose work this is built on.
 | Project | What it does here | By |
 |---|---|---|
 | 👁️ [YOLOv8](https://github.com/ultralytics/ultralytics) | Object detection on the robot | Ultralytics |
-| 🤖 [Claude Code](https://claude.ai/code) | The agent this is built around | Anthropic |
+| 🤖 [Claude API](https://docs.anthropic.com/) | Parses free-text commands the robot does not recognize | Anthropic |
 
 ---
 
