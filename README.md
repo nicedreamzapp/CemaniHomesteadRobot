@@ -375,7 +375,7 @@ If you add new secrets while working on your fork, put them in a file that match
 - [x] Loop closure via LIDAR fingerprints ([`server-scan-matcher.js`](vps-server/server-scan-matcher.js))
 
 ### Building Next
-- [ ] **Rebuild in progress:** longer 2020 frame and front-wheel steering to stop the shudder in turns. Plan, measurements and parts: [docs/rebuild-2026](docs/rebuild-2026/README.md)
+- [ ] **Rebuild in progress:** longer 2020 frame and front-wheel steering to stop the shudder in turns. Plan, measurements and parts: [docs/rebuild-2026](docs/rebuild-2026/README.md), latest frame: [frame v2](docs/rebuild-2026/frame-v2/README.md)
 - [ ] IMU upgrade (BNO085 - accelerometer + gyroscope)
 - [ ] Intel RealSense D455 depth camera
 - [ ] Auto-docking charging station
