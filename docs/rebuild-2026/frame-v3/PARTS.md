@@ -10,6 +10,6 @@
 | 6 | M12 x 35 mm countersunk bolts | The pivot bolts | [Amazon](https://www.amazon.com/dp/B0CG1NJMSZ) | $9.29 |
 | 7 | M12 nylon lock nuts, 10 pack | Hold the pivot bolts | [Amazon](https://www.amazon.com/dp/B0DM1FYDMY) | $6.64 |
 | 8 | Aluminum angle, 2 x 2 x 1/8 in | The actuator bracket | [Amazon](https://www.amazon.com/dp/B09W64KSR7) | $16.99 |
-| 9 | Glideforce LACT4P-12V-10 actuator, 4 in stroke, with feedback | Steers the wheels | [RobotShop](https://www.robotshop.com/products/glideforce-lact4p-12v-10-light-duty-linear-actuator-w-feedback-25kgf-4-stroke-11-s-12v) | $231.42 |
+| 9 | Glideforce LACT4P-12V-10 actuator, 4 in stroke, with feedback | Steers the wheels | [Pololu](https://www.pololu.com/product/3645) | $194.88 |
 
 Prices as of 2026-11-11.
