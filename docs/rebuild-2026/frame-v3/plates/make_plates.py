@@ -1,13 +1,13 @@
 # Steering plates for laser cutting. Units: mm. Pivot at (0,0). u = outward, v = toward the frame end.
-# ASSUMED black plate hole pattern (10/15 photo reading, ~44 x 64 mm): CHECK WITH CALIPERS BEFORE ORDERING.
+# Black plate hole pattern read off the 10/15 tape photos.
 import sys
 from PIL import Image, ImageDraw, ImageFont
-BP_U, BP_V, BP_CU = 44.0, 64.0, -12.0      # black plate hole spacing across / along, pattern centre offset in u
+BP_U, BP_V, BP_CU = 42.0, 63.0, -12.0      # read off IMG_7734 (across ~42 mm) and IMG_7735 (along ~63 mm), 10/15 tape photos; holes 7.5 mm so +-1.25 mm still fits M5
 OUT = [(-42, 42), (38, 42), (38, -70), (14, -95), (-42, -95)]
 def holes(right):
     h = [(0, 0, 12.5, "pivot (countersink for M12 flat head)")]
     for du in (-BP_U/2, BP_U/2):
-        for dv in (-BP_V/2, BP_V/2): h.append((BP_CU+du, dv, 5.5, "black plate screw M5"))
+        for dv in (-BP_V/2, BP_V/2): h.append((BP_CU+du, dv, 7.5, "black plate screw M5, oversize for fit"))
     h.append((-17.8, -57.3, 8.2, "tie rod 5/16"))
     if right: h.append((-25.0, -85.0, 6.6, "actuator pin 1/4"))
     return h

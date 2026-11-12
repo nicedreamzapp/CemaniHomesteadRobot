@@ -14,4 +14,4 @@
 | 10 | Glideforce light-duty mounting bracket | [Pololu](https://www.pololu.com/product/2314) | $24.07 |
 | 11 | 2 steering plates, laser cut from 1/4 in aluminum | `plates/` (DXF, mm) | quote pending |
 
-The plate files use an ASSUMED black plate screw pattern of about 44 x 64 mm. Measure the real pattern with calipers before you order the plates.
+Plate holes: black plate pattern 42 x 63 mm read off the 10/15 tape photos, cut 7.5 mm oversize for M5 so a 1 mm reading error still fits.
