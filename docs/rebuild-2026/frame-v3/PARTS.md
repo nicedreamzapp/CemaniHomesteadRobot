@@ -10,8 +10,10 @@
 | 6 | M12 nylon lock nuts, 10 pack | [Amazon](https://www.amazon.com/dp/B0DM1FYDMY) | $6.64 |
 | 7 | Back corner spacers, aluminum 1.5 in long for M5, 10 pack | [Amazon](https://www.amazon.com/dp/B0CQ88SM18) | $7.59 |
 | 8 | M5 x 50 mm screws, 25 pack | [Amazon](https://www.amazon.com/dp/B0GCSPTVC4) | $8.69 |
+| 9a | M5 x 20 mm fender washers, 50 pack | [Amazon](https://www.amazon.com/dp/B0H4Q6ZB36) | $6.69 |
+| 9b | M5 nylon lock nuts, 100 pack | [Amazon](https://www.amazon.com/dp/B0D1468L8Y) | $5.29 |
 | 9 | Glideforce LACT4P-12V-10 actuator | [Pololu](https://www.pololu.com/product/3645) | $194.88 |
 | 10 | Glideforce light-duty mounting bracket | [Pololu](https://www.pololu.com/product/2314) | $24.07 |
 | 11 | 2 steering plates, laser cut from 1/4 in aluminum | `plates/` (DXF, mm) | quote pending |
 
-Plate holes: black plate pattern 42 x 63 mm read off the 10/15 tape photos, cut 7.5 mm oversize for M5 so a 1 mm reading error still fits.
+Plate screw holes are 8 x 13 mm slots: the black plate pattern reads 39-42 mm across and 63-68 mm along across four tape photos, and the slots cover that whole range. Use fender washers.
