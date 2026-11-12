@@ -1,15 +1,17 @@
-# Front steering parts (both wheels)
+# Front steering parts, no cutting and no welding (2026-11-11)
 
-| # | Part | What it does | Link | Price |
-|---|---|---|---|---|
-| 1 | Eared bearing, 12 mm flange (KFL001), 2 pack | The pivot under each front rail | [Amazon](https://www.amazon.com/dp/B073KYRCXT) | $8.99 |
-| 2 | Flat washer bearing, 12 mm thrust (AXK1226) with washers, 4 sets | Carries the weight while the wheel turns | [Amazon](https://www.amazon.com/dp/B0G2QKWGRN) | $6.19 |
-| 3 | Heim joints, 5/16 x 5/16-24 right-hand, 2 pack | Go on the tie rod ends | [Amazon](https://www.amazon.com/dp/B0C9Y6S5CP) | $9.99 |
-| 4 | 5/16-24 stainless rod, 12 in | The tie rod, cut to about 8 in | [Amazon](https://www.amazon.com/dp/B0CDRMB496) | $9.99 |
-| 5 | 6061 aluminum bar, ¼ x 3 x 12 in | Cut into the two 3 x 5 in steering plates | [Amazon](https://www.amazon.com/dp/B0F2T987WK) | $9.99 |
-| 6 | M12 x 35 mm countersunk bolts | The pivot bolts | [Amazon](https://www.amazon.com/dp/B0CG1NJMSZ) | $9.29 |
-| 7 | M12 nylon lock nuts, 10 pack | Hold the pivot bolts | [Amazon](https://www.amazon.com/dp/B0DM1FYDMY) | $6.64 |
-| 8 | Aluminum angle, 2 x 2 x 1/8 in | The actuator bracket | [Amazon](https://www.amazon.com/dp/B09W64KSR7) | $16.99 |
-| 9 | Glideforce LACT4P-12V-10 actuator, 4 in stroke, with feedback | Steers the wheels | [Pololu](https://www.pololu.com/product/3645) | $194.88 |
+| # | Part | Link | Price |
+|---|---|---|---|
+| 1 | Eared bearing, 12 mm flange (KFL001), 2 pack | [Amazon](https://www.amazon.com/dp/B073KYRCXT) | $8.99 |
+| 2 | Flat washer bearing, 12 mm thrust (AXK1226) with washers, 4 sets | [Amazon](https://www.amazon.com/dp/B0G2QKWGRN) | $6.19 |
+| 3 | Heim joints, 5/16 x 5/16-24 right-hand, 2 pack | [Amazon](https://www.amazon.com/dp/B0C9Y6S5CP) | $9.99 |
+| 4 | Tie rod, 5/16-24 stainless, 7.9 in (no cutting), 2 pack | [Amazon](https://www.amazon.com/dp/B0FRSM7CQ9) | $9.19 |
+| 5 | M12 x 35 mm countersunk bolts | [Amazon](https://www.amazon.com/dp/B0CG1NJMSZ) | $9.29 |
+| 6 | M12 nylon lock nuts, 10 pack | [Amazon](https://www.amazon.com/dp/B0DM1FYDMY) | $6.64 |
+| 7 | Back corner spacers, aluminum 1.5 in long for M5, 10 pack | [Amazon](https://www.amazon.com/dp/B0CQ88SM18) | $7.59 |
+| 8 | M5 x 50 mm screws, 25 pack | [Amazon](https://www.amazon.com/dp/B0GCSPTVC4) | $8.69 |
+| 9 | Glideforce LACT4P-12V-10 actuator | [Pololu](https://www.pololu.com/product/3645) | $194.88 |
+| 10 | Glideforce light-duty mounting bracket | [Pololu](https://www.pololu.com/product/2314) | $24.07 |
+| 11 | 2 steering plates, laser cut from 1/4 in aluminum | `plates/` (DXF, mm) | quote pending |
 
-Prices as of 2026-11-11.
+The plate files use an ASSUMED black plate screw pattern of about 44 x 64 mm. Measure the real pattern with calipers before you order the plates.
