@@ -7,8 +7,8 @@ No cutting, welding or drilling by Matt: the laser shop cuts every plate hole.
 |---|---|---|---|
 | 2 | UCF204-12 flange bearing, 3/4 in bore (caliper the 4 bolt holes, plan 64 mm square) | [eBay 170523091215](https://www.ebay.com/itm/170523091215) $19.98 for 2 | IN CART |
 | 2 | Clevis pin 3/4 x 2 in, steel (50.8 mm under the head, no cotter needed) | [eBay 392746711757](https://www.ebay.com/itm/392746711757) $15.88 each | IN CART (qty 1, set it to 2) |
-| 2 | Face-mount shaft collar, 3/4 in bore, 40 OD x 15 wide, 2 tapped M6 face holes (Ruland FHT-MCL-12E-F) | [Zoro](https://www.zoro.com/ruland-shaft-collar-mountable-fht-mcl-12e-f/i/G708673879) $12.79 each | NOT YET (Zoro, not Amazon/eBay) |
-| 4 | M6 x 16 flat head socket screw, stainless (collar to plate, from below) | [Amazon B09Y5PLLGD](https://www.amazon.com/dp/B09Y5PLLGD) 20 pk | NOT YET (buy with the collar) |
+| 2 | Face-mount shaft collar, 3/4 in bore, 40 OD x 15 wide, 2 tapped M6 face holes (Ruland FHT-MCL-12E-F) | [Zoro](https://www.zoro.com/ruland-shaft-collar-mountable-fht-mcl-12e-f/i/G708673879) $12.79 each | IN CART (Zoro, qty 2, $25.58) |
+| 4 | M6 x 16 flat head socket screw, stainless (collar to plate, from below) | [Amazon B09Y5PLLGD](https://www.amazon.com/dp/B09Y5PLLGD) 20 pk | NOT YET (Amazon checkpoint blocked the add 11/16; retry) |
 | 8 | M5 x 18 socket head cap screw, stainless (bearing to frame) | [Amazon B019ETH1CC](https://www.amazon.com/dp/B019ETH1CC) 20 pk $9.69 | IN CART |
 | 8 | Sleeve 12 OD x 5.2 ID x 10 long, aluminium (in the bearing bolt holes) | [Amazon B0BYT4HFFZ](https://www.amazon.com/dp/B0BYT4HFFZ) 10 pk | IN CART |
 | 8 | M5 flat washer, stainless | [Amazon B0DDH3QNH4](https://www.amazon.com/dp/B0DDH3QNH4) 100 pk | IN CART |
