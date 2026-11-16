@@ -8,6 +8,8 @@ canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
 #phase{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:#1f5fb3;color:#fff;padding:6px 16px;border-radius:18px;font-size:16px;z-index:5}
 #labs{position:fixed;inset:0;pointer-events:none;z-index:4} #labs svg{position:absolute;inset:0;width:100%;height:100%}
 .lab{position:absolute;left:0;top:0;width:300px;background:#fff;border-radius:10px;padding:10px 14px;font-size:16px;line-height:1.35;box-shadow:0 4px 16px rgba(0,0,0,.16);border-left:6px solid #1f5fb3}
+.slab{position:absolute;left:0;top:0;background:rgba(255,255,255,.93);border:1px solid #c7cbd2;border-radius:6px;padding:2px 7px;font-size:12px;line-height:1.3;white-space:nowrap;color:#333}
+.slab b{font-weight:600;color:#111}
 .lab b{display:block;font-size:19px;margin-bottom:2px} .lab i{font-style:normal;display:inline-block;width:28px;height:28px;border-radius:50%;background:#1f5fb3;color:#fff;text-align:center;line-height:28px;font-weight:700;margin-right:8px;font-size:17px}
 </style></head><body>
 <div id="top">One front corner. It works like a door hinge. <button id="pause">❚❚ Pause</button></div>
@@ -154,7 +156,6 @@ function suspModule(px,cy,zt,sx){ const g=new THREE.Group(); const U=u=>px+sx*u,
   return g; }
 // his v3 frame: 22 1/4 x 12 in bottom, low box 6 1/2 in tall over the whole length, tall box 13 1/2 in over the back ~17 in,
 // mid rail ring at ~9 1/4 in, top side rails black, silver gussets with button heads on every outside joint, black end caps
-btn=()=>new THREE.Group(); // simple picture: no bolt heads
 const canvas=document.getElementById('c'); const renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true}); renderer.setPixelRatio(REC?1:devicePixelRatio);
 renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
 const scene=new THREE.Scene(); scene.background=new THREE.Color(0xe6e7ea);
@@ -177,6 +178,39 @@ const tie=new THREE.Group(); G.plate.add(tie); tie.add(ring(D.heimOD/2,D.heimBor
 const act=new THREE.Group(); G.plate.add(act); const ad=V(-205.5,-173.6,0).normalize();
 act.add(rodBetween(V(0,0,0),ad.clone().multiplyScalar(90),D.actRod/2,COL.chrome)); act.add(rodBetween(ad.clone().multiplyScalar(86),ad.clone().multiplyScalar(260),D.actTubeR,COL.act,32));
 act.add(cyl(8,14,COL.chrome,0,0,0));
+// ---- every fastener: home spot + its own pull-out direction, dashed line shows where it goes ----
+const armF=new THREE.Group(), actF=new THREE.Group(); G.plate.add(armF,actF);
+const FAST=[]; const dashM=()=>new THREE.LineDashedMaterial({color:0x6b7280,dashSize:5,gapSize:4,transparent:true});
+function place(parent,obj,pos,dir,dist,grp){ // dir = the way the shank points (the way it goes in); it is pulled out the other way
+  dir=dir.clone().normalize(); obj.quaternion.setFromUnitVectors(V(0,0,-1),dir); obj.position.copy(pos); parent.add(obj);
+  const off=dir.clone().multiplyScalar(-dist); const lg=new THREE.BufferGeometry().setFromPoints([pos.clone().addScaledVector(dir,8),pos.clone().add(off)]); const ln=new THREE.Line(lg,dashM()); ln.computeLineDistances(); parent.add(ln);
+  const f={obj,home:pos.clone(),off,ln,grp}; FAST.push(f); return f; }
+const nutO=(d,h)=>{ const g=new THREE.Group(); const n=nut(d,h); g.add(n); return g; };
+const washO=(od,id,h)=>{ const g=new THREE.Group(); g.add(washer(od,id,h)); return g; };
+const DN=V(0,0,-1), UP=V(0,0,1);
+// bearing to the 2 rails: drop-in T-nut in each rail's bottom slot, step sleeve in the ear hole, washer, M6 x 30 bolt up from below
+D.bolt4.forEach(([x,y],i)=>{
+  place(G.rails,(()=>{ const g=new THREE.Group(); g.add(box(10,12,4,COL.bolt,0,0,0)); return g; })(),V(x,y,1.8),UP,40,'tnut');
+  place(G.hinge,(()=>{ const g=new THREE.Group(); g.add(ring(D.holeR-0.3,3.2,D.ear,COL.chrome,0,0,-D.ear/2)); return g; })(),V(x,y,zE+D.ear),UP,40,'m6');
+  place(G.hinge,washO(18,6.4,1.6),V(x,y,zE-0.8),UP,58,'m6');
+  place(G.hinge,screw(6,30,6),V(x,y,zE-1.6),UP,80,'m6'); });
+// the bearing's 2 set screws, in the inner ring, pointing at the pin
+for(const a of [Math.PI+0.7,Math.PI-0.7]){ const d=V(-Math.cos(a),-Math.sin(a),0), r=D.shaftR+5; place(G.hinge,screw(6,6,0.01),V(r*Math.cos(a),r*Math.sin(a),zI+3.5),d,42,'set'); }
+// collar clamp screw (across the split collar)
+place(turnPin,screw(5,14,3.5),V(11,-19,zC+10.5),V(0,1,0),45,'clamp');
+// collar-to-plate bolts: up through the steering plate into the collar flange
+for(const x of [16,-16]) place(turnPlate,screw(5,12,3.5),V(x,0,zP-0.1),UP,55,'colb');
+// black plate under the steering plate: 4 M5 x 25 up from below, fender washer + nylock on top of the steering plate
+D.fslots.forEach(([u,v])=>{ place(turnBlack,screw(5,D.m5Lf,3.5),V(sx*u,v,zK-0.1),UP,60,'m5');
+  place(turnPlate,washO(20,5.3,1.2),V(sx*u,v,zP+D.plateT+0.6),DN,28,'m5n'); place(turnPlate,nutO(5,4),V(sx*u,v,zP+D.plateT+3.2),DN,46,'m5n'); });
+// 5/16 bolt down through the heim joint and the arm hole, nylock under the plate
+place(armF,screw(D.heimBore,D.heimBoltL,5),V(0,0,zt+D.heimT/2+0.1),DN,55,'heim'); place(armF,nutO(D.heimBore,6),V(0,0,zP-3),UP,40,'heim');
+// 1/4 bolt down through the steering plate and the actuator rod end, nylock under it
+place(actF,screw(6.35,32,4.5),V(0,0,zP+D.plateT+0.1),DN,55,'act'); place(actF,nutO(6.35,6),V(0,0,zP-16),UP,40,'act');
+const SLABS={tnut:'<b>Drop-in T-nuts</b> M6, 4 (in the rail slots)',m6:'<b>M6 x 30 bolts</b> + washers + step sleeves, 4 each',set:'<b>Bearing set screws</b>, 2 (come with the UCF204)',
+  clamp:'<b>Collar clamp screw</b>, 1 (comes with the collar)',colb:'<b>Collar-to-plate bolts</b>, 2: size set when collar is picked',m5:'<b>M5 x 25 screws</b>, 4 (up through both plates)',
+  m5n:'<b>M5 fender washers + nylock nuts</b>, 4 each',heim:'<b>5/16 x 1-1/4 bolt + nylock</b>, 1 (heim joint)',act:'<b>1/4 x 1-1/4 bolt + nylock</b>, 1 (actuator end)'};
+const slabs=Object.entries(SLABS).map(([g,h])=>{ const d=document.createElement('div'); d.className='slab'; d.innerHTML=h; document.getElementById('labs').appendChild(d); return {g,d,f:FAST.filter(f=>f.grp===g)}; });
 // dashed pin axis
 const axG=new THREE.BufferGeometry().setFromPoints([V(0,0,260),V(0,0,-420)]); const ax=new THREE.Line(axG,new THREE.LineDashedMaterial({color:0x1f5fb3,dashSize:12,gapSize:9})); ax.computeLineDistances(); scene.add(ax);
 // apart offsets (z), top to bottom
@@ -195,15 +229,23 @@ function state(t){ const u=((t%T)+T)%T; let k, a=0, ph;
   else if(u<14){ k=ease((u-11.5)/2.5); ph='Pulling apart'; } else { k=1; ph='Pulled apart'; }
   kNow=k; for(const g in APART) G[g].position.z=APART[g]*k;
   turnPin.rotation.z=turnPlate.rotation.z=turnBlack.rotation.z=a;
-  const ar=rotZ(armP,a), ac=rotZ(actP,a); tie.position.set(ar.x,ar.y,zt); act.position.set(ac.x,ac.y,zP-6);
+  const ar=rotZ(armP,a), ac=rotZ(actP,a); tie.position.set(ar.x,ar.y,zt); act.position.set(ac.x,ac.y,zP-6); armF.position.set(ar.x,ar.y,0); actF.position.set(ac.x,ac.y,0);
+  for(const f of FAST){ f.obj.position.copy(f.home).addScaledVector(f.off,k); f.ln.material.opacity=k; f.ln.visible=k>0.02; }
   if(phaseEl.textContent!==ph) phaseEl.textContent=ph;
-  const az=-0.95+0.35*Math.sin(t*2*Math.PI/30), el=0.32, r=1250+400*kNow, tg=V(10,0,-80); cam.position.set(tg.x+r*Math.cos(az)*Math.cos(el),tg.y+r*Math.sin(az)*Math.cos(el),tg.z+r*Math.sin(el)); cam.lookAt(tg); }
+  const az=-0.95+0.35*Math.sin(t*2*Math.PI/30), el=0.32, r=1150+250*kNow, tg=V(10,0,-100+30*kNow); cam.position.set(tg.x+r*Math.cos(az)*Math.cos(el),tg.y+r*Math.sin(az)*Math.cos(el),tg.z+r*Math.sin(el)); cam.lookAt(tg); }
 function placeLabels(){ const W=canvas.clientWidth,H=canvas.clientHeight; cam.updateMatrixWorld(); let lines=''; const used={'-1':[],'1':[]};
   const its=LABS.map(l=>{ const p=anchor[l[0]]().project(cam); return {l,ax:(p.x+1)/2*W,ay:(1-p.y)/2*H}; }).sort((a,b)=>a.ay-b.ay);
   for(const it of its){ const d=it.l[5], side=it.l[4], w=d.offsetWidth, h=d.offsetHeight; let x=side<0?Math.max(16,Math.min(it.ax-w-90,W*0.30-w)):Math.min(W-w-16,Math.max(it.ax+90,W*0.70));
     let y=Math.max(64,Math.min(H-h-60,it.ay-h/2)); for(const b of used[side]) if(y<b+8) y=b+8; used[side].push(y+h);
     d.style.transform=`translate(${x}px,${y}px)`; const ex=side<0?x+w:x, ey=y+h/2;
     lines+=`<line x1="${ex}" y1="${ey}" x2="${it.ax}" y2="${it.ay}" stroke="#1f5fb3" stroke-width="2"/><circle cx="${it.ax}" cy="${it.ay}" r="5" fill="#1f5fb3" stroke="#fff" stroke-width="2"/>`; }
+  const rects=[...document.querySelectorAll('.lab,#top,#phase')].map(e=>e.getBoundingClientRect()); const hit=(a,b)=>a.l<b.right&&a.r>b.left&&a.t<b.bottom&&a.b>b.top; const _w=new THREE.Vector3();
+  for(const S of slabs){ if(kNow<0.25){ S.d.style.transform='translate(-9999px,0)'; continue; } // assembled: small labels step aside so the bolts show in place
+    const f=S.f[0]; f.obj.getWorldPosition(_w); const p=_w.project(cam); const ax=(p.x+1)/2*W, ay=(1-p.y)/2*H, w=S.d.offsetWidth, h=S.d.offsetHeight; let ok=null;
+    for(const [dx,dy] of [[24,-h-14],[24,14],[-w-24,-h-14],[-w-24,14],[40,-h-40],[-w-40,-h-40],[40,40],[-w-40,40],[60,-h/2],[-w-60,-h/2],[24,-h-70],[-w-24,-h-70],[24,70],[-w-24,70]]){
+      const c={l:ax+dx,t:ay+dy,r:ax+dx+w,b:ay+dy+h}; if(c.l<8||c.r>W-8||c.t<56||c.b>H-50) continue; if(rects.some(r=>hit(c,r))) continue; ok=c; break; }
+    if(!ok){ S.d.style.transform='translate(-9999px,0)'; continue; } S.d.style.transform=`translate(${ok.l}px,${ok.t}px)`; rects.push({left:ok.l,right:ok.r,top:ok.t,bottom:ok.b});
+    const ex=Math.max(ok.l,Math.min(ok.r,ax)), ey=ay<ok.t?ok.t:(ay>ok.b?ok.b:(ok.t+ok.b)/2); lines+=`<line x1="${ex}" y1="${ey}" x2="${ax}" y2="${ay}" stroke="#6b7280" stroke-width="1.2"/><circle cx="${ax}" cy="${ay}" r="3" fill="#6b7280"/>`; }
   svg.innerHTML=lines; }
 function fit(){ const w=canvas.clientWidth,h=canvas.clientHeight; renderer.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix(); } addEventListener('resize',fit); fit();
 let t=0, playing=!REC, prev=performance.now(); const pb=document.getElementById('pause'); pb.onclick=()=>{ playing=!playing; pb.textContent=playing?'❚❚ Pause':'▶ Play'; };
