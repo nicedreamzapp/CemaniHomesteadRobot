@@ -1,10 +1,10 @@
-// Record viewer-steering-build.html?record frame by frame into an MP4 (24 fps, 1280x720).
+// Record viewer-4ws-ucf204.html?real?record frame by frame into an MP4 (24 fps, 1280x720).
 // node record.mjs <out.mp4>
 import { chromium } from '/Users/dtribe/Desktop/PROJECTS/marketplace-realism/npm/node_modules/playwright/index.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 const out = process.argv[2] || 'steering_builds_itself.mp4';
-const page_url = 'file://' + path.resolve('viewer-steering-build.html') + '?record';
+const page_url = 'file://' + path.resolve('viewer-4ws-ucf204.html?real') + '?record';
 const FPS = 24;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=metal', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });

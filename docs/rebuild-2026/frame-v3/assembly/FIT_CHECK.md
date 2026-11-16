@@ -9,7 +9,7 @@ Fits:
 
 Problem found, fixed with the 2020:
 - Actuator: 246 mm hole to hole retracted, 346 extended. Mounted on the middle cross rail as drawn before, it would need 228 mm at full lock one way, shorter than it can go, so it could not steer fully that way.
-- Fix: put the bracket on a short 2020 piece under the left side rail, about 9 1/2 in behind the front wheel centers and about 1 in in from the side rail. Then it needs 266-322 mm across full lock, inside 246-346 with room on both ends.
+- Fix: put the bracket on a short 2020 piece under the left side rail, about 10 1/4 in behind the front wheel centers (pin 20 mm further back than the first draw, 11/16). Then it needs about 258-305 mm across full lock (+-30 deg), inside 246-346 with about 12 mm spare closed and 41 mm spare open. Same on the back actuator in 4-wheel steering.
 
 Not on the parts list yet (needed to bolt it together):
 - 4 M5 x 16 screws + 4 washers + 4 M5 T-nuts: bearing ears to the rail (2 per corner)
