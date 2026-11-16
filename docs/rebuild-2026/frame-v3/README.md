@@ -25,7 +25,7 @@ Each front corner, top to bottom: the bottom rail, the eared bearing (12 mm flan
 
 A 5/16 tie rod with a heim joint on each end links the two steering arms. It is about 9¾ in from hole to hole. A 4 in stroke linear actuator pushes the right plate. The inside wheel turns up to about 30°, which uses about 2⅛ in of the stroke.
 
-The stack lifts the front about 1½ in, so the two back corners get 1½ in spacers cut from 2020 rail.
+The stack lifts the front about 1½ in, so the two back corners get store-bought 1½ in aluminum spacers (no cutting): one under each of the black plate's 4 screws, held with longer M5 screws, fender washers and lock nuts. See `PARTS.md`. Check the screw length against the black plate's thickness before ordering.
 
 | Side | From above |
 |---|---|
