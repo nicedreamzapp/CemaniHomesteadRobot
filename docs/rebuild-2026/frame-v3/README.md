@@ -27,6 +27,10 @@ The frame as rebuilt in November 2026: a low box in front, and a tall box over t
 
 ![Buy list on each step](assembly/step-buy-labels.jpg)
 
+**One corner, simply:** it works like a door hinge. [See it move](https://nicedreamzapp.github.io/CemaniHomesteadRobot/docs/rebuild-2026/frame-v3/assembly/corner-simple.html).
+
+![One corner, pulled apart](assembly/corner-simple.jpg)
+
 All four corners are the same. Top to bottom:
 - **Frame:** the side rail plus a second short 2020 rail 64 mm inboard of it.
 - **Bearing:** a UCF204-12 4-bolt flange bearing (¾ in bore) under the two rails, held by 4 M6 bolts into drop-in T-nuts. No adapter plate.
