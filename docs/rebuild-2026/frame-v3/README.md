@@ -19,9 +19,11 @@ The frame as rebuilt in November 2026: a low box in front, and a tall box over t
 
 ## 4-wheel steering (November 16 design)
 
-![4-wheel steering, real look](assembly/built-4ws.jpg)
+![4-wheel steering in action](assembly/steering-4ws.gif)
 
-**Interactive build:** [watch it build itself, part by part](https://raw.githack.com/nicedreamzapp/CemaniHomesteadRobot/main/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real). Every step shows the parts it adds, how many, and whether to buy them. "Front parts list" opens the whole front shopping list. Side by side with photos of the real robot: [compare page](https://raw.githack.com/nicedreamzapp/CemaniHomesteadRobot/main/docs/rebuild-2026/frame-v3/assembly/compare-real.html).
+![It builds itself, step by step](assembly/build-4ws.gif)
+
+**Interactive build:** [watch it build itself, part by part](https://nicedreamzapp.github.io/CemaniHomesteadRobot/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real). Every step shows the parts it adds, how many, and whether to buy them. "Front parts list" opens the whole front shopping list. Side by side with photos of the real robot: [compare page](https://nicedreamzapp.github.io/CemaniHomesteadRobot/docs/rebuild-2026/frame-v3/assembly/compare-real.html).
 
 ![Buy list on each step](assembly/step-buy-labels.jpg)
 

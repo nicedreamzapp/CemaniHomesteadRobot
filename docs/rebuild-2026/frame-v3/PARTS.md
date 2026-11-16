@@ -4,7 +4,7 @@ Buy the front first, one part at a time, measuring each before buying the parts 
 
 - Front list, in buying order: [assembly/PARTS-FRONT.md](assembly/PARTS-FRONT.md)
 - Whole robot, all 4 corners: [assembly/PARTS-4WS.md](assembly/PARTS-4WS.md)
-- The [interactive build](https://raw.githack.com/nicedreamzapp/CemaniHomesteadRobot/main/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real) shows each part on the robot, with how many and where to buy it.
+- The [interactive build](https://nicedreamzapp.github.io/CemaniHomesteadRobot/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real) shows each part on the robot, with how many and where to buy it.
 
 | # | Part (front) | Qty | Where | Price |
 |---|---|---|---|---|

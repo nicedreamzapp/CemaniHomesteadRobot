@@ -375,7 +375,11 @@ If you add new secrets while working on your fork, put them in a file that match
 - [x] Loop closure via LIDAR fingerprints ([`server-scan-matcher.js`](vps-server/server-scan-matcher.js))
 
 ### Building Next
-- [ ] **Rebuild in progress:** longer 2020 frame and 4-wheel steering (UCF204 bearing on every corner) to stop the shudder in turns. [Interactive build](https://raw.githack.com/nicedreamzapp/CemaniHomesteadRobot/main/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real), [frame v3](docs/rebuild-2026/frame-v3/README.md). Plan, measurements and parts: [docs/rebuild-2026](docs/rebuild-2026/README.md), latest frame: [frame v2](docs/rebuild-2026/frame-v2/README.md)
+- [ ] **Rebuild in progress:** longer 2020 frame and 4-wheel steering (UCF204 bearing on every corner) to stop the shudder in turns.
+
+  ![4-wheel steering](docs/rebuild-2026/frame-v3/assembly/steering-4ws.gif)
+
+  [Interactive build](https://nicedreamzapp.github.io/CemaniHomesteadRobot/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real), [frame v3](docs/rebuild-2026/frame-v3/README.md). Plan, measurements and parts: [docs/rebuild-2026](docs/rebuild-2026/README.md), latest frame: [frame v2](docs/rebuild-2026/frame-v2/README.md)
 - [ ] IMU upgrade (BNO085 - accelerometer + gyroscope)
 - [ ] Intel RealSense D455 depth camera
 - [ ] Auto-docking charging station
