@@ -1,5 +1,9 @@
 # Front steering parts, no cutting and no welding (2026-11-11)
 
+![Front steering corner, labeled](corner.jpg)
+
+Where each part goes: the front corner above. The back corners only get the spacers (row 7) under the black plate's 4 screws. Plate shapes: [plates/plates-preview.png](plates/plates-preview.png).
+
 | # | Part | Link | Price |
 |---|---|---|---|
 | 1 | Eared bearing, 12 mm flange (KFL001), 2 pack | [Amazon](https://www.amazon.com/dp/B073KYRCXT) | $8.99 |
