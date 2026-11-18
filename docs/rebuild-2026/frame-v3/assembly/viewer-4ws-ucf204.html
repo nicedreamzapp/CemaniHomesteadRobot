@@ -2,35 +2,57 @@
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cemani 4-wheel steering: UCF204 on all 4 corners, it builds itself</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
 body{background:#e8e8ec;font-family:-apple-system,sans-serif;color:#16181d;overflow:hidden}
-#wrap{position:fixed;inset:0} canvas{display:block;width:100%;height:100%}
+#app{position:fixed;inset:0}
+#stage{position:absolute;inset:0} canvas{display:block;width:100%;height:100%;touch-action:none}
 #ctl{position:absolute;top:12px;left:12px;background:rgba(255,255,255,.92);padding:10px 14px;border-radius:10px;display:flex;gap:10px;align-items:center;font-size:14px;z-index:10;flex-wrap:wrap;max-width:calc(100vw - 24px)}
-#ctl b{font-size:16px} #ctl button{font-size:15px;padding:6px 14px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer}
+#ctl b{font-size:16px} #ctl button{font-size:15px;padding:6px 14px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer;color:#16181d}
+#ctl .nav{display:contents}
 #bar{position:absolute;left:0;right:0;bottom:0;height:5px;background:rgba(0,0,0,.08);z-index:10} #bar i{display:block;height:100%;width:0;background:#1f5fb3}
 #step{position:absolute;top:70px;left:12px;max-width:min(760px,calc(100vw - 24px));background:#fff;border-left:5px solid #d08a00;padding:12px 16px;border-radius:8px;font-size:18px;line-height:1.4;z-index:10;box-shadow:0 4px 18px rgba(0,0,0,.12)}
-#step small{display:block;color:#666;font-size:13px;margin-bottom:3px}
+#step small{display:block;color:#666;font-size:13px;margin-bottom:3px} #step small .tg{display:none}
 #key{position:absolute;bottom:14px;left:12px;background:rgba(255,255,255,.9);padding:8px 12px;border-radius:10px;font-size:13px;z-index:10;display:flex;gap:14px;flex-wrap:wrap;max-width:calc(100vw - 24px)}
 #key i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
-#tag{position:absolute;z-index:9;background:#1f5fb3;color:#fff;font-size:14px;padding:4px 9px;border-radius:6px;white-space:nowrap;pointer-events:none;transform:translate(-50%,-140%)}
+#tag{display:none}
 body.rec #ctl button, body.rec #bar{display:none}
 #step table.buy{border-collapse:collapse;margin-top:8px;font-size:13px;line-height:1.3;width:100%} #step .bl{max-height:34vh;overflow:auto;margin-top:4px}
 #step table.buy td{padding:2px 6px 2px 0;vertical-align:top;border-top:1px solid #eee} #step table.buy td.q{white-space:nowrap;font-weight:600}
-.chip{display:inline-block;padding:0 6px;border-radius:9px;font-size:12px;font-weight:600;white-space:nowrap} .chip.buy{background:#fde3c4;color:#8a4b00} .chip.have{background:#d6f0d6;color:#1f6b1f} .chip.back{background:#e4e4e8;color:#555}
+.chip{display:inline-block;padding:0 6px;border-radius:9px;font-size:12px;font-weight:600;white-space:nowrap}
+.chip.ord,.chip.got{background:#d3f1dd;color:#16773a} .chip.have{background:#e3f1e3;color:#3c6b3c} .chip.hold{background:#fff1c7;color:#8a5d00} .chip.back{background:#e4e4e8;color:#555}
 #step a, #plist a{color:#1f5fb3} .note{color:#777;font-size:12px}
-#labs{position:absolute;inset:0;pointer-events:none;z-index:8} #labs svg{position:absolute;inset:0;width:100%;height:100%}
+#labs{position:absolute;inset:0;pointer-events:none;z-index:8;overflow:hidden} #labs svg{position:absolute;inset:0;width:100%;height:100%}
 .lab{position:absolute;background:rgba(255,255,255,.95);border:1px solid #c9ccd2;border-radius:6px;padding:3px 8px;font-size:12.5px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 .lab b{font-weight:600} .lab .chip{margin-left:4px}
 #plist{position:absolute;top:70px;right:12px;width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 140px);overflow:auto;background:#fff;border-radius:10px;box-shadow:0 6px 28px rgba(0,0,0,.25);z-index:20;padding:12px 16px;font-size:13.5px;display:none}
 #plist h3{font-size:16px;margin:4px 0 6px} #plist h4{font-size:14px;margin:10px 0 4px} #plist table{border-collapse:collapse;width:100%} #plist td{padding:3px 6px 3px 0;border-top:1px solid #eee;vertical-align:top}
+#plist td.q{white-space:nowrap;font-weight:600} #plist td.pr{white-space:nowrap;text-align:right}
 #plist .x{float:right;font-size:14px;padding:3px 10px;border-radius:7px;border:1px solid #999;background:#fff;cursor:pointer} #plist .tot{margin-top:10px;font-weight:600}
+#plist ul{margin:2px 0 0 18px}
+/* phone: the 3D view gets its own area on top; step text and buttons sit in their own strip under it, nothing over the robot */
+@media (max-width:700px){
+#app{display:flex;flex-direction:column;height:100dvh;bottom:auto}
+#stage{position:relative;inset:auto;flex:1 1 auto;min-height:0}
+#ctl{position:static;order:3;max-width:none;border-radius:0;padding:6px 6px calc(6px + env(safe-area-inset-bottom));gap:6px;display:grid;grid-template-columns:repeat(4,1fr);background:#f6f6f8;border-top:1px solid #d6d7db}
+#ctl b{display:none} #ctl .nav{display:contents}
+#ctl button{font-size:13px;padding:0 4px;min-height:40px;border-radius:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ctl #next{font-weight:700;background:#1f5fb3;color:#fff;border-color:#1f5fb3}
+#step{position:static;order:2;max-width:none;border-radius:0;border-left:0;border-top:4px solid #d08a00;box-shadow:none;padding:8px 12px;font-size:14.5px;line-height:1.35;height:27dvh;overflow:auto;flex:0 0 auto}
+#step small{display:flex;justify-content:space-between;align-items:center;font-size:12px;cursor:pointer}
+#step small .tg{display:inline-block;font-size:12px;color:#1f5fb3;font-weight:600;padding:4px 0 4px 12px}
+body.mini #step{height:auto;max-height:none} body.mini #step .tx, body.mini #step .bl{display:none}
+#step .bl{max-height:none} #step table.buy{font-size:12px}
+#key{display:none}
+.lab{font-size:10.5px;padding:2px 5px} .lab .note{display:none} .lab .chip{font-size:10px;padding:0 4px}
+#plist{position:fixed;top:8px;left:8px;right:8px;width:auto;max-height:calc(100dvh - 16px);font-size:13px;padding:10px 12px}
+}
 </style></head><body>
-<div id="wrap">
-<div id="ctl"><b>CEMANI 4-WHEEL STEERING · UCF204 on all 4 corners, no cutting, no drilling</b><button id="play">❚❚ Pause</button><button id="prev">◀ Back</button><button id="next">Next ▶</button><button id="again">↻ Replay</button><button id="look">Real look / Plain</button><button id="alllab">Show all labels</button><button id="plistb">Front parts list</button></div>
+<div id="app">
+<div id="stage"><canvas id="c"></canvas><div id="labs"><svg></svg></div><div id="tag"></div><div id="bar"><i></i></div></div>
+<div id="ctl"><b>CEMANI 4-WHEEL STEERING · UCF204 on all 4 corners, no cutting, no drilling</b><span class="nav"><button id="prev">◀ Back</button><button id="play">❚❚ Pause</button><button id="next">Next ▶</button></span><button id="again">↻ Replay</button><button id="look">Plain look</button><button id="alllab">All labels</button><button id="plistb">Parts list</button></div>
+<div id="step"></div>
+<div id="key"><span><i style="background:#a3a7ad"></i>2020 frame</span><span><i style="background:#1f3f8f"></i>UCF204 bearing</span><span><i style="background:#e0662f"></i>clevis pin + clamp collar</span><span><i style="background:#9fb7d6"></i>steering plate</span><span><i style="background:#1d1e21"></i>black plate + wheel (yours)</span><span><i style="background:#55595f"></i>bolts, nuts</span><span><i style="background:#3a3d42"></i>actuator</span></div>
 <div id="plist"></div>
-<div id="step"></div><div id="tag"></div><div id="labs"><svg></svg></div>
-<div id="key"><span><i style="background:#a3a7ad"></i>2020 frame</span><span><i style="background:#1f3f8f"></i>UCF204 bearing</span><span><i style="background:#e0662f"></i>¾ in shaft + flanged collar</span><span><i style="background:#9fb7d6"></i>steering plate</span><span><i style="background:#1d1e21"></i>black plate + wheel (yours)</span><span><i style="background:#55595f"></i>bolts, nuts</span><span><i style="background:#3a3d42"></i>actuator</span></div>
-<div id="bar"><i></i></div>
-<canvas id="c"></canvas>
 </div>
 <script src="steps-4ws.js"></script>
 <script type="importmap">
@@ -47,12 +69,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const D=window.DIMS;
 const XR=142.5, YAX=228.6, YACT=32, YE=272.5;
 const COL={rail:0xa3a7ad,brg:0xc9962f,plate:0x9fb7d6,black:0x1d1e21,spacer:0xd8dade,bolt:0x55595f,act:0x3a3d42,chrome:0xe4e6ea};
-const QS=new URLSearchParams(location.search), REC=QS.has('record'), REAL=QS.has('real');
-document.getElementById('look').onclick=()=>{ REAL?QS.delete('real'):QS.set('real',''); location.search=QS.toString().replace(/=(&|$)/g,'$1'); }; if(REC) document.body.classList.add('rec');
+const QS=new URLSearchParams(location.search), REC=QS.has('record'), REAL=!QS.has('plain');
+const lookB=document.getElementById('look'); lookB.textContent=REAL?'Plain look':'Real look';
+lookB.onclick=()=>{ REAL?QS.set('plain',''):QS.delete('plain'); location.search=QS.toString().replace(/=(&|$)/g,'$1'); }; if(REC) document.body.classList.add('rec');
 THREE.Object3D.DEFAULT_UP.set(0,0,1);
 const canvas=document.getElementById('c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});
-renderer.setPixelRatio(REC?1:devicePixelRatio); renderer.setClearColor(0xe8e8ec);
+const PHONE=matchMedia('(max-width:700px)').matches;
+renderer.setPixelRatio(REC?1:Math.min(devicePixelRatio,PHONE?1.75:2)); renderer.setClearColor(0xe8e8ec);
 renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.1;
 const scene=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(30,1,1,20000); cam.up.set(0,0,1);
@@ -81,8 +105,10 @@ const REALMAT={
   0x1f3f8f:()=>PHYS({color:0x7a7f84,metalness:0.25,roughness:0.62,clearcoat:0.15}),                      // UCF204 housing: gray painted cast iron
   0x2f6fd6:()=>PHYS({color:0x7a7f84,metalness:0.25,roughness:0.62}),
   [COL.chrome]:()=>PHYS({color:0xeceef0,metalness:1,roughness:0.14}),                                    // insert ring, heim joints, sleeves, rod
-  0xe0662f:()=>PHYS({color:0xc6c9cd,metalness:1,roughness:0.28,roughnessMap:TEX.brush}),                  // 3/4 in steel shaft + collar
-  [COL.plate]:()=>PHYS({color:0x5d6166,metalness:0.8,roughness:0.5,roughnessMap:TEX.brush}),              // bare laser-cut 1/4 in steel
+  0xe0662f:()=>PHYS({color:0xc6c9cd,metalness:1,roughness:0.28,roughnessMap:TEX.brush}),                  // 3/4 x 2 in steel clevis pin
+  [COL.plate]:()=>PHYS({color:0xc4c8cc,metalness:0.7,roughness:0.42,roughnessMap:TEX.brush}),             // 1/4 in 6061 aluminum, laser cut (PARTS-ORDERED)
+  blackox:()=>PHYS({color:0x232427,metalness:0.75,roughness:0.42}),                                         // Ruland -F collar: black oxide steel
+  standoff:()=>PHYS({color:0xd5d8db,metalness:0.6,roughness:0.34}),
   [COL.black]:()=>PHYS({color:0x161719,metalness:0.05,roughness:0.55,clearcoat:0.25,clearcoatRoughness:0.5}), // black powder coat plate
   [COL.bolt]:()=>PHYS({color:0xbfc3c7,metalness:1,roughness:0.3}),                                       // A2-70 stainless bolts, nuts, aluminum brackets
   [COL.act]:()=>PHYS({color:0xb4b8bd,metalness:0.85,roughness:0.38,roughnessMap:TEX.brush}),              // Glideforce LACT4P silver aluminum
@@ -122,10 +148,10 @@ function railGeo(len,axis,x,y,z){ const geo=new THREE.ExtrudeGeometry(PROF2020,{
   if(axis==='y') geo.rotateX(Math.PI/2); if(axis==='x') geo.rotateY(Math.PI/2); geo.translate(x,y,z); return geo; }
 function rail(len,axis,x,y,z){ const g=new THREE.Group(); g.add(new THREE.Mesh(railGeo(len,axis,x,y,z),M(COL.rail))); return g; }
 // steering plate outline (make_plates.py), u = outward, v = toward the frame end
-const OUTL=[[-42,50],[56,50],[56,-70],[14,-95],[-42,-95]];
+const OUTL=[[-42,-95],[14,-95],[56,-70],[56,50],[30,72],[-3,72],[-12,50],[-42,50]]; // CAD 11/16: front tab carries the arm hole (corner-cart.html)
 function steerPlate(sx,right){ const s=new THREE.Shape(); OUTL.forEach(([u,v],i)=>{ const x=sx*u; i?s.lineTo(x,v):s.moveTo(x,v); }); s.closePath();
   const hole=(u,v,r)=>{ const p=new THREE.Path(); p.absarc(sx*u,v,r,0,Math.PI*2,true); s.holes.push(p); };
-  hole(0,0,D.shaftR+0.3); D.fslots.forEach(([u,v])=>hole(u,v,4)); hole(D.arm[0],D.arm[1],8.2/2); if(right) hole(D.acth[0],D.acth[1],6.6/2);
+  hole(0,0,D.shaftR+0.3); D.fslots.forEach(([u,v])=>hole(u,v,4)); hole(D.arm[0],D.arm[1],8.2/2); hole(D.colHole,0,3.3); hole(-D.colHole,0,3.3); if(right) hole(D.acth[0],D.acth[1],6.6/2);
   const g=new THREE.ExtrudeGeometry(s,{depth:D.plateT,bevelEnabled:false,curveSegments:24}); return new THREE.Mesh(g,M(COL.plate)); }
 // ---- build parts: each part = {id, obj, from:Vector3 offset it travels in from, at: label point} ----
 let PAR=null; const P={}; const add=(id,obj,from,label)=>{ const g=new THREE.Group(); g.add(obj); (PAR||scene).add(g); P[id]={g,from:from||new THREE.Vector3(0,0,-120),label,home:g.position.clone()}; return g; };
@@ -134,7 +160,8 @@ const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 const frame=new THREE.Group(); scene.add(frame);
 if(!REAL){ frame.add(rail(600,'y',-XR,0,10)); frame.add(rail(600,'y',XR,0,10)); } frame.add(rail(305-40,'x',0,YE+7,10)); frame.add(rail(305-40,'x',0,YACT,10)); frame.add(rail(305-40,'x',0,-(YE+7),10)); // back end rail (the back corners bolt to it too)
 // UCF205 stack below the rail bottom (z=0): adapter plate, flange under it, flanged collar, steering plate, black plate
-const zA=0, zE=-D.ear, zBo=zE-D.boss, zI=zBo-D.ins, zC=zI-D.colH, zP=zC-D.plateT, zK=zP-D.blackT;
+// FIX A stack: plate right under the bearing inner ring, Ruland collar (15 wide) under the plate, black plate on 4 x 15 mm standoffs
+const zA=0, zE=-D.ear, zBo=zE-D.boss, zI=zBo-D.ins, zP=zI-D.plateT, zC=zP-D.colW, zK=zP-D.std-D.blackT;
 const COLT={flg:0x1f3f8f,adp:0x2f6fd6,turn:0xe0662f};
 function sq(w,l,holes,cut){ const s=new THREE.Shape(); s.moveTo(-w/2,-l/2); s.lineTo(w/2,-l/2); s.lineTo(w/2,l/2); s.lineTo(-w/2,l/2); s.closePath();
   if(cut){ const p=new THREE.Path(); p.absarc(0,0,cut,0,Math.PI*2,true); s.holes.push(p); } holes.forEach(([x,y,r])=>{ const q=new THREE.Path(); q.absarc(x,y,r,0,Math.PI*2,true); s.holes.push(q); }); return s; }
@@ -274,40 +301,60 @@ function corner(sx,right,pre,root){
   if(REAL){ const zb=zBo+D.boss/2; const zk=rodBetween(V(0,D.bossR-1,zb),V(0,D.bossR+7,zb),2.2,'zerk',12); f.add(zk); f.add(cyl(3.2,3,'zerk',0,D.bossR+8,zb,6).rotateX(Math.PI/2)); f.add(new THREE.Mesh(new THREE.SphereGeometry(2.4,12,8),M('zerk')).translateY(D.bossR+10.5).translateZ(zb));
     for(const a of [0.7,-0.7]){ const r=D.shaftR+5; f.add(cyl(2,1,'socket',r*Math.sin(a+Math.PI),r*Math.cos(a+Math.PI),zI+3).rotateX(0)); } }
   f.position.set(cx,cy,0); add(pre+'flg',f,V(0,0,-120));
-  // 4 M6 bolts with step sleeves up through the ears into the T-nuts
-  B4.forEach(([x,y],i)=>{ const g=new THREE.Group(); const b=screw(6,30,6); b.rotation.x=Math.PI; b.position.set(cx+x,cy+y,zE-0.1); g.add(b);
-    g.add(ring(D.holeR-0.3,3.2,D.ear,COL.chrome,cx+x,cy+y,zE+D.ear/2)); g.add(ring(9,3.2,1.6,COL.bolt,cx+x,cy+y,zE-0.8)); add(pre+'fb_'+i,g,V(0,0,-80)); });
+  // 4 M5 x 18 bolts, each through a sleeve in the bearing's bigger hole and a 15 mm washer, up into the T-nuts
+  B4.forEach(([x,y],i)=>{ const g=new THREE.Group(); const b=screw(5,D.m5L,4); b.rotation.x=Math.PI; b.position.set(cx+x,cy+y,zE-1.1); g.add(b);
+    g.add(ring(6,2.6,10,COL.chrome,cx+x,cy+y,zE+5)); g.add(ring(7.5,2.65,1,COL.bolt,cx+x,cy+y,zE-0.5)); add(pre+'fb_'+i,g,V(0,0,-80)); });
   PAR=off; // everything from here turns with the wheel
-  // 3/4 in shaft up into the bearing; flanged collar under the bearing carries the load + bolts to the steering plate
-  add(pre+'shaft',cyl(D.shaftR,-6-zP,COLT.turn,cx,cy,(-6+zP)/2),V(0,0,-140));
-  const c=new THREE.Group(); c.add(ring(18,D.shaftR,D.colH-5,COLT.turn,0,0,zC+5+(D.colH-5)/2)); c.add(ring(D.colFlR,D.shaftR,5,COLT.turn,0,0,zC+2.5)); c.position.set(cx,cy,0); add(pre+'col',c,V(0,0,-110));
+  // 3/4 x 2 in clevis pin: drops in from above, head (1-1/8 in) on the bearing inner ring between the two rails
+  { const g=new THREE.Group(); g.add(cyl(D.shaftR,D.pinL,COLT.turn,cx,cy,-D.pinL/2)); g.add(cyl(D.pinHeadR,D.pinHeadT,COLT.turn,cx,cy,D.pinHeadT/2,40));
+    const ch=new THREE.Mesh(new THREE.TorusGeometry(D.pinHeadR-0.6,0.8,8,40),M(COLT.turn)); ch.position.set(cx,cy,D.pinHeadT); g.add(ch);
+    add(pre+'shaft',g,V(0,0,160)); }
+  // steering plate squeezed right under the bearing inner ring
   const pl=steerPlate(sx,right); pl.position.set(cx,cy,zP); add(pre+'plate',pl,V(0,0,-120));
+  // Ruland FHT-MCL-12E-F: 40 OD x 15 wide, one slit + clamp screw, 2 tapped M6 holes in the top face; black oxide steel
+  { const sh=new THREE.Shape(); sh.absarc(0,0,D.colR,-Math.PI/2+0.05,3*Math.PI/2-0.05,false); sh.absarc(0,0,D.shaftR,3*Math.PI/2-0.1,-Math.PI/2+0.1,true); sh.closePath();
+    for(const x of [D.colHole,-D.colHole]){ const h=new THREE.Path(); h.absarc(x,0,2.5,0,Math.PI*2,true); sh.holes.push(h); }
+    const c=new THREE.Group(); const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:D.colW,bevelEnabled:false,curveSegments:40}),M(REAL?'blackox':COLT.turn)); m.position.z=zC; c.add(m);
+    const cs=screw(6,22,5); cs.rotation.set(0,Math.PI/2,0); cs.position.set(-11,-14.5,zC+D.colW/2); c.add(cs);
+    c.position.set(cx,cy,0); add(pre+'col',c,V(0,0,-110)); }
+  // 2 M6 x 16 flat heads, countersunk in the plate top, down into the collar
+  [D.colHole,-D.colHole].forEach((x,i)=>{ const s=screw(6,16,0,COL.bolt,true); s.position.set(cx+x,cy,zP+D.plateT-3.3); add(pre+'m6_'+i,s,V(0,0,70)); });
   const bp=new THREE.Group(); bp.add(box(56,100,D.blackT,COL.black,cx+sx*D.fbpU,cy,zK+D.blackT/2)); bp.add(REAL?suspModule(cx+sx*D.fbpU,cy,zK,sx):wheelUnder(cx+sx*D.fbpU,cy,zK,sx)); add(pre+'black',bp,REAL?V(sx*280,0,0):V(0,0,-130));
-  D.fslots.forEach(([u,v],i)=>{ const s=screw(5,D.m5Lf,3.5); s.rotation.x=Math.PI; s.position.set(cx+sx*u,cy+v,zK-0.1); add(pre+'m5_'+i,s,V(0,0,-80));
-    const g=new THREE.Group(); const w=washer(20,5.3,1.2); w.position.z=zP+D.plateT+0.6; const nn=nut(5,4); nn.position.z=zP+D.plateT+1.2+2; g.add(w,nn); g.position.set(cx+sx*u,cy+v,0); add(pre+'m5n_'+i,g,V(0,0,60)); });
+  // 4 standoffs (10 + 5 mm = 15), M5 x 40 up from below, 15 mm washer + nylock on top of the steering plate
+  D.fslots.forEach(([u,v],i)=>{ add(pre+'so_'+i,ring(5,2.6,D.std,REAL?'standoff':COL.rail,cx+sx*u,cy+v,zK+D.blackT+D.std/2,24),REAL?V(sx*280,0,0):V(0,0,-130));
+    const s=screw(5,D.m5Lf,3.5); s.rotation.x=Math.PI; s.position.set(cx+sx*u,cy+v,zK-0.1); add(pre+'m5_'+i,s,V(0,0,-80));
+    const g=new THREE.Group(); const w=washer(15,5.3,1.2); w.position.z=zP+D.plateT+0.6; const nn=nut(5,4); nn.position.z=zP+D.plateT+1.2+2; g.add(w,nn); g.position.set(cx+sx*u,cy+v,0); add(pre+'m5n_'+i,g,V(0,0,60)); });
   PAR=root; return {pv,off,p:V(cx,cy,0)};
 }
 // one steering axle = 2 corners + tie rod + actuator. Front: as built. Back: the same axle turned 180 deg about the
 // middle, so its arm holes face the back tie rod and its actuator hangs under the RIGHT side rail onto the LEFT plate.
 const Yax=new THREE.Vector3(0,1,0), rotZ=(v,a)=>V(v.x*Math.cos(a)-v.y*Math.sin(a),v.x*Math.sin(a)+v.y*Math.cos(a),v.z);
-function makeAct(pin,end){ // actuator along local +y from the back pin; the rod slides out to reach the plate
-  const o=new THREE.Group(); o.position.copy(pin);
-  o.add(rodBetween(V(0,D.actRear,0),V(0,D.actMotorL,0),D.actMotorR,COL.act,32)); o.add(rodBetween(V(0,D.actMotorL,0),V(0,D.actRet-D.actFront,0),D.actTubeR,COL.act,32));
-  const s0=D.actRet-D.actFront-5, rg=new THREE.CylinderGeometry(D.actRod/2,D.actRod/2,1,20); rg.translate(0,0.5,0); const rod=new THREE.Mesh(rg,M(COL.chrome)); rod.position.y=s0; o.add(rod);
-  const upd=e=>{ const d=new THREE.Vector3().subVectors(e,pin), L=d.length(); o.quaternion.setFromUnitVectors(Yax,d.normalize()); rod.scale.y=L-4-s0; return L; };
+function makeAct(pin,end){ // Glideforce LACT4P along local +y from the back pin (Pololu drawing): gearbox block at the back, 30.5 mm tube,
+  // 40 mm motor beside the tube (the pin is vertical, so the motor sits level next to it), black wiper ring, 20 mm rod slides out to the plate
+  const o=new THREE.Group(); o.position.copy(pin); const off=-D.actMotorOff; // motor on the side away from the other axle's actuator (the clevis can be flipped either way)
+  const gb=new THREE.Shape(); gb.absarc(0,0,21,-Math.PI/2,Math.PI/2,false); gb.absarc(off,0,21,Math.PI/2,3*Math.PI/2,false); gb.closePath();
+  const gg=new THREE.ExtrudeGeometry(gb,{depth:D.actGearL,bevelEnabled:true,bevelThickness:2,bevelSize:2,bevelSegments:2,curveSegments:24}); gg.rotateX(-Math.PI/2); gg.translate(0,D.actRear-2,0);
+  o.add(new THREE.Mesh(gg,M(COL.act)));
+  o.add(rodBetween(V(0,-9,0),V(0,D.actRear,0),9,COL.act,24)); // rear clevis stub into the bracket
+  const y0=D.actGearL+D.actRear, yT=D.actRet-D.actFront-16;
+  o.add(rodBetween(V(0,y0,0),V(0,yT,0),D.actTubeR,COL.act,32)); o.add(rodBetween(V(0,yT,0),V(0,yT+8,0),D.actTubeR+0.3,'capblack',32));
+  o.add(rodBetween(V(off,y0,0),V(off,y0+D.actMotorL,0),D.actMotorR,COL.act,32)); o.add(rodBetween(V(off,y0+D.actMotorL,0),V(off,y0+D.actMotorL+3,0),D.actMotorR-4,COL.bolt,32));
+  const s0=yT+8, rg=new THREE.CylinderGeometry(D.actRod/2,D.actRod/2,1,24); rg.translate(0,0.5,0); const rod=new THREE.Mesh(rg,M(COL.chrome)); rod.position.y=s0; o.add(rod);
+  const tip=new THREE.Group(); tip.add(rodBetween(V(0,-10,0),V(0,D.actFront+4,0),D.actRod/2,COL.chrome,24)); o.add(tip);
+  const upd=e=>{ const d=new THREE.Vector3().subVectors(e,pin), L=d.length(); o.quaternion.setFromUnitVectors(Yax,d.normalize()); rod.scale.y=Math.max(1,L-10-s0); tip.position.y=L; return L; };
   upd(end); return {o,upd}; }
 function axle(k,ang,nL,nR){
   const root=new THREE.Group(); root.rotation.z=ang; scene.add(root);
   const cL=corner(-1,false,nL,root), cR=corner(1,true,nR,root);
   // tie rod: heim joints on top of the two arms (they turn with the plates)
   const armL=V(-(XR-D.piv)-D.arm[0],YAX+D.arm[1],0), armR=V((XR-D.piv)+D.arm[0],YAX+D.arm[1],0);
-  const zt=zP+D.plateT+D.heimT/2;
+  const zt=zP+D.plateT+D.heimSpc+D.heimT/2; // each heim rides on an 8 mm spacer
   function heim(at,dir){ const g=new THREE.Group(); g.add(ring(D.heimOD/2,D.heimBore/2,D.heimT,COL.chrome,at.x,at.y,zt)); g.add(rodBetween(V(at.x,at.y,zt).addScaledVector(dir,D.heimOD/2-1),V(at.x,at.y,zt).addScaledVector(dir,D.heimL),D.heimShank/2,COL.chrome)); return g; }
   const dir=new THREE.Vector3().subVectors(armR,armL).setZ(0).normalize();
   PAR=cL.off; add(k+'heimL',heim(armL,dir),V(0,0,80)); PAR=cR.off; add(k+'heimR',heim(armR,dir.clone().negate()),V(0,0,80)); PAR=root;
   const tr=rodBetween(V(armL.x,armL.y,zt).addScaledVector(dir,D.heimL-6),V(armR.x,armR.y,zt).addScaledVector(dir,-(D.heimL-6)),D.rodD/2,COL.chrome);
   add(k+'tierod',tr,V(0,0,90));
-  for(const [h,a,c] of [['hbL',armL,cL],['hbR',armR,cR]]){ PAR=c.off; const g=new THREE.Group(); const s=screw(D.heimBore,D.heimBoltL,5); s.position.set(a.x,a.y,zt+D.heimT/2+0.1); const nn=nut(D.heimBore,6); nn.position.set(a.x,a.y,zP-3); g.add(s,nn); add(k+h,g,V(0,0,90)); }
+  for(const [h,a,c] of [['hbL',armL,cL],['hbR',armR,cR]]){ PAR=c.off; const g=new THREE.Group(); const s=screw(D.heimBore,D.heimBoltL,5); s.position.set(a.x,a.y,zt+D.heimT/2+0.1); const nn=nut(D.heimBore,6); nn.position.set(a.x,a.y,zP-3); g.add(s,nn,ring(8,4.1,D.heimSpc,COL.chrome,a.x,a.y,zP+D.plateT+D.heimSpc/2,24)); add(k+h,g,V(0,0,90)); }
   PAR=root;
   // actuator under the right plate; back pin on a bracket under a short 2020 piece hung under the left side rail
   const actH=V((XR-D.piv)+D.acth[0],YAX+D.acth[1],zP-6), PX=D.pin[0], PY=D.pin[1], stubZ=-10;
@@ -353,7 +400,7 @@ if(REAL){
   bg.colorSpace=THREE.SRGBColorSpace; scene.background=bg; scene.fog=new THREE.Fog(0xd3d1cd,3200,9000);
   scene.add(new THREE.HemisphereLight(0xeef2ff,0x8a857c,0.55));
   const key=new THREE.DirectionalLight(0xfff4e6,2.4); key.position.set(900,-1400,2200); key.target.position.set(0,0,FLOORZ);
-  key.castShadow=true; key.shadow.mapSize.set(2048,2048); Object.assign(key.shadow.camera,{left:-900,right:900,top:900,bottom:-900,near:100,far:6000});
+  key.castShadow=true; key.shadow.mapSize.set(PHONE?1024:2048,PHONE?1024:2048); Object.assign(key.shadow.camera,{left:-900,right:900,top:900,bottom:-900,near:100,far:6000});
   key.shadow.bias=-0.0004; key.shadow.normalBias=1.2; key.shadow.radius=4; scene.add(key,key.target);
   const rim=new THREE.DirectionalLight(0xdde6ff,0.6); rim.position.set(-1500,1200,900); scene.add(rim);
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(14000,14000),new THREE.MeshStandardMaterial({map:TEX.floor,roughness:0.92,metalness:0}));
@@ -361,7 +408,7 @@ if(REAL){
   scene.traverse(o=>{ if(o.isMesh&&o!==floor){ o.castShadow=true; o.receiveShadow=true; } });
   ctl.maxPolarAngle=Math.PI/2-0.04;
   // legend swatches follow the real finishes
-  const sw=['#c9cdd2','#7a7f84','#c6c9cd','#5d6166','#161719','#bfc3c7','#b4b8bd']; document.querySelectorAll('#key i').forEach((e,i)=>e.style.background=sw[i]);
+  const sw=['#c9cdd2','#7a7f84','#c6c9cd','#c4c8cc','#161719','#bfc3c7','#b4b8bd']; document.querySelectorAll('#key i').forEach((e,i)=>e.style.background=sw[i]);
 }
 window.__axles={FRONT,BACK};
 // ---- the steps ----
@@ -372,8 +419,9 @@ const ease=e=>e<=0?0:e>=1?1:1-Math.pow(1-e,3);
 const stepEl=document.getElementById('step'), barEl=document.querySelector('#bar i'), tagEl=document.getElementById('tag');
 let lastStep=-1; const camT=new THREE.Vector3(), camP=new THREE.Vector3();
 function focus(n){ const s=S[n]; if(!REAL) return {t:V(...s.cam.t), r:s.cam.r, az:s.cam.az, el:s.cam.el};
+  if(s.rcam) return {t:V(...s.rcam.t), r:s.rcam.r, az:s.rcam.az, el:s.rcam.el}; // real look: low view in under the frame from behind
   if(n===S.length-2) return {t:V(0,0,10), r:2300, az:2.05, el:0.4};
-  if(n===S.length-1) return {t:V(0,0,0), r:2500, az:-0.55, el:0.75};
+  if(n===S.length-1) return {t:V(0,0,-40), r:2150, az:-0.55, el:0.75};
   // real: the full frame sits above the corners now, so close-ups look in from just under the frame, nearly level, above the floor
   const t=V(...s.cam.t), far=s.cam.r>=700; if(far) t.set(t.x*0.3,t.y*0.5,30); else t.z=Math.max(t.z,-25); const el=far?Math.max(s.cam.el,0.12):Math.max(s.cam.el,-0.15); let r=far?Math.max(s.cam.r,1900):s.cam.r; if(el<0) r=Math.min(r,(t.z-FLOORZ-40)/Math.sin(-el)); return {t, r, az:s.cam.az, el}; }
 function state(t){
@@ -381,7 +429,7 @@ function state(t){
   for(const k in P){ const it=P[k]; const st=stepIn[k]; const vis=st!==undefined&&st<=n; it.g.visible=vis; if(!vis) continue;
     const f=(st===n)?1-e:0; it.g.position.copy(it.from).multiplyScalar(f);
     const hot=(st===n)&&local<DUR-0.3; it.g.traverse(ch=>{ if(ch.isMesh) ch.material.emissive?.setHex(hot?(REAL?0x14100a:0x332200):0); }); }
-  if(n!==lastStep){ lastStep=n; stepEl.innerHTML=`<small>Step ${n+1} of ${S.length}</small>${S[n].t}`+buyHTML(n); labStep=-1; }
+  if(n!==lastStep){ lastStep=n; stepEl.innerHTML=`<small>Step ${n+1} of ${S.length}<span class="tg">${document.body.classList.contains('mini')?'Show text ▴':'Hide text ▾'}</span></small><div class="tx">${S[n].t}</div>`+buyHTML(n); labStep=-1; }
   barEl.style.width=(100*Math.min(1,t/TOTAL))+'%';
   if(!userCam){ const a=focus(n), b=n>0?focus(n-1):a, k=ease(Math.min(1,local/1.2));
     const tt=b.t.clone().lerp(a.t,k), r=b.r+(a.r-b.r)*k, az=b.az+(a.az-b.az)*k, el=b.el+(a.el-b.el)*k;
@@ -392,21 +440,21 @@ function state(t){
   if(labStep!==n) buildLabels(n);
 }
 // ---- buy list on the card + floating 3D labels + front parts panel ----
-const BUY=window.BUY||[], CHIP={buy:'buy',have:'have it',back:'back, later'};
+const BUY=window.BUY||[], CHIP={ord:'ordered',got:'bought',have:'have it',hold:'on hold',back:'back, later'};
 const chip=st=>`<span class="chip ${st}">${CHIP[st]}</span>`;
 const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
 function buyHTML(n){ const L=BUY[n]||[]; if(!L.length) return '';
   return `<div class="bl"><table class="buy">`+L.map(i=>`<tr><td class="q">${i.q} ×</td><td><b>${esc(i.n)}</b><br><span class="note">${esc(i.size)}</span></td><td>${chip(i.st)}</td><td>${i.price?esc(i.price):''}${i.link?` <a href="${i.link}" target="_blank" rel="noopener">link</a>`:''}${i.note?`<br><span class="note">${esc(i.note)}</span>`:''}</td></tr>`).join('')+`</table></div>`; }
 const labsEl=document.getElementById('labs'), labSvg=labsEl.querySelector('svg'); let showAll=false, labStep=-1, labItems=[];
-document.getElementById('alllab').onclick=e=>{ showAll=!showAll; e.target.textContent=showAll?'Hide old labels':'Show all labels'; labStep=-1; };
+document.getElementById('alllab').onclick=e=>{ showAll=!showAll; e.target.textContent=showAll?'Fewer labels':'All labels'; labStep=-1; };
 function labText(i){ return `<b>${esc(i.lab||i.n)}</b> — ${chip(i.st)}${i.ps?` <span class="note">(${esc(i.ps)})</span>`:''}`; }
 function buildLabels(n){ labsEl.querySelectorAll('.lab').forEach(e=>e.remove()); labItems=[];
   const steps=showAll?[...Array(n+1).keys()]:[n];
   for(const k of steps) for(const i of (BUY[k]||[])) if(i.at&&P[i.at]){ const d=document.createElement('div'); d.className='lab'; d.innerHTML=labText(i); labsEl.appendChild(d); labItems.push({i,d,step:k}); }
   labStep=n; }
 const _bx=new THREE.Box3(), _v=new THREE.Vector3();
-function placeLabels(){ const W=canvas.clientWidth, H=canvas.clientHeight; cam.updateMatrixWorld(); const card=stepEl.getBoundingClientRect(), key=document.getElementById('key').getBoundingClientRect();
-  const placed=[card,key]; if(plist.style.display==='block') placed.push(plist.getBoundingClientRect()); let lines='';
+function placeLabels(){ const W=canvas.clientWidth, H=canvas.clientHeight; cam.updateMatrixWorld(); const sr=canvas.getBoundingClientRect(), rel=r=>({left:r.left-sr.left,right:r.right-sr.left,top:r.top-sr.top,bottom:r.bottom-sr.top});
+  const placed=[stepEl,document.getElementById('key'),document.getElementById('ctl')].map(e=>e.getBoundingClientRect()).filter(r=>r.width&&r.bottom>sr.top&&r.top<sr.bottom).map(rel); if(plist.style.display==='block') placed.push(rel(plist.getBoundingClientRect())); let lines='';
   const hit=(a,b)=>a.x<b.right&&a.x+a.w>b.left&&a.y<b.bottom&&a.y+a.h>b.top;
   const its=labItems.map(L=>{ const g=P[L.i.at].g; if(!g.visible) return null; _bx.setFromObject(g); _bx.getCenter(_v); _v.project(cam); if(_v.z>1) return null; return {L,ax:(_v.x+1)/2*W,ay:(1-_v.y)/2*H}; }).filter(Boolean);
   its.sort((a,b)=>a.ay-b.ay);
@@ -420,15 +468,19 @@ function placeLabels(){ const W=canvas.clientWidth, H=canvas.clientHeight; cam.u
   labSvg.innerHTML=lines; }
 // front parts list panel (PARTS-FRONT.md, buy order)
 const plist=document.getElementById('plist'), FL=window.FRONT_LIST;
-if(FL) plist.innerHTML=`<button class="x" id="plx">Close</button><h3>Front steering parts list</h3><div class="note">2 corners + 1 axle, in buy order. Back comes later. Prices only where a real listing was read.</div>
-<h4>Already on the robot or bought ${chip('have')}</h4><table>${FL.have.map(([q,n,w])=>`<tr><td class="q"><b>${q}</b></td><td>${esc(n)}<br><span class="note">${esc(w)}</span></td></tr>`).join('')}</table>
-<h4>To buy, in this order ${chip('buy')}</h4><table>${FL.buy.map(([o,q,n,w,pr,l])=>`<tr><td><b>${o}.</b></td><td class="q"><b>${q}</b></td><td>${esc(n)}<br><span class="note">${esc(w)}</span></td><td>${pr?esc(pr):''}${l?` <a href="${l}" target="_blank" rel="noopener">link</a>`:''}</td></tr>`).join('')}</table>
-<div class="tot">Front total, verified prices: ${esc(FL.total)}</div>`;
+if(FL) plist.innerHTML=`<button class="x" id="plx">Close</button><h3>Front steering parts (what is ordered, 11/18)</h3><div class="note">2 front corners + 1 tie rod + 1 actuator. The back axle for 4-wheel steering comes later as a copy of the front: ${chip('back')}</div>`+
+  FL.groups.map(g=>`<h4>${esc(g.h)} ${chip(g.st)}</h4><table>${g.rows.map(([q,n,pn,pr])=>`<tr><td class="q">${esc(q)}</td><td>${esc(n)}${pn?`<br><span class="note">${esc(pn)}</span>`:''}</td><td class="pr">${esc(pr)}</td></tr>`).join('')}</table>${g.note?`<div class="note">${esc(g.note)}</div>`:''}`).join('')+
+  `<h4>Already owned ${chip('have')}</h4><ul>${FL.have.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><div class="tot">${esc(FL.total)}</div>`;
 const showPanel=v=>{ plist.style.display=v?'block':'none'; }; window.__panel=showPanel;
 document.getElementById('plistb').onclick=()=>showPanel(plist.style.display!=='block'); plist.addEventListener('click',e=>{ if(e.target.id==='plx') showPanel(false); });
 window.__showAll=v=>{ showAll=v; labStep=-1; };
-function fit(){ const w=canvas.clientWidth,h=canvas.clientHeight; renderer.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix(); }
-addEventListener('resize',fit); fit();
+stepEl.addEventListener('click',e=>{ if(!e.target.closest('small')) return; const m=document.body.classList.toggle('mini'); const tg=stepEl.querySelector('.tg'); if(tg) tg.textContent=m?'Show text ▴':'Hide text ▾'; });
+const HF=2*Math.atan(Math.tan(15*Math.PI/180)*1.2);
+function fit(){ const w=canvas.clientWidth,h=canvas.clientHeight; if(!w||!h) return; renderer.setSize(w,h,false); cam.aspect=w/h;
+  cam.fov=cam.aspect<1.2?Math.min(70,2*Math.atan(Math.tan(HF/2)/cam.aspect)*180/Math.PI):30; cam.updateProjectionMatrix(); }
+function placeCards(){ if(PHONE||matchMedia('(max-width:700px)').matches){ stepEl.style.top=''; plist.style.top=''; return; } const top=document.getElementById('ctl').getBoundingClientRect().bottom+10; stepEl.style.top=top+'px'; plist.style.top=top+'px'; plist.style.maxHeight=`calc(100vh - ${top+20}px)`; }
+addEventListener('resize',placeCards); placeCards();
+addEventListener('resize',fit); if(window.ResizeObserver) new ResizeObserver(fit).observe(canvas); fit();
 let t=0, playing=!REC, tPrev=performance.now();
 const playb=document.getElementById('play');
 playb.onclick=()=>{ playing=!playing; playb.textContent=playing?'❚❚ Pause':'▶ Play'; };
@@ -448,6 +500,10 @@ window.__clearance=(degs)=>{ // min gap from every tire point to the world box o
       for(const o of others){ let q=o, mine=false; while(q){ if(q===pv){ mine=true; break; } q=q.parent; } if(mine) continue;
         bx.setFromObject(o); for(const p of pts){ const d=bx.distanceToPoint(p); if(d<res.gap){ res.gap=d; res.deg=dg; let n=o; while(n.parent&&n.parent!==scene&&!Object.values(P).some(v=>v.g===n)) n=n.parent; res.what=(Object.entries(P).find(([k,v])=>v.g===n)||['frame'])[0]; } } } } }
   FRONT.pose(0); BACK.pose(0); return res; };
+window.__seek=tt=>{ t=tt; playing=false; playb.textContent='▶ Play'; userCam=false; };
+window.__actGap=(degs)=>{ const A=P['actuator'].g, B=P['kactuator'].g, pts=g=>{ const o=[]; g.updateMatrixWorld(true); g.traverse(m=>{ if(!m.isMesh) return; const p=m.geometry.attributes.position; for(let i=0;i<p.count;i+=2) o.push(new THREE.Vector3().fromBufferAttribute(p,i).applyMatrix4(m.matrixWorld)); }); return o; };
+  let best={gap:1e9,deg:0}; for(const dg of degs){ FRONT.pose(dg*Math.PI/180); BACK.pose(-dg*Math.PI/180); scene.updateMatrixWorld(true); const a=pts(A), b=pts(B), bx=new THREE.Box3().setFromPoints(b);
+    for(const p of a){ if(bx.distanceToPoint(p)>best.gap) continue; for(const q of b){ const d=p.distanceTo(q); if(d<best.gap) best={gap:d,deg:dg}; } } } FRONT.pose(0); BACK.pose(0); return best; };
 window.__total=TOTAL; window.__frame=tt=>{ state(tt); ctl.update(); renderer.render(scene,cam); placeLabels(); return true; };
 state(0); window.__ready=true;
 if(!REC) (function loop(){ requestAnimationFrame(loop); const now=performance.now(); if(playing){ t+=(now-tPrev)/1000; if(!S[S.length-1].swing) t=Math.min(TOTAL,t); } tPrev=now;
