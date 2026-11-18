@@ -11,7 +11,7 @@ A 200 mm 5/16-24 tie rod with a CF5 heim joint on each end (8 mm spacers, 5/16 x
 Front axle first to test every part, then an identical rear axle for 4-wheel steering. Until the rear gets the same stack, the front sits about 54 mm (2⅛ in) lower under the frame than the back.
 
 - [PARTS-ORDERED.md](../../steering-v3/PARTS-ORDERED.md) (what is ordered and its status), [PARTS-FRONT.md](../../steering-v3/PARTS-FRONT.md), [FIT_CHECK.md](../../steering-v3/FIT_CHECK.md), [PHYSICS.md](../../steering-v3/PHYSICS.md)
-- 3D corner view: [corner-cart.html](../../steering-v3-view/corner-cart.html), buy list: [buy-list.html](../../steering-v3-view/buy-list.html)
+- **[Live 3D corner view](https://nicedreamzapp.github.io/CemaniHomesteadRobot/steering-v3-view/corner-cart.html)** (works on phone), buy list: [buy-list.html](../../steering-v3-view/buy-list.html)
 - Plate DXFs: [steering-v3-view/plates/](../../steering-v3-view/plates/), cardboard template (print and test before cutting metal): [steering-v3-view/template/](../../steering-v3-view/template/)
 - Whole-robot renders and Blender model: [frame-v3](frame-v3/README.md)
 

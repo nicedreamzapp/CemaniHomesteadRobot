@@ -1,5 +1,8 @@
 # Front steering physics (steering-v3, Fix A), 2026-11-18
 
+> **11/18 update: fix applied.** The right plate's actuator hole is now at (48, -63) in the DXF, the cardboard template and the 3D corner view, and the bracket pin moves about 54 mm toward the robot center (x = -176). The dead-center problem below is solved.
+
+
 Source of truth used: `steering-v3/FIT_CHECK.md`, `PARTS-FRONT.md`, `PARTS-4WS.md`, `HARDWARE-INVENTORY.md`,
 the DXFs in `steering-v3-view/plates/` (hole coordinates), `steering-v3-view/steps-4ws.js` (window.DIMS),
 `steering-v3-view/corner-cart.html` (arm hole override, actuator direction `ad`, suspension module `SM`, pin),
