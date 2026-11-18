@@ -21,7 +21,7 @@ The frame as rebuilt in November 2026: a low box in front, and a tall box over t
 
 ![4-wheel steering in action](assembly/steering-4ws.gif)
 
-Each front corner, top to bottom: the side rail and a short inboard 2020 rail (64 mm apart), a UCF204-12 flange bearing bolted under both (M5 x 18, 12 x 5.2 sleeves, T-nuts), a 3/4 x 2 in clevis pin as the kingpin, a 1/4 in aluminum steering plate (98 x 167 mm) under the bearing, a Ruland 3/4 in clamp collar under the plate (2 countersunk M6 x 16), then the black suspension plate on four 15 mm standoffs (M5 x 40, fender washer and nylock), then the shock and the wheel. No lazy susan.
+Each front corner, top to bottom: the side rail and a short inboard 2020 rail (64 mm apart), a UCF204-12 flange bearing bolted under both (M5 x 18, 12 x 5.2 sleeves, T-nuts), a 3/4 x 2 in clevis pin as the kingpin, a 1/4 in aluminum steering plate (98 x 167 mm) under the bearing, a Ruland 3/4 in clamp collar under the plate (2 countersunk M6 x 16), then the black suspension plate on four 15 mm standoffs (M5 x 40, fender washer and nylock), then the shock and the wheel.
 
 A 200 mm 5/16-24 tie rod with a CF5 heim joint on each end links the two plates, about 246 mm hole to hole. One Glideforce LACT4P-12V-10 actuator (246 to 346 mm) on bracket 2314, under a 110 mm 2020 stub below the left side rail about 10 1/4 in behind the front wheels, pushes the right plate. Inside wheel 30 deg at full lock (outside about 27 deg); the actuator runs about 258 to 301 mm, with about 12 mm spare closed and 45 mm open.
 
@@ -51,7 +51,7 @@ Turning circle: about 8.8 ft with front steering only, about 5.9 ft with all fou
 
 No cutting, welding or drilling: the plates are laser cut, and the shafts are bought cut to length. Sizes for the collar, shaft and plates get confirmed once the bearings arrive and are measured. See `assembly/FIT_CHECK.md`.
 
-The older eared-bearing and lazy susan designs are replaced. Pictures below are the frame itself.
+The older eared-bearing design is replaced. Pictures below are the frame itself.
 
 | Side | From above |
 |---|---|

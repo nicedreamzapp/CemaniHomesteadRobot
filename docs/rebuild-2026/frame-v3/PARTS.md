@@ -19,4 +19,4 @@ Buy the front first, one part at a time, measuring each before buying the parts 
 
 Already on hand: the black plates, shocks and wheels, the Glideforce actuator (Pololu 3645) and its bracket (Pololu 2314), 2 heim joints and the tie rod.
 
-Not used any more: the KFL001 eared bearing, the AXK1226 flat washer bearing, the M12 countersunk bolts, the 1½ in back spacers and the lazy susans.
+Not used any more: the KFL001 eared bearing, the AXK1226 flat washer bearing, the M12 countersunk bolts and the 1½ in back spacers.

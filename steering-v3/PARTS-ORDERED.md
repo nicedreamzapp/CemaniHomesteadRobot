@@ -1,11 +1,11 @@
 # Front steering v3: what is ordered (2026-11-18)
 
 Front axle only (2 corners + 1 tie rod + 1 actuator). The rear axle for 4-wheel steering comes later as an identical copy.
-Design: `../steering-v3-view/corner-cart.html` (corner view), `FIT_CHECK.md`, `PARTS-FRONT.md`, `../steering-v3-view/buy-list.html`. No lazy susan.
+Design: `../steering-v3-view/corner-cart.html` (corner view), `FIT_CHECK.md`, `PARTS-FRONT.md`, `../steering-v3-view/buy-list.html`.
 
 Status key: **ORDERED** = order confirmation on file. **BOUGHT (no conf.)** = bought per Matt 11/18, confirmation not on file yet. **ON HOLD** = not ordered on purpose.
 
-## Pololu (ORDERED 11/18/2026, Pololu sales order 1J606749)
+## Pololu (ORDERED 11/18/2026, Pololu sales order 1J606749, SHIPPED 11/18)
 | Qty | Part | Part number | Price | Status |
 |---|---|---|---|---|
 | 1 | Glideforce LACT4P-12V-10 linear actuator, 4 in stroke, pot feedback, 246-346 mm hole to hole | Pololu 3645 | $194.88 | ORDERED |
@@ -18,12 +18,12 @@ Only one bracket: the rod end bolts straight to the right steering plate.
 |---|---|---|---|---|
 | 2 | UCF204-12 flange bearing, 3/4 in bore (one per front corner, under the side rail + inboard rail) | eBay 170523091215 (Carnell Sales) | $9.99 each | BOUGHT (no conf.) |
 
-## Zoro (about $37.07, BOUGHT (no conf.))
+## Zoro (about $37.07, ORDERED 11/18/2026, Zoro order WB5666745153)
 | Qty | Part | Part number | Price | Status |
 |---|---|---|---|---|
-| 2 | Ruland face-mount clamp collar, 3/4 in bore, 40 OD x 15 wide, 2 tapped M6 face holes | Ruland FHT-MCL-12E-F, Zoro G708673879 | $25.58 | BOUGHT (no conf.) |
-| 2 | Clevis pin 3/4 x 2 in, steel (the kingpin) | Zoro G3393796 | $9.50 | BOUGHT (no conf.) |
-| 1 | M5 nylock nuts, stainless, 50 pack | Zoro | $1.99 | BOUGHT (no conf.) |
+| 2 | Ruland face-mount clamp collar, 3/4 in bore, 40 OD x 15 wide, 2 tapped M6 face holes | Ruland FHT-MCL-12E-F, Zoro G708673879 | $25.58 | ORDERED |
+| 2 | Clevis pin 3/4 x 2 in, steel (the kingpin) | Zoro G3393796 | $9.50 | ORDERED |
+| 1 | M5 nylock nuts, stainless, 50 pack | Zoro | $1.99 | ORDERED |
 
 ## Amazon (14 items, $140.16, BOUGHT (no conf.))
 | Qty | Part (what it does) | Part number | Price | Status |

@@ -2,7 +2,7 @@
 # Front steering = steering-v3 "Fix A" corner (steering-v3-view/corner-cart.html): UCF204-12 flange bearing under two 2020 rails,
 # 3/4 x 2 in clevis pin as the kingpin, Ruland clamp collar under a 1/4 in steering plate, black plate on 15 mm standoffs,
 # Glideforce LACT4P actuator from a bracket on a 2020 stub under the LEFT side rail to the RIGHT plate, 5/16-24 tie rod with CF5 heims.
-# No lazy susan. Back corners unchanged (black plate straight under the rail) until the identical rear axle is built.
+# Back corners unchanged (black plate straight under the rail) until the identical rear axle is built.
 # Run: Blender -b --factory-startup -P cemani_frame_v3.py -- VIEW      VIEW = iso | side | top | corner
 # Then: python3 callouts.py   (labels the renders and writes ../iso.jpg side.jpg top.jpg corner.jpg)
 # Front is +y (the LOW end). Tall box is the back. z=0 is the underside of the bottom rails.
@@ -300,7 +300,7 @@ PIN_L, PIN_HR, PIN_HT, SHAFT_R = 50.8, 14.3, 6.35, 9.525
 # steering plate outline (u = outward, v = toward the frame end) = steering-v3-view/plates/steer-plate-*-fixA.dxf, 98 x 167 mm
 OUTL = [(-42, -95), (14, -95), (56, -70), (56, 50), (30, 72), (-3, 72), (-12, 50), (-42, 50)]
 ARM = (12.5, 57.3)      # tie rod hole: 12.5 out, 57.3 ahead of the pin (both plates)
-ACTH = (-25.0, -85.0)   # actuator hole, right plate only
+ACTH = (48.0, -63.0)    # actuator hole, right plate only (moved 11/18 so it never goes over dead center, PHYSICS.md)
 SLOTS = [(-9, -32.75), (-9, 32.75), (32, -32.75), (32, 32.75)]   # black plate screw slots (8 x 13 mm) / standoffs
 BPU = 11.5              # black plate centre, outward of the pivot (20.5 mm inboard of the side rail, same as the back)
 HEIM_SPC, HEIM_T, HEIM_OD, HEIM_L = 8.0, 11.1, 22.23, 34.93
@@ -308,7 +308,7 @@ HEIM_SPC, HEIM_T, HEIM_OD, HEIM_L = 8.0, 11.1, 22.23, 34.93
 ACT_RET, ACT_EXT = 246.0, 346.0
 STUB_L, STUB_Y = 110.0, -30.0           # stub ~10 1/4 in behind the front wheel centres
 BRK_PIN_H = 29.2
-ACT_PIN = Vector((-120.0, STUB_Y, -20.0 - BRK_PIN_H))
+ACT_PIN = Vector((-65.5, STUB_Y, -20.0 - BRK_PIN_H))
 PL, PR = Vector((-(XR - PIV), YAX, 0)), Vector((XR - PIV, YAX, 0))
 
 def rotz(v, deg):
