@@ -26,7 +26,7 @@ canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
 #key{position:absolute;top:58px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.96);padding:6px 14px;border-radius:9px;font-size:15px;z-index:6;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.12)}
 #key span{display:inline-block;padding:1px 10px;border-radius:8px;margin:0 4px;font-weight:700}
 </style></head><body>
-<div id="top">Front steering corner &nbsp;·&nbsp; what's in your carts (11/17, 11 PM)</div><div id="key"><span style="background:#e5f7ec;color:#1f9d4c;border:1px solid #1f9d4c">IN CART</span><span style="background:#eef0f2;color:#5b6068;border:1px solid #8a8f98">YOU HAVE IT</span><span style="background:#fff5d6;color:#a06c00;border:1px solid #c98a00">NOT IN CART YET</span></div>
+<div id="top">Front steering corner &nbsp;·&nbsp; ordered parts, actuator hole moved (11/18)</div><div id="key"><span style="background:#e5f7ec;color:#1f9d4c;border:1px solid #1f9d4c">IN CART</span><span style="background:#eef0f2;color:#5b6068;border:1px solid #8a8f98">YOU HAVE IT</span><span style="background:#fff5d6;color:#a06c00;border:1px solid #c98a00">NOT IN CART YET</span></div>
 <div id="ctl"><label>Apart <input id="kS" type="range" min="0" max="1" step="0.01" value="0"> Together</label>
 <label>Steer <input id="aS" type="range" min="-30" max="30" step="1" value="0"> <span id="aV">0°</span></label>
 <button id="play">▶ Play animation</button><button id="rv">Reset view</button><button id="lb">Labels on/off</button><button id="blb">Bolt labels on/off</button><button id="cutb">Cut in half</button></div>
@@ -213,8 +213,8 @@ tie.add(rodBetween(V(-(D.heimL-ENG),0,0),V(-(EYE-D.heimL+ENG),0,0),D.rodD/2,COL.
 const ghostX=-2*(142.5-D.piv), ghost=new THREE.Group(); G.plate.add(ghost); { const gp=steerPlate(-1,false); gp.position.set(ghostX,0,zP); gp.material=new THREE.MeshStandardMaterial({color:0x9fb7d6,transparent:true,opacity:0.28,depthWrite:false}); ghost.add(gp);
   const gpin=cyl(D.shaftR,PIN.L,0xe0662f,ghostX,0,-PIN.L/2); gpin.material=new THREE.MeshStandardMaterial({color:0xe0662f,transparent:true,opacity:0.22,depthWrite:false}); ghost.add(gpin); }
 const leftEye=V(D.arm[0]-EYE,D.arm[1],zt);
-const act=new THREE.Group(); G.plate.add(act); const ad=V(-205.5,-173.6,0).normalize();
-act.add(rodBetween(V(0,0,0),ad.clone().multiplyScalar(90),D.actRod/2,COL.chrome)); act.add(rodBetween(ad.clone().multiplyScalar(86),ad.clone().multiplyScalar(260),D.actTubeR,COL.act,32));
+const act=new THREE.Group(); G.plate.add(act); const ad=V(-224,-195.6,0).normalize(); // 11/18: hole (48,-63), bracket pin x=-176 (PHYSICS.md)
+act.add(rodBetween(V(0,0,0),ad.clone().multiplyScalar(118),D.actRod/2,COL.chrome)); act.add(rodBetween(ad.clone().multiplyScalar(114),ad.clone().multiplyScalar(288),D.actTubeR,COL.act,32));
 act.add(cyl(8,14,COL.chrome,0,0,0));
 // ---- every fastener: home spot + its own pull-out direction, dashed line shows where it goes ----
 const armF=new THREE.Group(), actF=new THREE.Group(); G.plate.add(armF,actF);

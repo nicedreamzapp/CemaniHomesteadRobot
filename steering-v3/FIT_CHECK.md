@@ -21,3 +21,5 @@ Not on the parts list yet (needed to bolt it together):
 - 2 M5 x 12 screws + 2 T-nuts: actuator bracket to the short 2020 piece
 - 1 L corner bracket + 2 M5 screws + 2 T-nuts: short 2020 piece to the side rail
 - 1 short 2020 piece, about 4 in (110 mm)
+
+- 11/18: fix applied. Right plate actuator hole moved to (48, -63) in steer-plate-right-fixA.dxf and the cardboard template; bracket pin goes about 54 mm toward the robot center (x = -176). The 3D corner view shows it.

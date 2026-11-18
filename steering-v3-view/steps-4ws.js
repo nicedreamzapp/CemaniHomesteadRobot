@@ -9,7 +9,7 @@ window.DIMS={
   plateT:6.35, blackT:6,
   // front: black plate centered 20.5 mm inboard of the side rail, same as the back, so front and back wheels line up
   fbpU:11.5, fslots:[[-9,-32.75],[-9,32.75],[32,-32.75],[32,32.75]],
-  arm:[-17.8,-57.3], acth:[-25,-85],
+  arm:[-17.8,-57.3], acth:[48,-63],
   m5L:70, m5Lf:25,
   heimOD:22.23, heimBore:7.94, heimT:11.1, heimL:34.93, heimShank:12.7, heimBoltL:32, rodD:7.94,
   actRet:246, actRear:12, actFront:9, actMotorL:110, actMotorR:20, actTubeR:15.25, actRod:12, actPin:6.35,
