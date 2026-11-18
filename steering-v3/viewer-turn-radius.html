@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cemani turn radius, top down</title>
+<style>*{margin:0;padding:0;box-sizing:border-box} body{background:#eef0f2;font-family:-apple-system,sans-serif;color:#16181d;overflow:hidden}
+canvas{display:block;width:100vw;height:100vh}
+#info{position:absolute;top:12px;left:12px;max-width:min(560px,calc(100vw - 24px));background:#fff;border-left:5px solid #d08a00;padding:12px 16px;border-radius:8px;font-size:17px;line-height:1.45;box-shadow:0 4px 18px rgba(0,0,0,.12)}
+#info small{display:block;color:#666;font-size:13px}
+#btns{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap} #btns button{font-size:15px;padding:6px 12px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer} #btns button.on{background:#1f5fb3;color:#fff;border-color:#1f5fb3}
+</style></head><body><canvas id="c"></canvas>
+<div id="info"><small>Cemani, seen from above · real size from the frame model (18 in wheelbase, 17½ in wheel centers, 8 in wheels)</small><div id="txt"></div>
+<div id="btns"><button data-m="front">Front steering</button><button data-m="four">4-wheel steering</button><button data-m="both">Both</button></div></div>
+<script>
+// mm. Wheel centres +-222.25 across, axles +-228.6 (frame-v3). Inside wheel 30 deg max.
+const L=457.2, T=444.5, WD=203, WW=60, FW=305, FL=545, DEG=Math.PI/180, MAX=30;
+const xf=L/Math.tan(MAX*DEG), x4=(L/2)/Math.tan(MAX*DEG);
+const MODES={
+ front:{name:'Front steering only',col:'#1f5fb3',cx:xf+T/2,cy:-L/2},          // turn centre on the back axle line
+ four:{name:'4-wheel steering',col:'#d0571f',cx:x4+T/2,cy:0},                   // turn centre on the middle line
+};
+for(const k in MODES){ const m=MODES[k]; const wh=[[-T/2,L/2],[T/2,L/2],[-T/2,-L/2],[T/2,-L/2]];
+  m.rOut=Math.max(...wh.map(([x,y])=>Math.hypot(m.cx+ -x - 0 + 0 - 0 + 0, 0)+0)); // placeholder, fixed below
+  m.rOut=Math.max(...wh.map(([x,y])=>Math.hypot(x-(-m.cx), y-m.cy)))+WW/2;     // turning left: centre at x=-cx
+  m.circleFt=(2*m.rOut/304.8); }
+const txt=document.getElementById('txt');
+let mode='both'; document.querySelectorAll('#btns button').forEach(b=>{ b.onclick=()=>{ mode=b.dataset.m; t0=performance.now(); paint(); }; });
+function paint(){ document.querySelectorAll('#btns button').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
+  const f=MODES.front, q=MODES.four;
+  txt.innerHTML=(mode!=='four'?`<b style="color:${f.col}">Front steering:</b> needs a circle about <b>${f.circleFt.toFixed(1)} ft</b> across (outside tire).<br>`:'')
+   +(mode!=='front'?`<b style="color:${q.col}">4-wheel steering:</b> about <b>${q.circleFt.toFixed(1)} ft</b> across, the back follows the front's tracks.<br>`:'')
+   +`<small>Today it skids like a tank: it can spin in place, but the tires scrub and the wheel counts lie.</small>`; }
+paint();
+const cv=document.getElementById('c'), g=cv.getContext('2d'); let W,H,S;
+function fit(){ W=cv.width=innerWidth*devicePixelRatio; H=cv.height=innerHeight*devicePixelRatio; S=Math.min(W,H)/3300; } addEventListener('resize',fit); fit();
+let t0=performance.now();
+const trails={front:[],four:[]};
+function robot(m,ang,ox,oy){ // pose on the circle around (-cx, cy) after turning 'ang' rad (left turn)
+  const c=[-m.cx,m.cy], ca=Math.cos(ang), sa=Math.sin(ang);
+  const rot=(x,y)=>{ const dx=x-c[0], dy=y-c[1]; return [c[0]+dx*ca-dy*sa, c[1]+dx*sa+dy*ca]; };
+  return {rot,ang};
+}
+function draw(){ requestAnimationFrame(draw); const t=(performance.now()-t0)/1000;
+  g.setTransform(1,0,0,1,0,0); g.fillStyle='#eef0f2'; g.fillRect(0,0,W,H);
+  g.setTransform(S,0,0,-S,W*0.58+800*S,H*0.52); // y up, origin offset so circles fit
+  // 1 ft grid
+  g.strokeStyle='#dde1e5'; g.lineWidth=2/S*0.6; for(let i=-12;i<=12;i++){ g.beginPath(); g.moveTo(i*304.8,-3700); g.lineTo(i*304.8,3700); g.stroke(); g.beginPath(); g.moveTo(-3700,i*304.8); g.lineTo(3700,i*304.8); g.stroke(); }
+  const ms=mode==='both'?['front','four']:[mode];
+  const ang=Math.min(Math.PI*2, t*0.55);
+  for(const k of ms){ const m=MODES[k];
+    // turning circle (outside tire)
+    g.strokeStyle=m.col; g.setLineDash([40,30]); g.lineWidth=6; g.beginPath(); g.arc(-m.cx,m.cy,m.rOut,0,Math.PI*2); g.stroke(); g.setLineDash([]);
+    g.fillStyle=m.col; g.beginPath(); g.arc(-m.cx,m.cy,18,0,Math.PI*2); g.fill();
+    const {rot}=robot(m,ang);
+    // steering angles (Ackermann: every wheel points perpendicular to the line to the turn centre)
+    const wh=[[-T/2,L/2],[T/2,L/2],[-T/2,-L/2],[T/2,-L/2]];
+    const steer=wh.map(([x,y])=>{ if(k==='front'&&y<0) return 0; return Math.atan2(y-m.cy, x+m.cx); });
+    // trails of the 4 wheel centres
+    if(!trails[k].len||ang<trails[k].last){ trails[k]=wh.map(()=>[]); trails[k].len=1; } trails[k].last=ang;
+    wh.forEach(([x,y],i)=>{ const p=rot(x,y); trails[k][i].push(p); g.strokeStyle=m.col+'88'; g.lineWidth=4; g.beginPath(); trails[k][i].forEach((q,j)=>j?g.lineTo(...q):g.moveTo(...q)); g.stroke(); });
+    // frame
+    g.save(); const o=rot(0,0); g.translate(...o); g.rotate(ang);
+    g.fillStyle='rgba(160,165,172,.55)'; g.strokeStyle='#5b6068'; g.lineWidth=6; g.fillRect(-FW/2,-FL/2,FW,FL); g.strokeRect(-FW/2,-FL/2,FW,FL);
+    g.fillStyle='#16181d'; g.beginPath(); g.moveTo(0,FL/2+40); g.lineTo(-40,FL/2-10); g.lineTo(40,FL/2-10); g.fill(); // front arrow
+    wh.forEach(([x,y],i)=>{ g.save(); g.translate(x,y); g.rotate(steer[i]); g.fillStyle='#222'; g.fillRect(-WW/2,-WD/2,WW,WD); g.strokeStyle=m.col; g.lineWidth=5; g.strokeRect(-WW/2,-WD/2,WW,WD); g.restore(); });
+    g.restore();
+    // label
+    g.save(); g.scale(1,-1); g.fillStyle=m.col; g.font='bold 110px -apple-system,sans-serif'; g.fillText(m.circleFt.toFixed(1)+' ft', -m.cx-200, -(m.cy+m.rOut+40)); g.restore();
+  }
+  if(t*0.55>Math.PI*2+1.5) { t0=performance.now(); }
+}
+draw();
+</script></body></html>

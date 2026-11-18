@@ -374,8 +374,16 @@ If you add new secrets while working on your fork, put them in a file that match
 - [x] A* path planning with frontier exploration ([`server-navigation.js`](vps-server/server-navigation.js))
 - [x] Loop closure via LIDAR fingerprints ([`server-scan-matcher.js`](vps-server/server-scan-matcher.js))
 
+### Front steering v3 (Nov 2026)
+Cemani is getting real steering on the front wheels to stop the shudder skid steer causes in turns. Each front corner now turns on a ¾ in flange bearing (UCF204-12) bolted under two 2020 rails. A ¾ x 2 in clevis pin is the kingpin, a clamp collar locks it to a ¼ in aluminum steering plate, and the existing black shock plate hangs under that plate on 15 mm standoffs, so the whole corner (shock, arms, hub motor) swivels together. A 5/16 tie rod with heim joints links the two plates, and one Glideforce 4 in linear actuator, mounted on a short 2020 piece under the left side rail, pushes the right plate. The Teensy 4.1 reads the actuator's built-in pot and holds the angle, about 30° each way. Front first to test every part, then an identical rear axle for 4-wheel steering. No lazy susan (that was the October plan).
+
+- Parts and order status: [steering-v3/PARTS-ORDERED.md](steering-v3/PARTS-ORDERED.md), parts list: [PARTS-FRONT.md](steering-v3/PARTS-FRONT.md), fit check: [FIT_CHECK.md](steering-v3/FIT_CHECK.md), forces and physics: [PHYSICS.md](steering-v3/PHYSICS.md)
+- 3D corner view (open in a browser): [steering-v3-view/corner-cart.html](steering-v3-view/corner-cart.html), buy list: [buy-list.html](steering-v3-view/buy-list.html)
+- Steering plate DXFs: [steering-v3-view/plates/](steering-v3-view/plates/), cardboard test template: [steering-v3-view/template/](steering-v3-view/template/)
+- Whole robot model with the new steering: [frame v3](docs/rebuild-2026/frame-v3/README.md)
+
 ### Building Next
-- [ ] **Rebuild in progress:** longer 2020 frame and front-wheel steering to stop the shudder in turns. Plan, measurements and parts: [docs/rebuild-2026](docs/rebuild-2026/README.md), latest frame: [frame v2](docs/rebuild-2026/frame-v2/README.md)
+- [ ] **Rebuild in progress:** 2020 frame v3 is built; front steering v3 parts are ordered (see above). Plan history: [docs/rebuild-2026](docs/rebuild-2026/README.md), current frame: [frame v3](docs/rebuild-2026/frame-v3/README.md)
 - [ ] IMU upgrade (BNO085 - accelerometer + gyroscope)
 - [ ] Intel RealSense D455 depth camera
 - [ ] Auto-docking charging station

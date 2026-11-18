@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Front steering corner, fixed (Fix A)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box} body{background:#e6e7ea;font-family:-apple-system,sans-serif;color:#15171b;overflow:hidden}
+canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
+#top{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.94);padding:8px 16px;border-radius:10px;font-size:18px;font-weight:600;z-index:5;display:flex;gap:14px;align-items:center;white-space:nowrap}
+#top button{font-size:15px;padding:5px 14px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer} body.rec #top button{display:none}
+#ctl{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.95);padding:8px 14px;border-radius:12px;z-index:6;display:flex;gap:14px;align-items:center;font-size:15px;box-shadow:0 3px 14px rgba(0,0,0,.15);white-space:nowrap}
+#ctl button{font-size:14px;padding:5px 11px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer} #ctl input{vertical-align:middle;width:150px}
+#info{position:absolute;right:14px;bottom:76px;width:330px;background:#fff;border-left:6px solid #e8730c;border-radius:10px;padding:10px 14px;font-size:14px;line-height:1.4;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:6;display:none} #info b{font-size:16px}
+#hint{position:absolute;top:96px;left:50%;transform:translateX(-50%);font-size:13px;color:#555;z-index:5}
+#phase{display:none;position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:#1f5fb3;color:#fff;padding:6px 16px;border-radius:18px;font-size:16px;z-index:5}
+#labs{position:fixed;inset:0;pointer-events:none;z-index:4} #labs svg{position:absolute;inset:0;width:100%;height:100%}
+.lab{position:absolute;left:0;top:0;width:300px;background:#fff;border-radius:10px;padding:10px 14px;font-size:16px;line-height:1.35;box-shadow:0 4px 16px rgba(0,0,0,.16);border-left:6px solid #1f5fb3}
+.slab{position:absolute;left:0;top:0;background:rgba(255,255,255,.93);border:1px solid #c7cbd2;border-radius:6px;padding:2px 7px;font-size:12px;line-height:1.3;white-space:nowrap;color:#333}
+.slab b{font-weight:600;color:#111}
+.clab{position:absolute;left:0;top:0;width:250px;background:#fff;border-radius:9px;padding:8px 12px;font-size:15px;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,.16);border-left:6px solid #e8730c;display:none}
+#legend{white-space:nowrap;position:absolute;top:84px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.95);padding:5px 12px;border-radius:8px;font-size:14px;z-index:6;display:none} #legend i{display:inline-block;width:13px;height:13px;border-radius:3px;margin:0 5px -2px 10px}
+.lab b{display:block;font-size:19px;margin-bottom:2px} .lab i{font-style:normal;display:inline-block;width:28px;height:28px;border-radius:50%;background:#1f5fb3;color:#fff;text-align:center;line-height:28px;font-weight:700;margin-right:8px;font-size:17px}
+.lab.cart{background:#e5f7ec;border-left-color:#1f9d4c} .lab.cart i{background:#1f9d4c}
+.lab.have{background:#f1f2f4;border-left-color:#8a8f98} .lab.have i{background:#8a8f98}
+.lab.notyet{background:#fff5d6;border-left-color:#c98a00} .lab.notyet i{background:#c98a00}
+.lab em{display:block;font-style:normal;font-weight:700;font-size:14px;margin-top:4px}
+.lab.cart em{color:#1f9d4c} .lab.have em{color:#5b6068} .lab.notyet em{color:#a06c00}
+.slab.cart{background:#e5f7ec;border-color:#1f9d4c} .slab.have{background:#eef0f2;border-color:#8a8f98} .slab.notyet{background:#fff5d6;border-color:#c98a00}
+#key{position:absolute;top:58px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.96);padding:6px 14px;border-radius:9px;font-size:15px;z-index:6;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+#key span{display:inline-block;padding:1px 10px;border-radius:8px;margin:0 4px;font-weight:700}
+</style></head><body>
+<div id="top">Front steering corner &nbsp;·&nbsp; NEW 11/18: 2 bearings per corner (top + bottom), longer pin</div><div id="key"><span style="background:#e5f7ec;color:#1f9d4c;border:1px solid #1f9d4c">IN CART</span><span style="background:#eef0f2;color:#5b6068;border:1px solid #8a8f98">YOU HAVE IT</span><span style="background:#fff5d6;color:#a06c00;border:1px solid #c98a00">NOT IN CART YET</span></div>
+<div id="ctl"><label>Apart <input id="kS" type="range" min="0" max="1" step="0.01" value="0"> Together</label>
+<label>Steer <input id="aS" type="range" min="-30" max="30" step="1" value="0"> <span id="aV">0°</span></label>
+<button id="play">▶ Play animation</button><button id="rv">Reset view</button><button id="lb">Labels on/off</button><button id="blb">Bolt labels on/off</button><button id="cutb">Cut in half</button></div>
+<div id="info"></div><div id="legend"><b>Turn together:</b><i style="background:#e8730c"></i>pin<i style="background:#c24f00"></i>plate<i style="background:#f7a64c"></i>collar<i style="background:#ffd23f"></i>screws<i style="background:#2a2b2e"></i>black plate &nbsp; <b>Never move:</b><i style="background:#9a9ea4"></i>frame + bearing housing</div>
+<div id="hint">Drag to turn · scroll or pinch to zoom · right-drag to move · click any part or bolt</div>
+<div id="labs"><svg></svg></div><div id="phase"></div>
+<canvas id="c"></canvas>
+<script src="steps-4ws.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+// Same part builders and real-look finishes as viewer-4ws-ucf204.html?real (copied), one front-right corner only, you drive it (orbit, sliders, click a part).
+const D=Object.assign({},window.DIMS,{arm:[12.5,57.3]}), REAL=true, QS=new URLSearchParams(location.search), REC=QS.has('record'); if(REC) document.body.classList.add('rec');
+THREE.Object3D.DEFAULT_UP.set(0,0,1);
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+const COL={rail:0xa3a7ad,brg:0xc9962f,plate:0x9fb7d6,black:0x1d1e21,spacer:0xd8dade,bolt:0x55595f,act:0x3a3d42,chrome:0xe4e6ea};
+// ---- real look: PBR finishes matched to the part photos (parts/*.jpg) and his robot photos ----
+function canvasTex(w,h,draw){ const c=document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'),w,h); const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; return t; }
+let TEX={};
+if(REAL){
+  // brushed streaks for aluminum / bare steel (roughness variation)
+  TEX.brush=canvasTex(256,256,(g,w,h)=>{ g.fillStyle='#808080'; g.fillRect(0,0,w,h); for(let i=0;i<900;i++){ const v=110+Math.random()*60|0; g.strokeStyle=`rgb(${v},${v},${v})`; g.globalAlpha=.5; g.beginPath(); const y=Math.random()*h; g.moveTo(0,y); g.lineTo(w,y+Math.random()*2-1); g.stroke(); } });
+  // tire tread: grooves across the tread, repeated around the wheel (bump + roughness)
+  TEX.tread=canvasTex(512,64,(g,w,h)=>{ g.fillStyle='#fff'; g.fillRect(0,0,w,h); g.fillStyle='#000'; g.fillStyle='#555'; for(let i=0;i<72;i++){ const x=i*w/72; g.fillRect(x,h*0.08,w/72*0.22,h*0.38); g.fillRect(x+w/144,h*0.54,w/72*0.22,h*0.38); } g.fillRect(0,h*0.485,w,h*0.03); });
+  TEX.floor=canvasTex(512,512,(g,w,h)=>{ g.fillStyle='#8d8a85'; g.fillRect(0,0,w,h); for(let i=0;i<14000;i++){ const v=110+Math.random()*60|0; g.fillStyle=`rgba(${v},${v-3},${v-8},.25)`; g.fillRect(Math.random()*w,Math.random()*h,2,2); } g.strokeStyle='rgba(60,58,55,.35)'; g.lineWidth=2; g.strokeRect(0,0,w,h); });
+  TEX.floor.colorSpace=THREE.SRGBColorSpace; TEX.floor.repeat.set(14,14); TEX.floor.anisotropy=8;
+}
+const PHYS=(o)=>new THREE.MeshPhysicalMaterial(Object.assign({side:THREE.DoubleSide},o));
+const REALMAT={
+  [COL.rail]:()=>PHYS({color:0xd2d5d9,metalness:0.55,roughness:0.36,roughnessMap:TEX.brush}),            // silver anodized 2020 (IMG_7735)
+  0x1f3f8f:()=>PHYS({color:0x7a7f84,metalness:0.25,roughness:0.62,clearcoat:0.15}),                      // UCF204 housing: gray painted cast iron
+  0x2f6fd6:()=>PHYS({color:0x7a7f84,metalness:0.25,roughness:0.62}),
+  [COL.chrome]:()=>PHYS({color:0xeceef0,metalness:1,roughness:0.14}),                                    // insert ring, heim joints, sleeves, rod
+  0xe0662f:()=>PHYS({color:0xc6c9cd,metalness:1,roughness:0.28,roughnessMap:TEX.brush}),                  // 3/4 in steel shaft + collar
+  [COL.plate]:()=>PHYS({color:0x5d6166,metalness:0.8,roughness:0.5,roughnessMap:TEX.brush}),              // bare laser-cut 1/4 in steel
+  [COL.black]:()=>PHYS({color:0x161719,metalness:0.05,roughness:0.55,clearcoat:0.25,clearcoatRoughness:0.5}), // black powder coat plate
+  [COL.bolt]:()=>PHYS({color:0xbfc3c7,metalness:1,roughness:0.3}),                                       // A2-70 stainless bolts, nuts, aluminum brackets
+  [COL.act]:()=>PHYS({color:0xb4b8bd,metalness:0.85,roughness:0.38,roughnessMap:TEX.brush}),              // Glideforce LACT4P silver aluminum
+  0xb8bcc2:()=>PHYS({color:0xc9ccd0,metalness:1,roughness:0.2}),                                          // shock shaft
+  0x2a2b2e:()=>PHYS({color:0x2b2c2e,metalness:0,roughness:0.85,bumpMap:TEX.tread,bumpScale:1.2}), // rubber tire
+  0x3d6fb8:()=>PHYS({color:0x8e9297,metalness:0.8,roughness:0.45}),                                     // ZLLG80 gray aluminum hub shell
+  nylon:()=>PHYS({color:0x2f5fb8,metalness:0,roughness:0.5}), socket:()=>PHYS({color:0x1a1b1d,metalness:0.6,roughness:0.6}),
+  zerk:()=>PHYS({color:0xcfc6a0,metalness:1,roughness:0.3}),
+  gusset:()=>PHYS({color:0xdadde0,metalness:0.55,roughness:0.34,roughnessMap:TEX.brush}),              // silver aluminum gusset plates
+  blackrail:()=>PHYS({color:0x1c1d20,metalness:0.4,roughness:0.45}),                                      // black anodized top side rails
+  capblack:()=>PHYS({color:0x121314,metalness:0,roughness:0.6}),                                           // black 2020 end caps
+  cable:()=>PHYS({color:0x111214,metalness:0,roughness:0.55,clearcoat:0.3}),
+  rubber:()=>PHYS({color:0x232426,metalness:0,roughness:0.82}),
+  hubface:()=>PHYS({color:0xe2e5e8,metalness:0.55,roughness:0.32,roughnessMap:TEX.brush}),                  // silver hub motor face
+  shockbody:()=>PHYS({color:0x3a3c40,metalness:0.8,roughness:0.35}), collar:()=>PHYS({color:0xc9ccd0,metalness:1,roughness:0.22}),
+  spring:()=>PHYS({color:0xd8dbdf,metalness:1,roughness:0.18}),
+};
+const M=c=>REAL?(REALMAT[c]?REALMAT[c]():PHYS({color:c,metalness:0.6,roughness:0.4})):new THREE.MeshStandardMaterial({color:c,metalness:(c===COL.black||c===COL.act)?0.3:0.55,roughness:0.42,side:THREE.DoubleSide});
+// ---- shape helpers (z up) ----
+function box(sx,sy,sz,c,x=0,y=0,z=0){ const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),M(c)); m.position.set(x,y,z); return m; }
+function cyl(r,h,c,x=0,y=0,z=0,seg=40,r2){ const g=new THREE.CylinderGeometry(r,r2??r,h,seg); g.rotateX(Math.PI/2); const m=new THREE.Mesh(g,M(c)); m.position.set(x,y,z); return m; }
+function ring(ro,ri,h,c,x=0,y=0,z=0,seg=40){ const s=new THREE.Shape(); s.absarc(0,0,ro,0,Math.PI*2); const p=new THREE.Path(); p.absarc(0,0,ri,0,Math.PI*2,true); s.holes.push(p);
+  const g=new THREE.ExtrudeGeometry(s,{depth:h,bevelEnabled:false,curveSegments:seg}); g.translate(0,0,-h/2); const m=new THREE.Mesh(g,M(c)); m.position.set(x,y,z); return m; }
+function rodBetween(a,b,r,c,seg=20){ const d=new THREE.Vector3().subVectors(b,a), L=d.length(); const g=new THREE.CylinderGeometry(r,r,L,seg); const m=new THREE.Mesh(g,M(c));
+  m.position.copy(a).addScaledVector(d,0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); return m; }
+function screw(dia,len,head,c=COL.bolt,flat=false){ // shaft along -z from z=0 (head on top at z 0..head)
+  const g=new THREE.Group(); g.add(cyl(dia/2,len,c,0,0,-len/2,20));
+  if(flat) g.add(cyl(dia,dia*0.55,c,0,0,dia*0.275,30,dia/2)); else if(REAL){ g.add(cyl(dia*0.85,head,c,0,0,head/2,28)); g.add(cyl(dia*0.42,0.6,'socket',0,0,head+0.05,6)); } else g.add(cyl(dia*0.85,head,c,0,0,head/2,6)); return g; }
+function nut(dia,h,c=COL.bolt){ const n=ring(dia*0.9,dia/2,h,c,0,0,0,6); if(!REAL) return n; const g=new THREE.Group(); g.add(n); g.add(ring(dia*0.72,dia/2,0.8,'nylon',0,0,0)); return g; }
+function washer(dout,din,h,c=COL.bolt){ return ring(dout/2,din/2,h,c); }
+// 2020 rail with a T-slot look
+// real 2020 profile: 6.2 mm slot opening, 1.8 mm lips, undercut T cavity, diagonal webs to a center core, 4.2 mm center bore
+const PROF2020=(()=>{ const side=[[-9.4,-10],[-3.1,-10],[-3.1,-8.2],[-5.6,-8.2],[-5.6,-6.6],[-2.9,-4.4],[2.9,-4.4],[5.6,-6.6],[5.6,-8.2],[3.1,-8.2],[3.1,-10],[9.4,-10]];
+  const s=new THREE.Shape(); let first=true; for(let k=0;k<4;k++){ const c=Math.cos(k*Math.PI/2), sn=Math.sin(k*Math.PI/2); for(const [x,y] of side){ const X=x*c-y*sn, Y=x*sn+y*c; first?s.moveTo(X,Y):s.lineTo(X,Y); first=false; } } s.closePath();
+  const h=new THREE.Path(); h.absarc(0,0,2.1,0,Math.PI*2,true); s.holes.push(h); return s; })();
+function railGeo(len,axis,x,y,z){ const geo=new THREE.ExtrudeGeometry(PROF2020,{depth:len,bevelEnabled:false,curveSegments:8}); geo.translate(0,0,-len/2);
+  if(axis==='y') geo.rotateX(Math.PI/2); if(axis==='x') geo.rotateY(Math.PI/2); geo.translate(x,y,z); return geo; }
+function rail(len,axis,x,y,z){ const g=new THREE.Group(); g.add(new THREE.Mesh(railGeo(len,axis,x,y,z),M(COL.rail))); return g; }
+// steering plate outline (make_plates.py), u = outward, v = toward the frame end
+const OUTL=[[-42,-95],[14,-95],[56,-70],[56,50],[30,72],[-3,72],[-12,50],[-42,50]]; // CAD 11/16: front tab carries the arm hole
+function steerPlate(sx,right){ const s=new THREE.Shape(); OUTL.forEach(([u,v],i)=>{ const x=sx*u; i?s.lineTo(x,v):s.moveTo(x,v); }); s.closePath();
+  const hole=(u,v,r)=>{ const p=new THREE.Path(); p.absarc(sx*u,v,r,0,Math.PI*2,true); s.holes.push(p); };
+  hole(0,0,D.shaftR+0.3); D.fslots.forEach(([u,v])=>hole(u,v,4)); hole(D.arm[0],D.arm[1],8.2/2); hole(14.73,0,3.3); hole(-14.73,0,3.3); if(right) hole(D.acth[0],D.acth[1],6.6/2);
+  const g=new THREE.ExtrudeGeometry(s,{depth:D.plateT,bevelEnabled:false,curveSegments:24}); return new THREE.Mesh(g,M(COL.plate)); }
+// FIX A stack: plate right under the bearing inner ring, Ruland collar (15 wide) under the plate, black plate on 4 x 15 mm standoffs
+const COLW=15, STD=15, zA=0, zE=-D.ear, zBo=zE-D.boss, zI=zBo-D.ins, zP=zI-D.plateT, zC=zP-COLW, zK=zP-STD-D.blackT;
+const COLT={flg:0x1f3f8f,adp:0x2f6fd6,turn:0xe0662f};
+function sq(w,l,holes,cut){ const s=new THREE.Shape(); s.moveTo(-w/2,-l/2); s.lineTo(w/2,-l/2); s.lineTo(w/2,l/2); s.lineTo(-w/2,l/2); s.closePath();
+  if(cut){ const p=new THREE.Path(); p.absarc(0,0,cut,0,Math.PI*2,true); s.holes.push(p); } holes.forEach(([x,y,r])=>{ const q=new THREE.Path(); q.absarc(x,y,r,0,Math.PI*2,true); s.holes.push(q); }); return s; }
+function slab(shape,th,c){ const g=new THREE.ExtrudeGeometry(shape,{depth:th,bevelEnabled:false,curveSegments:40}); return new THREE.Mesh(g,M(c)); }
+// ===== real look: his v3 frame + his suspension modules (real/v3/measurements-v3.md, MEASURE_side/front, IMG_8100/8106/8116) =====
+// Suspension module sizes (mm, local to the black plate: u = outward, z down from the plate bottom). Guesses scaled from the photos
+// with the 8 in tire as the ruler, except hub track 17.5 in and tire 8 in (measured).
+// hubZ: wheel top ~1 in under the frame bottom like his robot (IMG_7735, IMG_8116): hub 66 mm under the black plate, so the tire rises beside the steering stack
+const SM={hubU:100, hubZ:66, tireR:101.6, tireW:56, upY:28, linkY:21, linkU:[-6,52], linkZ:[26,58], shockTop:[-16,6], shockBot:[50,78], knU:62};
+function plateShape(pts,holes){ const s=new THREE.Shape(); pts.forEach(([a,b],i)=>i?s.lineTo(a,b):s.moveTo(a,b)); s.closePath();
+  (holes||[]).forEach(h=>s.holes.push(h)); return s; }
+function slotPath(a0,b0,a1,b1,r){ const p=new THREE.Path(); const ang=Math.atan2(b1-b0,a1-a0); p.absarc(a0,b0,r,ang+Math.PI/2,ang+3*Math.PI/2,false); p.absarc(a1,b1,r,ang-Math.PI/2,ang+Math.PI/2,false); p.closePath(); return p; }
+// shape in (u,z) -> plate in the x-z plane at y, thickness t (u mirrored by sx)
+function xzPlate(shape,t,c,px,y,zt,sx){ const g=new THREE.ExtrudeGeometry(shape,{depth:t,bevelEnabled:false,curveSegments:16}); g.translate(0,0,-t/2); g.rotateX(Math.PI/2); const m=new THREE.Mesh(g,M(c)); m.position.set(px,y,zt); m.scale.x=sx; return m; } // mesh-level mirror keeps the faces lit
+const BTN_G=(()=>{ const g=new THREE.SphereGeometry(4.8,16,8,0,Math.PI*2,0,Math.PI/2); g.rotateX(Math.PI/2); g.scale(1,1,0.6); return g; })(); // M5 button head, dome along +z
+function btn(mat,pos,n){ const m=new THREE.Mesh(BTN_G,mat); m.position.copy(pos); m.quaternion.setFromUnitVectors(V(0,0,1),n); return m; }
+class Helix extends THREE.Curve{ constructor(r,L,turns){ super(); this.r=r; this.L=L; this.n=turns; } getPoint(t,o=new THREE.Vector3()){ const a=t*this.n*Math.PI*2; return o.set(this.r*Math.cos(a),t*this.L,this.r*Math.sin(a)); } }
+function coilover(a,b){ // eye to eye, pivots along world y
+  const d=new THREE.Vector3().subVectors(b,a), L=d.length(); d.normalize(); const zA=V(0,1,0), xA=new THREE.Vector3().crossVectors(d,zA).normalize();
+  const g=new THREE.Group(); g.matrixAutoUpdate=false; g.matrix.makeBasis(xA,d,zA).setPosition(a);
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(7,7,L*0.55-8,24),M('shockbody')); body.position.y=4+(L*0.55-8)/2; g.add(body);
+  const sh=new THREE.Mesh(new THREE.CylinderGeometry(3.2,3.2,L*0.45,16),M(0xb8bcc2)); sh.position.y=L*0.55+L*0.225-4; g.add(sh);
+  for(const [y,r] of [[9,15],[L-11,15]]){ const c=new THREE.Mesh(new THREE.CylinderGeometry(r,r,3.5,28),M('collar')); c.position.y=y; g.add(c); }
+  const sp=new THREE.Mesh(new THREE.TubeGeometry(new Helix(12.5,L-24,8),200,2.1,10),M('spring')); sp.position.y=11; g.add(sp);
+  for(const y of [0,L]){ g.add(ring(6,2.6,10,'shockbody',0,y,0,20)); }
+  return g; }
+function hubWheel(sx){ // ZLLG80 8 in hub motor: knobby tread, gray shell, silver face; local axle = +Y outward, then turned to +-x
+  const w=new THREE.Group(); const W=SM.tireW, R=SM.tireR;
+  const prof=[[73,-W/2+1],[86,-W/2],[93,-W/2+2.5],[95.5,-W/2+7],[96,0],[95.5,W/2-7],[93,W/2-2.5],[86,W/2],[73,W/2-1]].map(([r,y])=>new THREE.Vector2(r,y));
+  { const tm=new THREE.Mesh(new THREE.LatheGeometry(prof,72),M(0x2a2b2e)); tm.userData.tire=true; w.add(tm); }
+  const N=36, blk=new THREE.BoxGeometry(5,22,11), im=new THREE.InstancedMesh(blk,M('rubber'),N*2), o=new THREE.Object3D(); let k=0;
+  for(let row=0;row<2;row++) for(let i=0;i<N;i++){ const th=(i+row*0.5)/N*Math.PI*2, r=R-2.5; o.position.set(r*Math.cos(th),(row?1:-1)*13,r*Math.sin(th)); o.rotation.set(0,-th,0); o.updateMatrix(); im.setMatrixAt(k++,o.matrix); }
+  im.userData.tire=true; w.add(im);
+  const shell=new THREE.Mesh(new THREE.CylinderGeometry(74,74,W-4,64),M(0x3d6fb8)); w.add(shell);
+  const face=new THREE.Mesh(new THREE.CylinderGeometry(71,73,3,64),M('hubface')); face.position.y=W/2-1; w.add(face);
+  const boss=new THREE.Mesh(new THREE.CylinderGeometry(26,30,4,48),M('hubface')); boss.position.y=W/2+2; w.add(boss);
+  const cap=new THREE.Mesh(new THREE.CylinderGeometry(8,8,3,24),M(COL.bolt)); cap.position.y=W/2+5; w.add(cap);
+  const bm=M(COL.bolt); for(let i=0;i<6;i++){ const a=i/6*Math.PI*2; const b=new THREE.Mesh(BTN_G,bm); b.position.set(50*Math.cos(a),W/2+0.6,50*Math.sin(a)); b.rotation.x=-Math.PI/2; b.scale.setScalar(0.7); w.add(b); }
+  const ax=new THREE.Mesh(new THREE.CylinderGeometry(7,7,W/2+12,16),M(0xb8bcc2)); ax.position.y=-(W/2+12)/2; w.add(ax);
+  w.rotation.z=-sx*Math.PI/2; return w; }
+// his black plate suspension module hung under the black plate (IMG_8100/8106/MEASURE_front): a pair of black uprights, two pairs of
+// slotted links (parallel arms), a black hub knuckle, a coil-over shock from the upright top to the lower links, the hub motor wheel
+function suspModule(px,cy,zt,sx){ const g=new THREE.Group(); const U=u=>px+sx*u, Z=z=>zt-z, bm=M(COL.bolt);
+  // uprights (2 plates, 5 mm, either side of the links)
+  const upS=()=>plateShape([[-24,0],[24,0],[24,-14],[4,-30],[4,-74],[-16,-74],[-24,-56]],[slotPath(-14,-32,-14,-46,3.5)]);
+  for(const s of [-1,1]) g.add(xzPlate(upS(),5,COL.black,px,cy+s*SM.upY,zt,sx));
+  // links: upper + lower, each a pair of slotted bars
+  for(const lz of SM.linkZ) for(const s of [-1,1]){ const [u0,u1]=SM.linkU; const sh=new THREE.Shape(); sh.absarc(u0,-lz,5.5,Math.PI/2,Math.PI*1.5,false); sh.absarc(u1,-lz,5.5,-Math.PI/2,Math.PI/2,false); sh.closePath();
+    sh.holes.push(slotPath(u0+9,-lz,u1-9,-lz,2.2)); g.add(xzPlate(sh,4,COL.black,px,cy+s*SM.linkY,zt,sx)); }
+  // knuckle: ears + a web plate facing the wheel
+  for(const s of [-1,1]) g.add(xzPlate(plateShape([[44,-14],[66,-14],[66,-94],[50,-94],[44,-70]]),5,COL.black,px,cy+s*SM.upY,zt,sx));
+  const web=new THREE.Mesh(new THREE.BoxGeometry(6,2*SM.upY+5,80),M(COL.black)); web.position.set(U(SM.knU+1),cy,Z(54)); g.add(web);
+  // pivot pins along y with button heads both sides
+  const pins=[[SM.linkU[0],SM.linkZ[0]],[SM.linkU[0],SM.linkZ[1]],[SM.linkU[1],SM.linkZ[0]],[SM.linkU[1],SM.linkZ[1]],SM.shockTop,SM.shockBot,[6,7],[18,7]];
+  for(const [u,z] of pins){ const p=new THREE.Mesh(new THREE.CylinderGeometry(2.5,2.5,2*SM.upY+8,10),bm); p.position.set(U(u),cy,Z(z)); g.add(p);
+    for(const s of [-1,1]){ g.add(btn(bm,V(U(u),cy+s*(SM.upY+2.5),Z(z)),V(0,s,0))); } }
+  for(const [yy,zz] of [[-30,-26],[30,-26],[-30,-84],[30,-84]]) g.add(btn(bm,V(U(SM.knU+4),cy+yy*0.7,zt+zz),V(sx,0,0)));
+  // coil-over
+  g.add(coilover(V(U(SM.shockTop[0]),cy,Z(SM.shockTop[1])),V(U(SM.shockBot[0]),cy,Z(SM.shockBot[1]))));
+  // motor cable from the hub up to the plate
+  const cab=new THREE.CatmullRomCurve3([V(U(SM.knU+3),cy-SM.upY-6,Z(SM.hubZ)),V(U(SM.knU-8),cy-SM.upY-14,Z(50)),V(U(10),cy-SM.upY-12,Z(30)),V(U(-20),cy-SM.upY-6,Z(4))]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(cab,40,3,8),M('cable')));
+  const wh=hubWheel(sx); wh.position.set(U(SM.hubU),cy,Z(SM.hubZ)); g.add(wh);
+  return g; }
+// his v3 frame: 22 1/4 x 12 in bottom, low box 6 1/2 in tall over the whole length, tall box 13 1/2 in over the back ~17 in,
+// mid rail ring at ~9 1/4 in, top side rails black, silver gussets with button heads on every outside joint, black end caps
+const canvas=document.getElementById('c'); const renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true}); renderer.setPixelRatio(REC?1:devicePixelRatio);
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0xe6e7ea);
+const pm=new THREE.PMREMGenerator(renderer); scene.environment=pm.fromScene(new RoomEnvironment(),0.04).texture; pm.dispose();
+scene.add(new THREE.HemisphereLight(0xeef2ff,0x8a857c,0.6)); const key=new THREE.DirectionalLight(0xfff4e6,2.0); key.position.set(600,-900,1400); scene.add(key);
+const cam=new THREE.PerspectiveCamera(30,1,1,20000); cam.up.set(0,0,1);
+// pivot (pin axis) at x=y=0; side rail outboard at +x, 2nd rail 64 mm inboard
+const sx=1, G={}; for(const k of ['rails','hinge','hinge2','pin','plate','collar','black']){ G[k]=new THREE.Group(); scene.add(G[k]); }
+const turnPin=new THREE.Group(), turnPlate=new THREE.Group(), turnCol=new THREE.Group(), turnBlack=new THREE.Group(); G.pin.add(turnPin); G.plate.add(turnPlate); G.collar.add(turnCol); G.black.add(turnBlack);
+// side rail runs on to the frame end; inboard rail stops at the front cross rail (CAD FRAME: cross rail 43.9 mm ahead of the pin)
+const YCR=272.5-228.6; G.rails.add(rail(150+YCR+10,'y',D.piv,(YCR+10-150)/2,10)); G.rails.add(rail(150+YCR-10,'y',-D.piv,(YCR-10-150)/2,10)); G.rails.add(rail(282,'x',D.piv-10-141,YCR,10));
+const bearingG=new THREE.Group(); G.hinge.add(bearingG);
+{ const f=bearingG; const ear=slab(sq(D.sqF,D.sqF,D.bolt4.map(([x,y])=>[x,y,D.holeR]),D.bossR),D.ear,0x1f3f8f); ear.position.z=zE; f.add(ear);
+  f.add(ring(D.bossR,D.shaftR+5,D.boss,0x1f3f8f,0,0,zBo+D.boss/2)); { const ir=ring(D.shaftR+5,D.shaftR,D.ear+D.boss+D.ins,COL.chrome,0,0,zI+(D.ear+D.boss+D.ins)/2); ir.userData.cat='inner'; f.add(ir); } }
+// 11/18: SECOND bearing, same UCF204-12, bolted on TOP of the same 2 rails (mount face z=20), so the pin is held at 2 points and cannot lean
+const ZT=20, bearing2G=new THREE.Group(); G.hinge2.add(bearing2G);
+{ const f=bearing2G; const ear=slab(sq(D.sqF,D.sqF,D.bolt4.map(([x,y])=>[x,y,D.holeR]),D.bossR),D.ear,0x1f3f8f); ear.position.z=ZT; f.add(ear);
+  f.add(ring(D.bossR,D.shaftR+5,D.boss,0x1f3f8f,0,0,ZT+D.ear+D.boss/2)); { const L=D.ear+D.boss+D.ins; const ir=ring(D.shaftR+5,D.shaftR,L,COL.chrome,0,0,ZT+L/2); ir.userData.cat='inner'; f.add(ir); } }
+const ZTOP=ZT+D.ear+D.boss+D.ins, WASH=3.4; // top of the top inner ring; 3/4 in USS flat washer under the pin head
+// 3/4 x 2 in clevis pin (50.8 mm under the head), head 1-1/8 in OD x 1/4 in on top of the bearing inner ring (between the rails)
+const PIN={L:108.36, headR:14.3, headT:6.35}; // 11/18: 3/4 x 4-17/64 in clevis pin (Zoro G2463316), head on a 3/4 washer on top of the TOP bearing
+turnPin.position.z=ZTOP+WASH;
+{ const m=cyl(D.shaftR,PIN.L,0xe0662f,0,0,-PIN.L/2); m.userData.cat='pin'; turnPin.add(m); const h=cyl(PIN.headR,PIN.headT,0xe0662f,0,0,PIN.headT/2,40); h.userData.cat='pin'; turnPin.add(h);
+  const ch=new THREE.Mesh(new THREE.TorusGeometry(PIN.headR-0.6,0.8,8,40),M(0xe0662f)); ch.position.z=PIN.headT; ch.userData.cat='pin'; turnPin.add(ch);
+  const xh=cyl(2.4,0.4,COL.black,0,0,0); xh.rotation.x=Math.PI/2;
+  const pw=ring(17.5,10,WASH,COL.chrome,0,0,-WASH/2); pw.userData.cat='pin'; turnPin.add(pw); } // washer under the head
+// Ruland FHT-MCL-12E-F face-mount collar: 40 OD x 15 wide, 3/4 bore, one slit + 1 clamp screw, 2 tapped M6 holes in the top face (29.46 apart)
+{ const s=new THREE.Shape(); s.absarc(0,0,20,-Math.PI/2+0.05,3*Math.PI/2-0.05,false); s.absarc(0,0,D.shaftR,3*Math.PI/2-0.1,-Math.PI/2+0.1,true); s.closePath();
+  for(const x of [14.73,-14.73]){ const h=new THREE.Path(); h.absarc(x,0,2.5,0,Math.PI*2,true); s.holes.push(h); }
+  const g=new THREE.ExtrudeGeometry(s,{depth:COLW,bevelEnabled:false,curveSegments:40}); const m=new THREE.Mesh(g,M('collar')); m.position.z=zC; m.userData.cat='collar'; turnCol.add(m);
+  const lug=box(9,7,COLW,0xe0662f,0,-17,zC+COLW/2); lug.visible=false; } // slit sits at -y
+{ const pl=steerPlate(sx,true); pl.position.z=zP; turnPlate.add(pl); }
+turnBlack.add(box(56,100,D.blackT,COL.black,sx*D.fbpU,0,zK+D.blackT/2)); turnBlack.add(suspModule(sx*D.fbpU,0,zK,sx));
+// tie rod stub + actuator end ride on the plate's arm holes (they keep their direction, only the end follows the plate)
+const armP=V(D.arm[0],D.arm[1],0), actP=V(D.acth[0],D.acth[1],0), zt=zP+D.plateT+8+D.heimT/2; // heim rides on an 8 mm spacer
+// full tie rod: Matt's 200 mm 5/16-24 rod + 2 CF5 heim joints, ~246 mm eye to eye, to a ghosted left steering plate (track 221 mm pivot to pivot)
+const EYE=246, ENG=(D.heimL*2+200-EYE)/2; const tie=new THREE.Group(); G.plate.add(tie);
+for(const [x0,dx] of [[0,-1],[-EYE,1]]){ tie.add(ring(D.heimOD/2,D.heimBore/2,D.heimT,COL.chrome,x0,0,0)); tie.add(rodBetween(V(x0+dx*(D.heimOD/2-1),0,0),V(x0+dx*D.heimL,0,0),D.heimShank/2,COL.chrome));
+  tie.add(ring(7,D.rodD/2,5,COL.chrome,x0+dx*(D.heimL+2.5),0,0,6).rotateY(Math.PI/2)); }
+tie.add(rodBetween(V(-(D.heimL-ENG),0,0),V(-(EYE-D.heimL+ENG),0,0),D.rodD/2,COL.chrome));
+const ghostX=-2*(142.5-D.piv), ghost=new THREE.Group(); G.plate.add(ghost); { const gp=steerPlate(-1,false); gp.position.set(ghostX,0,zP); gp.material=new THREE.MeshStandardMaterial({color:0x9fb7d6,transparent:true,opacity:0.28,depthWrite:false}); ghost.add(gp);
+  const gpin=cyl(D.shaftR,PIN.L,0xe0662f,ghostX,0,ZTOP+WASH-PIN.L/2); gpin.material=new THREE.MeshStandardMaterial({color:0xe0662f,transparent:true,opacity:0.22,depthWrite:false}); ghost.add(gpin); }
+const leftEye=V(D.arm[0]-EYE,D.arm[1],zt);
+const act=new THREE.Group(); G.plate.add(act); const ad=V(-205.5,-173.6,0).normalize();
+act.add(rodBetween(V(0,0,0),ad.clone().multiplyScalar(90),D.actRod/2,COL.chrome)); act.add(rodBetween(ad.clone().multiplyScalar(86),ad.clone().multiplyScalar(260),D.actTubeR,COL.act,32));
+act.add(cyl(8,14,COL.chrome,0,0,0));
+// ---- every fastener: home spot + its own pull-out direction, dashed line shows where it goes ----
+const armF=new THREE.Group(), actF=new THREE.Group(); G.plate.add(armF,actF);
+const FAST=[]; const dashM=()=>new THREE.LineDashedMaterial({color:0x6b7280,dashSize:5,gapSize:4,transparent:true});
+function place(parent,obj,pos,dir,dist,grp,keepRot){ // dir = the way the shank points (the way it goes in); it is pulled out the other way
+  dir=dir.clone().normalize(); if(!keepRot) obj.quaternion.setFromUnitVectors(V(0,0,-1),dir); obj.position.copy(pos); parent.add(obj);
+  const off=dir.clone().multiplyScalar(-dist); const lg=new THREE.BufferGeometry().setFromPoints([pos.clone().addScaledVector(dir,8),pos.clone().add(off)]); const ln=new THREE.Line(lg,dashM()); ln.computeLineDistances(); parent.add(ln);
+  const f={obj,home:pos.clone(),off,ln,grp}; FAST.push(f); return f; }
+const nutO=(d,h)=>{ const g=new THREE.Group(); const n=nut(d,h); g.add(n); return g; };
+const washO=(od,id,h)=>{ const g=new THREE.Group(); g.add(washer(od,id,h)); return g; };
+const DN=V(0,0,-1), UP=V(0,0,1);
+// bearing to the 2 rails: drop-in T-nut in each rail's bottom slot, 10 mm sleeve in the ear hole, M5 washer, M5 x 18 up from below
+D.bolt4.forEach(([x,y],i)=>{
+  place(G.rails,(()=>{ const g=new THREE.Group(); g.add(box(10,12,4,COL.bolt,0,0,0)); return g; })(),V(x,y,1.8),UP,40,'tnut');
+  place(G.hinge,(()=>{ const g=new THREE.Group(); g.add(ring(6,2.6,10,COL.chrome,0,0,5)); return g; })(),V(x,y,zE),UP,40,'slv');
+  place(G.hinge,washO(10,5.3,1),V(x,y,zE-0.5),UP,58,'wsh');
+  place(G.hinge,screw(5,18,4),V(x,y,zE-1),UP,80,'m5b'); });
+D.bolt4.forEach(([x,y])=>{
+  place(G.rails,(()=>{ const g=new THREE.Group(); g.add(box(10,12,4,COL.bolt,0,0,0)); return g; })(),V(x,y,ZT-1.8),DN,40,'tnut');
+  place(G.hinge2,(()=>{ const g=new THREE.Group(); g.add(ring(6,2.6,10,COL.chrome,0,0,-5)); return g; })(),V(x,y,ZT+D.ear),DN,40,'slv');
+  place(G.hinge2,washO(10,5.3,1),V(x,y,ZT+D.ear+0.5),DN,58,'wsh');
+  place(G.hinge2,screw(5,18,4),V(x,y,ZT+D.ear+1),DN,80,'m5b'); });
+for(const a of [Math.PI,Math.PI+1.1]){ const d=V(-Math.cos(a),-Math.sin(a),0), r=D.shaftR+5; place(G.hinge2,screw(6,6,0.01),V(r*Math.cos(a),r*Math.sin(a),ZTOP-3.5),d,42,'set'); }
+// the bearing's 2 set screws, in the inner ring, pointing at the pin
+for(const a of [Math.PI,Math.PI+1.1]){ const d=V(-Math.cos(a),-Math.sin(a),0), r=D.shaftR+5; place(G.hinge,screw(6,6,0.01),V(r*Math.cos(a),r*Math.sin(a),zI+3.5),d,42,'set'); }
+// collar clamp screw, across the slit (comes with the collar)
+place(turnCol,screw(6,22,5),V(-11,-14.5,zC+COLW/2),V(1,0,0),45,'clamp');
+// 2 M6 x 16 flat heads: countersunk in the plate top, DOWN through the plate into the collar's tapped face holes
+for(const x of [14.73,-14.73]) place(turnPlate,screw(6,16,0,COL.bolt,true),V(x,0,zI-3.3),DN,60,'m6c');
+// 4 aluminum standoffs 10 OD x 15 between the plates, M5 x 40 up from below, fender washer + nylock on top of the steering plate
+const STAND=[]; D.fslots.forEach(([u,v])=>{ const so=ring(5,2.6,STD,COL.rail,sx*u,v,zK+D.blackT+STD/2,24); so.userData.info='standoff'; turnBlack.add(so); STAND.push(so);
+  place(turnBlack,screw(5,40,3.5),V(sx*u,v,zK-0.1),UP,60,'m5');
+  place(turnPlate,washO(20,5.3,1.2),V(sx*u,v,zP+D.plateT+0.6),DN,28,'m5n'); place(turnPlate,nutO(5,5),V(sx*u,v,zP+D.plateT+3.7),DN,46,'m5n'); });
+// heim: 5/16 x 1-1/2 bolt down through the heim, an 8 mm spacer and the arm hole; nylock under the plate
+place(armF,screw(D.heimBore,38.1,5.4),V(0,0,zt+D.heimT/2+0.1),DN,55,'heim'); place(armF,washO(16,8.2,8),V(0,0,zP+D.plateT+4),V(0,-1,0),38,'hspc',true); place(armF,nutO(D.heimBore,7),V(0,0,zP-3.5),UP,40,'heim');
+// 1/4-20 x 1-1/2 bolt down through the steering plate and the actuator rod end, nylock under it
+place(actF,screw(6.35,38.1,4.5),V(0,0,zP+D.plateT+0.1),DN,55,'act'); place(actF,nutO(6.35,6),V(0,0,zP-24),UP,40,'act');
+const SLABS={tnut:'<b>M5 T-nuts</b> x8',slv:'<b>Sleeves 12x5.2x10</b> x8',wsh:'<b>M5 washers</b> x8',m5b:'<b>M5 x 18</b> x8',set:'<b>Set screws</b> x4 (with bearings)',
+  clamp:'<b>Clamp screw</b> (with collar)',m6c:'<b>M6 x 16 flat head</b> x2',m5:'<b>M5 x 40</b> x4',m5n:'<b>Fender washer + nylock</b> x4',heim:'<b>5/16 x 1-1/2 + nylock</b>',hspc:'<b>8 mm spacer</b>',act:'<b>1/4-20 x 1-1/2 + nylock</b>'};
+const SST={tnut:'cart',slv:'notyet',wsh:'cart',m5b:'cart',set:'cart',clamp:'cart',m6c:'cart',m5:'cart',m5n:'cart',heim:'cart',hspc:'cart',act:'cart'};
+const slabs=Object.entries(SLABS).map(([g,h])=>{ const d=document.createElement('div'); d.className='slab '+(SST[g]||''); d.innerHTML=h; document.getElementById('labs').appendChild(d); return {g,d,f:FAST.filter(f=>f.grp===g)}; });
+// dashed pin axis
+const axG=new THREE.BufferGeometry().setFromPoints([V(0,0,260),V(0,0,-420)]); const ax=new THREE.Line(axG,new THREE.LineDashedMaterial({color:0x1f5fb3,dashSize:12,gapSize:9})); ax.computeLineDistances(); scene.add(ax);
+// apart offsets (z), top to bottom
+const APART={rails:200,hinge2:300,hinge:110,pin:430,plate:-60,collar:-120,black:-210};
+const LABS=[['hinge2','1','Top bearing (NEW)','UCF204-12, bolted ON TOP of the 2 rails',1,'notyet','CART CHANGE: eBay qty 2 to 4 (+$19.98)'],['hinge','1','Bottom bearing','UCF204-12, bolted under the 2 rails',1,'cart','IN CART: eBay (same listing)'],['pin','2','Pin (LONGER)','3/4 x 4-17/64 in clevis pin + 3/4 washer, drops through both bearings',1,'notyet','CART CHANGE: Zoro G2463316 x2 + 2 washers, remove G3393796'],
+ ['plate','3','Steering plate','squeezed right under the bearing',1,'notyet','ON HOLD: cardboard test first, then laser cut'],['collar','4','Collar','Ruland, pinches the plate from below',1,'cart','IN CART: Zoro, 2 x $12.79'],['black','5','Black plate','on 4 standoffs, shock + wheel',1,'have','YOU HAVE IT. Standoffs IN CART: 10 mm + 5 mm stacked = 15 mm'],
+ ['tie','6','Tie rod','200 mm 5/16-24 rod, to the left wheel',-1,'cart','IN CART: 7.9 in (200 mm) rod $7.89 + 2 heims $9.99, Amazon'],['act','7','Actuator','Glideforce LACT4P + bracket, pushes the plate',-1,'cart','IN CART: Pololu, actuator $194.88 + bracket $24.07']];
+const labsEl=document.getElementById('labs'), svg=labsEl.querySelector('svg');
+LABS.forEach(l=>{ const d=document.createElement('div'); d.className='lab '+l[5]; d.innerHTML=`<b><i>${l[1]}</i>${l[2]}</b>${l[3]}<em>${l[6]}</em>`; labsEl.appendChild(d); l.splice(5,2); l.push(d); });
+const anchor={hinge:()=>V(D.sqF/2-6,-D.sqF/2+6,zE+6).add(G.hinge.position), hinge2:()=>V(D.sqF/2-6,-D.sqF/2+6,ZT+6).add(G.hinge2.position), pin:()=>V(0,-D.shaftR,ZTOP+WASH+3).add(G.pin.position), plate:()=>rotZ(V(50,-40,zP+3),turnPlate.rotation.z).add(G.plate.position),
+  collar:()=>V(0,-20,zC+7).add(G.collar.position), black:()=>rotZ(V(D.fbpU+26,-45,zK+3),turnBlack.rotation.z).add(G.black.position),
+  tie:()=>{ tie.updateMatrixWorld(); return tie.localToWorld(V(-125,0,0)); }, act:()=>act.position.clone().addScaledVector(ad,200).add(G.plate.position)};
+function rotZ(v,a){ return V(v.x*Math.cos(a)-v.y*Math.sin(a),v.x*Math.sin(a)+v.y*Math.cos(a),v.z); }
+const ease=e=>e<=0?0:e>=1?1:e*e*(3-2*e); const T=15; const phaseEl=document.getElementById('phase');
+let kNow=1, sK=0, sA=0, playing=false, tPlay=0;
+function phaseAt(u){ let k,a=0; if(u<1.5) k=1; else if(u<4.5) k=1-ease((u-1.5)/3); else if(u<11.5){ k=0; a=(30*Math.PI/180)*Math.sin(2*Math.PI*2*(u-4.5)/7); } else if(u<14) k=ease((u-11.5)/2.5); else k=1; return [k,a]; }
+function apply(k,a){ kNow=k; for(const g in APART) G[g].position.z=APART[g]*k;
+  turnPin.rotation.z=turnPlate.rotation.z=turnCol.rotation.z=turnBlack.rotation.z=a;
+  const ar=rotZ(armP,a), ac=rotZ(actP,a); tie.position.set(ar.x,ar.y,zt); tie.rotation.z=Math.atan2(-(leftEye.y-ar.y),-(leftEye.x-ar.x)); act.position.set(ac.x,ac.y,zP-6); armF.position.set(ar.x,ar.y,0); actF.position.set(ac.x,ac.y,0);
+  for(const f of FAST){ f.obj.position.copy(f.home).addScaledVector(f.off,k); f.ln.material.opacity=k; f.ln.visible=k>0.02; } }
+function state(t){ if(playing){ const [k,a]=phaseAt(((t%T)+T)%T); apply(k,a); kS.value=1-k; aS.value=Math.round(a*180/Math.PI); aV.textContent=aS.value+'°'; } else apply(1-sK,sA*Math.PI/180); }
+function placeLabels(){ const W=canvas.clientWidth,H=canvas.clientHeight; cam.updateMatrixWorld(); let lines=''; const used={'-1':[],'1':[]};
+  const its=LABS.map(l=>{ const p=anchor[l[0]]().project(cam); if(!showLab||cut||p.z>1){ l[5].style.transform='translate(-9999px,0)'; return null; } return {l,ax:(p.x+1)/2*W,ay:(1-p.y)/2*H}; }).filter(Boolean).sort((a,b)=>a.ay-b.ay);
+  for(const it of its){ const d=it.l[5], side=it.l[4], w=d.offsetWidth, h=d.offsetHeight; let x=side<0?Math.max(16,Math.min(it.ax-w-90,W*0.30-w)):Math.min(W-w-16,Math.max(it.ax+90,W*0.70));
+    let y=Math.max(64,Math.min(H-h-60,it.ay-h/2)); for(const b of used[side]) if(y<b+8) y=b+8; used[side].push(y+h);
+    d.style.transform=`translate(${x}px,${y}px)`; const ex=side<0?x+w:x, ey=y+h/2;
+    lines+=`<line x1="${ex}" y1="${ey}" x2="${it.ax}" y2="${it.ay}" stroke="#1f5fb3" stroke-width="2"/><circle cx="${it.ax}" cy="${it.ay}" r="5" fill="#1f5fb3" stroke="#fff" stroke-width="2"/>`; }
+  const rects=[...document.querySelectorAll('.lab,#top,#ctl,#info,#hint')].map(e=>e.getBoundingClientRect()); const hit=(a,b)=>a.l<b.right&&a.r>b.left&&a.t<b.bottom&&a.b>b.top; const _w=new THREE.Vector3();
+  for(const S of slabs){ if(kNow<0.25||!showBolt||cut){ S.d.style.transform='translate(-9999px,0)'; continue; } // assembled: small labels step aside so the bolts show in place
+    const f=S.f[0]; f.obj.getWorldPosition(_w); const p=_w.project(cam); if(p.z>1){ S.d.style.transform='translate(-9999px,0)'; continue; } const ax=(p.x+1)/2*W, ay=(1-p.y)/2*H, w=S.d.offsetWidth, h=S.d.offsetHeight; let ok=null;
+    for(const [dx,dy] of [[24,-h-14],[24,14],[-w-24,-h-14],[-w-24,14],[40,-h-40],[-w-40,-h-40],[40,40],[-w-40,40],[60,-h/2],[-w-60,-h/2],[24,-h-70],[-w-24,-h-70],[24,70],[-w-24,70]]){
+      const c={l:ax+dx,t:ay+dy,r:ax+dx+w,b:ay+dy+h}; if(c.l<8||c.r>W-8||c.t<56||c.b>H-50) continue; if(rects.some(r=>hit(c,r))) continue; ok=c; break; }
+    if(!ok){ S.d.style.transform='translate(-9999px,0)'; continue; } S.d.style.transform=`translate(${ok.l}px,${ok.t}px)`; rects.push({left:ok.l,right:ok.r,top:ok.t,bottom:ok.b});
+    const ex=Math.max(ok.l,Math.min(ok.r,ax)), ey=ay<ok.t?ok.t:(ay>ok.b?ok.b:(ok.t+ok.b)/2); lines+=`<line x1="${ex}" y1="${ey}" x2="${ax}" y2="${ay}" stroke="#6b7280" stroke-width="1.2"/><circle cx="${ax}" cy="${ay}" r="3" fill="#6b7280"/>`; }
+  svg.innerHTML=lines; placeCut(); }
+const ctl=new OrbitControls(cam,renderer.domElement); ctl.enableDamping=true; ctl.dampingFactor=0.08; ctl.minDistance=250; ctl.maxDistance=4000;
+const HOME={p:null,t:V(10,0,-80)}; { const az=-0.95, el=0.32, r=1400; HOME.p=V(HOME.t.x+r*Math.cos(az)*Math.cos(el),HOME.t.y+r*Math.sin(az)*Math.cos(el),HOME.t.z+r*Math.sin(el)); }
+const resetView=()=>{ cam.position.copy(HOME.p); ctl.target.copy(HOME.t); ctl.update(); }; resetView();
+let showLab=true, showBolt=true;
+const kS=document.getElementById('kS'), aS=document.getElementById('aS'), aV=document.getElementById('aV'), playB=document.getElementById('play');
+const stopPlay=()=>{ if(playing){ playing=false; playB.textContent='▶ Play animation'; sK=+kS.value; sA=+aS.value; } };
+kS.oninput=()=>{ stopPlay(); sK=+kS.value; }; aS.oninput=()=>{ stopPlay(); sA=+aS.value; aV.textContent=sA+'°'; };
+playB.onclick=()=>{ playing=!playing; playB.textContent=playing?'❚❚ Stop animation':'▶ Play animation'; if(!playing){ sK=+kS.value; sA=+aS.value; } else tPlay=0; };
+document.getElementById('rv').onclick=resetView; document.getElementById('lb').onclick=()=>showLab=!showLab; document.getElementById('blb').onclick=()=>showBolt=!showBolt;
+// click a part or bolt: orange highlight + info card
+// [name, size, qty per corner, bolts to, where to buy, status]  status from PARTS-FRONT.md + the 11/16 Fable hold
+const AMZ=id=>`<a href="https://www.amazon.com/dp/${id}" target="_blank">Amazon ${id}</a>`;
+const INFO={rails:['2020 frame rails','20 x 20 mm, side rail + rail 64 mm in','2 + cross rail','the frame','you have them','HAVE'],
+ bearing:['UCF204-12 flange bearing (x2 per corner)','3/4 in bore, 86 mm square','2','one UNDER both rails, one ON TOP, 4 M5 x 18 each','<a href="https://www.ebay.com/itm/170523091215" target="_blank">eBay 170523091215</a> need 4 total (2 in cart, add 2 = +$19.98)','NOT IN A CART'],
+ pin:['Clevis pin 3/4 x 4-17/64 in + 3/4 USS washer','108.4 mm under the head','1','head + washer on the TOP bearing, runs down through both bearings, plate and collar; 4 set screws lock it','Zoro G2463316 $6.89 each (replaces G3393796) + 3/4 USS flat washer','NOT IN A CART'],
+ plate:['Steering plate','1/4 in (6.35 mm), laser cut','1','between bearing and collar; 2 M6 into the collar','laser shop (DXF needs the Fix A update)','NOT YET'],
+ collar:['Ruland face-mount collar FHT-MCL-12E-F','3/4 bore, 40 OD x 15 wide','1','clamps the pin under the plate','<a href="https://www.zoro.com/ruland-shaft-collar-mountable-fht-mcl-12e-f/i/G708673879" target="_blank">Zoro</a> $12.79 each','IN CART'],
+ black:['Your black plate + shock + wheel','on the robot now','1','4 M5 x 40 through standoffs','you have it','HAVE'],
+ standoff:['Aluminum standoff','10 OD x 15 long, M5 hole','4','between black plate and steering plate',AMZ('B0CQ8DHY93')+' 10 mm + '+AMZ('B0CQ2NSH2V')+' 5 mm, stacked','IN CART'],
+ tie:['Tie rod: 200 mm rod + 2 CF5 heims','5/16-24, 246 mm eye to eye','1 rod + 2 heims','arm holes in FRONT of the axle',AMZ('B0C9Y6S5CP')+' heims + '+AMZ('B0FRSM362Q')+' 200 mm rod','IN CART'],
+ act:['Glideforce LACT4P actuator','246-346 mm, 4 in stroke','1','right plate actuator hole','<a href="https://www.pololu.com/product/3645" target="_blank">Pololu 3645</a> $194.88 + bracket 2314 $24.07','IN CART'],
+ f_tnut:['M5 drop-in T-nut','for 2020 slot','8','rail bottom slots (bottom bearing) + top slots (top bearing)',AMZ('B0DMCS8KW4'),'IN CART'],
+ f_slv:['Step sleeve','12 OD x 5.2 ID x 10 long','8','inside the bearing bolt holes (both bearings)',AMZ('B0BYT4HFFZ')+' need 2 packs (1 in cart, add 1)','NOT IN A CART'],
+ f_wsh:['M5 flat washer','stainless','8','under each bearing bolt head',AMZ('B0DDH3QNH4'),'IN CART'],
+ f_m5b:['M5 x 18 socket cap screw','stainless','8','up into the bottom bearing T-nuts, down into the top bearing T-nuts',AMZ('B019ETH1CC'),'IN CART'],
+ f_set:['Bearing set screws','come with the UCF204','4','lock the pin to the inner ring','with the bearing','IN CART'],
+ f_clamp:['Collar clamp screw','comes with the collar','1','squeezes the collar on the pin','with the collar','IN CART'],
+ f_m6c:['M6 x 16 flat head','stainless, countersunk','2','down through the plate into the collar',AMZ('B09Y5PLLGD'),'IN CART'],
+ f_m5:['M5 x 40 socket cap screw','stainless','4','black plate, standoff, steering plate','Amazon M5 x 40 (in the cart)','IN CART'],
+ f_m5n:['M5 fender washer + nylock','15 OD washer','4 each','on top of the steering plate','washers Amazon B0DDH3QNH4 + nylocks Zoro G5355253 50 pk $1.99','IN CART'],
+ f_heim:['5/16 x 1-1/2 bolt + nylock','5/16-18','1','down through the heim and the arm hole (past ~19° outboard lock its head reaches the bearing flange corner)',AMZ('B0CJQ3PWF5'),'IN CART'],
+ f_hspc:['Heim spacer','8.2 ID x 16 OD x 8 long','1','under the heim, on the plate',AMZ('B0CBJGC6TK'),'IN CART'],
+ f_act:['1/4-20 x 1-1/2 bolt + nylock','1/4-20','1','plate + actuator rod end',AMZ('B081FB7D6M'),'IN CART']};
+const STC={BUYING:'#1f9d4c','IN CART':'#1f9d4c','ON HOLD':'#d62828','NOT YET':'#8a6d00','NOT IN A CART':'#d62828',HAVE:'#555'};
+G.rails.children.forEach(c=>{ if(!FAST.some(f=>f.obj===c)) c.userData.info='rails'; }); bearingG.userData.info='bearing'; bearing2G.userData.info='bearing'; turnPin.userData.info='pin'; turnPlate.userData.info='plate'; turnBlack.userData.info='black'; tie.userData.info='tie'; act.userData.info='act'; turnCol.userData.info='collar';
+FAST.forEach(f=>f.obj.userData.info='f_'+f.grp);
+const ray=new THREE.Raycaster(), infoEl=document.getElementById('info'); let sel=null; const ORANGE=new THREE.Color(0xe8730c);
+function walk(o,root,fn){ if(o!==root&&o.userData.info) return; fn(o); o.children.forEach(c=>walk(c,root,fn)); } // a part's own meshes only, not the bolts sitting on it
+function highlight(obj,on){ walk(obj,obj,o=>{ if(o.isMesh){ const ms=Array.isArray(o.material)?o.material:[o.material]; ms.forEach(m=>{ if(!m.emissive) return; if(on){ m.userData.e0=m.userData.e0??m.emissive.getHex(); m.emissive.copy(ORANGE); m.emissiveIntensity=0.55; } else if(m.userData.e0!==undefined){ m.emissive.setHex(m.userData.e0); m.emissiveIntensity=1; } }); } }); }
+function pick(cx,cy){ const r=canvas.getBoundingClientRect(); ray.setFromCamera(new THREE.Vector2((cx-r.left)/r.width*2-1,-(cy-r.top)/r.height*2+1),cam);
+  const hits=ray.intersectObjects(scene.children,true).filter(h=>h.object.isMesh&&h.object.visible); let o=null;
+  for(const h of hits){ let q=h.object; while(q&&!q.userData.info) q=q.parent; if(q){ o=q; break; } }
+  const key=o?.userData.info; const group=key&&key.startsWith('f_')?FAST.filter(f=>'f_'+f.grp===key).map(f=>f.obj):(o?[o]:[]);
+  if(sel) sel.forEach(x=>highlight(x,false)); sel=group.length?group:null; if(sel) sel.forEach(x=>highlight(x,true));
+  if(!key){ infoEl.style.display='none'; return; } const [n,sz,q,to,buy,st]=INFO[key]; infoEl.innerHTML=`<b>${n}</b><br>Size: ${sz}<br>Qty: ${q} per corner<br>Bolts to: ${to}<br>Buy: ${buy}<br><span style="display:inline-block;margin-top:4px;padding:1px 8px;border-radius:9px;color:#fff;font-weight:700;background:${STC[st]}">${st}</span>`; infoEl.style.display='block'; }
+let down=null; renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]); renderer.domElement.addEventListener('pointerup',e=>{ if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<5) pick(e.clientX,e.clientY); down=null; });
+function fit(){ const w=canvas.clientWidth,h=canvas.clientHeight; renderer.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix(); } addEventListener('resize',fit); fit();
+let prev=performance.now();
+window.__frame=tt=>{ state(tt??tPlay); ctl.update(); renderer.render(scene,cam); placeLabels(); return true; };
+// ---- cut in half: clip on the vertical plane through the pin (keep y <= 0), solid caps from back faces, turn/still colors ----
+renderer.localClippingEnabled=true; const CUTP=new THREE.Plane(V(0,-1,0),0); let cut=false; const SAVE=new Map(), CAPS=[];
+const TURN=new Set(['pin','plate']), STILL=new Set(['rails','bearing']); 
+function catOf(o){ if(o.userData.cat) return o.userData.cat; let q=o; while(q&&!q.userData.info) q=q.parent; const k=q?.userData.info; return k==='plate'?'plate':k==='collar'?'collar':(k==='f_m6c'||k==='f_set'||k==='f_clamp')?'tbolt':TURN.has(k)?'pin':STILL.has(k)?'still':k==='black'?'black':'other'; }
+const CUTCOL={pin:[0xe8730c,0xb4520a],collar:[0xf7a64c,0xd9832a],plate:[0xc24f00,0x8f3a00],tbolt:[0xffd23f,0xd9a800],inner:[0xf2b87a,0xd09050],still:[0x9a9ea4,0x6e7277],black:[0x2a2b2e,0x111214],other:[0xc3c6ca,0x8d9095]};
+const CL=[['set','Set screws lock the pin',-1],['colb','Plate squeezed: bearing above, collar below',1],['m6c','2 M6 flat heads: plate into collar',1],['pe','Pin ends ~2.4 mm above the collar bottom',-1]];
+CL.forEach(c=>{ const d=document.createElement('div'); d.className='clab'; d.textContent=c[1]; document.getElementById('labs').appendChild(d); c.push(d); });
+const CUTHIDE=()=>[tie,act,armF,actF,ghost,turnBlack.children[1]]; // cut view: only the stack (rail, bearing, pin, collar, plate, black plate)
+function setCut(on){ cut=on; document.getElementById('cutb').textContent=on?'Whole view':'Cut in half'; document.getElementById('legend').style.display=on?'block':'none';
+  if(on){ stopPlay(); sK=1; kS.value=1; const ms=[]; scene.traverse(o=>{ if(o.isMesh&&o.geometry&&!CAPS.includes(o)) ms.push(o); });
+    for(const o of ms){ const [fc,cc]=CUTCOL[catOf(o)]; SAVE.set(o,o.material); o.material=new THREE.MeshStandardMaterial({color:fc,metalness:0.3,roughness:0.5,side:THREE.FrontSide,clippingPlanes:[CUTP]});
+      const cap=o.isInstancedMesh?new THREE.InstancedMesh(o.geometry,new THREE.MeshBasicMaterial({color:cc,side:THREE.BackSide,clippingPlanes:[CUTP]}),o.count):new THREE.Mesh(o.geometry,new THREE.MeshBasicMaterial({color:cc,side:THREE.BackSide,clippingPlanes:[CUTP]}));
+      if(o.isInstancedMesh){ cap.instanceMatrix=o.instanceMatrix; } cap.raycast=()=>{}; o.add(cap); CAPS.push(cap); }
+    cam.position.set(0,330,-30); ctl.target.set(0,0,-30); ctl.update(); CUTHIDE().forEach(o=>o.visible=false); }
+  else { for(const [o,m] of SAVE) o.material=m; SAVE.clear(); CAPS.forEach(c=>c.parent.remove(c)); CAPS.length=0; CUTHIDE().forEach(o=>o.visible=true); CL.forEach(c=>c[3].style.display='none'); resetView(); } }
+document.getElementById('cutb').onclick=()=>setCut(!cut);
+const _c=new THREE.Vector3();
+function placeCut(){ if(!cut) return; const W=canvas.clientWidth,H=canvas.clientHeight; let lines=''; const used={'-1':[],'1':[]};
+  const anc={set:()=>FAST.find(f=>f.grp==='set').obj.getWorldPosition(_c).clone(),colb:()=>turnPlate.localToWorld(V(-D.shaftR-6,0,zP+D.plateT/2)),
+    m6c:()=>FAST.find(f=>f.grp==='m6c').obj.localToWorld(V(0,0,-8)),pe:()=>turnPin.localToWorld(V(0,0,-PIN.L))};
+  for(const c of CL){ const p=anc[c[0]]().project(cam), d=c[3]; d.style.display='block'; const ax=(p.x+1)/2*W, ay=(1-p.y)/2*H, w=d.offsetWidth, h=d.offsetHeight;
+    let x=c[2]<0?24:W-w-24, y=Math.max(110,Math.min(H-h-90,ay-h/2)); for(const b of used[c[2]]) if(y<b+10) y=b+10; used[c[2]].push(y+h);
+    d.style.transform=`translate(${x}px,${y}px)`; const ex=c[2]<0?x+w:x; lines+=`<line x1="${ex}" y1="${y+h/2}" x2="${ax}" y2="${ay}" stroke="#e8730c" stroke-width="2"/><circle cx="${ax}" cy="${ay}" r="4.5" fill="#e8730c" stroke="#fff" stroke-width="1.5"/>`; }
+  svg.insertAdjacentHTML('beforeend',lines); }
+window.__cut=on=>{ setCut(on); window.__frame(); };
+window.__set=o=>{ if('k' in o){ sK=o.k; kS.value=o.k; } if('steer' in o){ sA=o.steer; aS.value=o.steer; aV.textContent=o.steer+'°'; } if(o.cam){ const [az,el,r]=o.cam; const t=ctl.target; cam.position.set(t.x+r*Math.cos(az)*Math.cos(el),t.y+r*Math.sin(az)*Math.cos(el),t.z+r*Math.sin(el)); } if(o.pick) pick(...o.pick); window.__frame(); };
+state(0); window.__ready=true;
+if(!REC) (function loop(){ requestAnimationFrame(loop); const now=performance.now(); if(playing) tPlay+=(now-prev)/1000; prev=now; state(tPlay); ctl.update(); renderer.render(scene,cam); placeLabels(); })();
+</script></body></html>

@@ -1,0 +1,182 @@
+{
+ "2020_side_rail_front_portion": {
+  "qty": 2,
+  "source": "have",
+  "note": "existing frame rail, front 350 mm shown"
+ },
+ "2020_cross_rail_265": {
+  "qty": 2,
+  "source": "have",
+  "note": "existing frame cross rail"
+ },
+ "2020_inboard_rail": {
+  "qty": 2,
+  "source": "buy",
+  "note": "2020 cut to 110.9 mm"
+ },
+ "2020_cross_piece": {
+  "qty": 2,
+  "source": "buy",
+  "note": "2020 cut to 44 mm"
+ },
+ "2020_L_bracket": {
+  "qty": 7,
+  "source": "buy",
+  "note": "20x20 corner bracket, 3 mm, simplified (no screw holes)"
+ },
+ "tnut_M6_dropin_2020": {
+  "qty": 8,
+  "source": "buy",
+  "note": "drop-in M6 for 2020 B-type 6 mm slot (simplified section)"
+ },
+ "step_sleeve_12x6.4x12": {
+  "qty": 8,
+  "source": "buy",
+  "note": "12 OD (11.7 modelled) / 6.4 ID / 12 long"
+ },
+ "washer_M6": {
+  "qty": 8,
+  "source": "buy",
+  "note": "M6 flat 18 OD"
+ },
+ "bolt_M6x30_SHCS": {
+  "qty": 8,
+  "source": "buy",
+  "note": "ISO 4762"
+ },
+ "ucf204-12_housing": {
+  "qty": 2,
+  "source": "buy",
+  "note": "catalog dims, caliper on arrival"
+ },
+ "ucf204_zerk": {
+  "qty": 2,
+  "source": "buy",
+  "note": "comes with bearing"
+ },
+ "ucf204-12_insert": {
+  "qty": 2,
+  "source": "buy",
+  "note": "comes with bearing, 3/4 in bore"
+ },
+ "ucf204_set_screw": {
+  "qty": 4,
+  "source": "buy",
+  "note": "comes with bearing"
+ },
+ "shaft_3-4in": {
+  "qty": 2,
+  "source": "buy",
+  "note": "3/4 in x 49.4 mm"
+ },
+ "COLLAR_PLACEHOLDER_not_picked": {
+  "qty": 2,
+  "source": "placeholder",
+  "note": "3/4 bore, 44 flange, 16 tall; not chosen yet"
+ },
+ "collar_clamp_screw_PLACEHOLDER": {
+  "qty": 2,
+  "source": "placeholder",
+  "note": "comes with collar"
+ },
+ "collar_bolt_M5x12_flathead_PLACEHOLDER": {
+  "qty": 4,
+  "source": "placeholder",
+  "note": "size set when collar is picked"
+ },
+ "steering_plate_left": {
+  "qty": 1,
+  "source": "laser-cut",
+  "note": "1/4 in (6.35) aluminium"
+ },
+ "black_shock_plate": {
+  "qty": 2,
+  "source": "have",
+  "note": "56 x 100 x 6, 4 holes 41 x 65.5 (tape reading)"
+ },
+ "screw_M5x25_SHCS": {
+  "qty": 8,
+  "source": "buy",
+  "note": "ISO 4762"
+ },
+ "fender_washer_M5x20": {
+  "qty": 8,
+  "source": "have",
+  "note": "5.3 / 20 / 1.2"
+ },
+ "nylock_M5": {
+  "qty": 8,
+  "source": "have",
+  "note": "8 AF x 5"
+ },
+ "shock_module_envelope": {
+  "qty": 2,
+  "source": "have",
+  "note": "fit envelope only, not for manufacture"
+ },
+ "wheel_8in_hub_motor_envelope": {
+  "qty": 2,
+  "source": "have",
+  "note": "8 in tire, 56 wide, fit envelope only"
+ },
+ "bolt_5-16x1.25_hex": {
+  "qty": 2,
+  "source": "buy",
+  "note": "5/16 x 1-1/4"
+ },
+ "nylock_5-16": {
+  "qty": 2,
+  "source": "buy",
+  "note": "1/2 AF"
+ },
+ "steering_plate_right": {
+  "qty": 1,
+  "source": "laser-cut",
+  "note": "1/4 in (6.35) aluminium"
+ },
+ "bolt_1-4x1.5_hex": {
+  "qty": 1,
+  "source": "buy",
+  "note": "1/4 x 1-1/2 (was 1-1/4, too short)"
+ },
+ "nylock_1-4": {
+  "qty": 1,
+  "source": "buy",
+  "note": "7/16 AF"
+ },
+ "2020_actuator_stub": {
+  "qty": 1,
+  "source": "buy",
+  "note": "2020 cut to 110 mm"
+ },
+ "actuator_rear_pin_bracket_PLACEHOLDER": {
+  "qty": 1,
+  "source": "placeholder",
+  "note": "stands in for the LA-LD bracket, vertical pin"
+ },
+ "pin_6.35x40": {
+  "qty": 1,
+  "source": "have",
+  "note": "comes with LA-LD bracket"
+ },
+ "heim_CF5_5-16-24_RH": {
+  "qty": 2,
+  "source": "have",
+  "note": "CF5 5/16 bore, 5/16-24 RH female"
+ },
+ "tie_rod_5-16-24": {
+  "qty": 1,
+  "source": "have",
+  "note": "cut the 200 mm rod to 146 mm"
+ },
+ "actuator_LACT4P_body": {
+  "qty": 1,
+  "source": "have",
+  "note": "Glideforce LACT4P-12V-10, simplified from the drawing"
+ },
+ "actuator_LACT4P_rod": {
+  "qty": 1,
+  "source": "have",
+  "note": "shown at 269.0 mm pin to pin"
+ }
+}

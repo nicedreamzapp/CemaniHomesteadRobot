@@ -1,3 +1,5 @@
+> **Old design (11/11), not being built.** The current front steering parts and order status are in [steering-v3/PARTS-ORDERED.md](../../../steering-v3/PARTS-ORDERED.md).
+
 # Front steering parts, no cutting and no welding (2026-11-11)
 
 | # | Part | Link | Price |
