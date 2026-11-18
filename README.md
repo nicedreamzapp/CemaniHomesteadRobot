@@ -384,6 +384,10 @@ Cemani is getting real steering on the front wheels to stop the shudder skid ste
 
 ### Building Next
 - [ ] **Rebuild in progress:** 2020 frame v3 is built; front steering v3 parts are ordered (see above). Plan history: [docs/rebuild-2026](docs/rebuild-2026/README.md), current frame: [frame v3](docs/rebuild-2026/frame-v3/README.md)
+
+  ![4-wheel steering](docs/rebuild-2026/frame-v3/assembly/steering-4ws.gif)
+
+  [Interactive build](https://nicedreamzapp.github.io/CemaniHomesteadRobot/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real), [frame v3](docs/rebuild-2026/frame-v3/README.md). Plan, measurements and parts: [docs/rebuild-2026](docs/rebuild-2026/README.md), latest frame: [frame v2](docs/rebuild-2026/frame-v2/README.md)
 - [ ] IMU upgrade (BNO085 - accelerometer + gyroscope)
 - [ ] Intel RealSense D455 depth camera
 - [ ] Auto-docking charging station

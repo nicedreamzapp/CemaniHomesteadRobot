@@ -19,6 +19,8 @@ Front axle first to test every part, then an identical rear axle for 4-wheel ste
 
 ## October 2026 plan (old, kept for history)
 
+> **Update, November 16:** the steering is now **4-wheel steering** with a UCF204 flange bearing on every corner, replacing the lazy susan plan below. Design, interactive build and parts: [frame v3](frame-v3/README.md).
+
 > **Update, October 25:** [frame v2](frame-v2/README.md) replaces the frame below. It's stiffer (cross rails at the wheel mounts, 8 uprights, a gusset at every joint, a one-piece top plate), the batteries sit low in the middle, and every board has a set spot. The lazy susan steering plan below was later replaced by front steering v3 (above).
 
 Cemani sat for about five months after a wheel came off. The rebuild fixes the two things that bothered me most when it drove: the shudder in turns, and how easily a tall robot on a short footprint could tip.

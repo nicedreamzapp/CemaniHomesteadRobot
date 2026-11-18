@@ -1,21 +1,22 @@
-> **Old design (11/11), not being built.** The current front steering parts and order status are in [steering-v3/PARTS-ORDERED.md](../../../steering-v3/PARTS-ORDERED.md).
+> Order status for the front axle: [steering-v3/PARTS-ORDERED.md](../../../steering-v3/PARTS-ORDERED.md).
 
-# Front steering parts, no cutting and no welding (2026-11-11)
+# 4-wheel steering parts (2026-11-16)
 
-| # | Part | Link | Price |
-|---|---|---|---|
-| 1 | Eared bearing, 12 mm flange (KFL001), 2 pack | [Amazon](https://www.amazon.com/dp/B073KYRCXT) | $8.99 |
-| 2 | Flat washer bearing, 12 mm thrust (AXK1226) with washers, 4 sets | [Amazon](https://www.amazon.com/dp/B0G2QKWGRN) | $6.19 |
-| 3 | Heim joints, 5/16 x 5/16-24 right-hand, 2 pack | [Amazon](https://www.amazon.com/dp/B0C9Y6S5CP) | $9.99 |
-| 4 | Tie rod, 5/16-24 stainless, 7.9 in (no cutting), 2 pack | [Amazon](https://www.amazon.com/dp/B0FRSM7CQ9) | $9.19 |
-| 5 | M12 x 35 mm countersunk bolts | [Amazon](https://www.amazon.com/dp/B0CG1NJMSZ) | $9.29 |
-| 6 | M12 nylon lock nuts, 10 pack | [Amazon](https://www.amazon.com/dp/B0DM1FYDMY) | $6.64 |
-| 7 | Back corner spacers, aluminum 1.5 in long for M5, 10 pack | [Amazon](https://www.amazon.com/dp/B0CQ88SM18) | $7.59 |
-| 8 | M5 x 50 mm screws, 25 pack | [Amazon](https://www.amazon.com/dp/B0GCSPTVC4) | $8.69 |
-| 9a | M5 x 20 mm fender washers, 50 pack | [Amazon](https://www.amazon.com/dp/B0H4Q6ZB36) | $6.69 |
-| 9b | M5 nylon lock nuts, 100 pack | [Amazon](https://www.amazon.com/dp/B0D1468L8Y) | $5.29 |
-| 9 | Glideforce LACT4P-12V-10 actuator | [Pololu](https://www.pololu.com/product/3645) | $194.88 |
-| 10 | Glideforce light-duty mounting bracket | [Pololu](https://www.pololu.com/product/2314) | $24.07 |
-| 11 | 2 steering plates, laser cut from 1/4 in aluminum | `plates/` (DXF, mm) | quote pending |
+Buy the front first, one part at a time, measuring each before buying the parts that bolt to it. The back comes after.
 
-Plate screw holes are 8 x 13 mm slots: the black plate pattern reads 39-42 mm across and 63-68 mm along across four tape photos, and the slots cover that whole range. Use fender washers.
+- Front list, in buying order: [assembly/PARTS-FRONT.md](assembly/PARTS-FRONT.md)
+- Whole robot, all 4 corners: [assembly/PARTS-4WS.md](assembly/PARTS-4WS.md)
+- The [interactive build](https://nicedreamzapp.github.io/CemaniHomesteadRobot/docs/rebuild-2026/frame-v3/assembly/viewer-4ws-ucf204.html?real) shows each part on the robot, with how many and where to buy it.
+
+| # | Part (front) | Qty | Where | Price |
+|---|---|---|---|---|
+| 1 | UCF204-12 flange bearing, ¾ in bore, 2-pack | 1 pack | [eBay](https://www.ebay.com/itm/170523091215) | $19.98 |
+| 2 | Collar under each bearing | 2 | picked after the bearings are measured | |
+| 3 | ¾ in steel shaft, cut to about 2 in | 2 | after 1 and 2 are measured | |
+| 4 | Steering plates, ¼ in, laser cut | 2 | `plates/` | quote pending |
+| 5 | 2020: 2 inboard rails (115 mm), 2 cross pieces (108 mm), 1 actuator stub (110 mm), 7 L brackets | | | |
+| 6 | M6 and M5 bolts, T-nuts, step sleeves, lock nuts | see PARTS-FRONT.md | | |
+
+Already on hand: the black plates, shocks and wheels, the Glideforce actuator (Pololu 3645) and its bracket (Pololu 2314), 2 heim joints and the tie rod.
+
+Not used any more: the KFL001 eared bearing, the AXK1226 flat washer bearing, the M12 countersunk bolts, the 1½ in back spacers and the lazy susans.
