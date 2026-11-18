@@ -34,10 +34,10 @@ canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
 #ctl button{font-size:13px;padding:9px 10px;min-height:40px}
 #info{left:8px;right:8px;width:auto;bottom:178px;font-size:13px}
 .lab{width:auto;max-width:150px;padding:5px 9px;font-size:12px} .lab b{font-size:14px;margin:0} .lab i{width:22px;height:22px;line-height:22px;font-size:13px;margin-right:5px}
-.lab .d,.lab em{display:none} #legend{font-size:11px;top:114px;white-space:normal;width:calc(100% - 16px)}
+.lab .d,.lab em{display:none} .clab{width:auto;max-width:140px;font-size:11px;padding:5px 8px;line-height:1.25} #legend{font-size:11px;top:114px;white-space:normal;width:calc(100% - 16px)}
 }
 </style></head><body>
-<div id="top">Front steering corner &nbsp;·&nbsp; ordered parts, actuator hole moved (11/18)</div><div id="key"><span style="background:#e5f7ec;color:#1f9d4c;border:1px solid #1f9d4c">IN CART</span><span style="background:#eef0f2;color:#5b6068;border:1px solid #8a8f98">YOU HAVE IT</span><span style="background:#fff5d6;color:#a06c00;border:1px solid #c98a00">NOT IN CART YET</span></div>
+<div id="top">Front steering corner &nbsp;·&nbsp; ordered parts, actuator hole moved (11/18)</div><div id="key"><span style="background:#e5f7ec;color:#1f9d4c;border:1px solid #1f9d4c">ORDERED</span><span style="background:#eef0f2;color:#5b6068;border:1px solid #8a8f98">YOU HAVE IT</span><span style="background:#fff5d6;color:#a06c00;border:1px solid #c98a00">ON HOLD</span></div>
 <div id="ctl"><label>Apart <input id="kS" type="range" min="0" max="1" step="0.01" value="0"> Together</label>
 <label>Steer <input id="aS" type="range" min="-30" max="30" step="1" value="0"> <span id="aV">0°</span></label>
 <button id="play">▶ Play animation</button><button id="rv">Reset view</button><button id="lb">Labels on/off</button><button id="blb">Bolt labels on/off</button><button id="cutb">Cut in half</button></div>
@@ -266,9 +266,9 @@ const slabs=Object.entries(SLABS).map(([g,h])=>{ const d=document.createElement(
 const axG=new THREE.BufferGeometry().setFromPoints([V(0,0,260),V(0,0,-420)]); const ax=new THREE.Line(axG,new THREE.LineDashedMaterial({color:0x1f5fb3,dashSize:12,gapSize:9})); ax.computeLineDistances(); scene.add(ax);
 // apart offsets (z), top to bottom
 const APART={rails:200,hinge:110,pin:30,plate:-60,collar:-120,black:-210};
-const LABS=[['hinge','1','Bearing','UCF204-12, bolted under 2 rails',1,'cart','IN CART: eBay, 2 for $19.98'],['pin','2','Pin','3/4 x 2 in clevis pin, head on top',1,'cart','IN CART: Zoro, 2 x $4.75'],
- ['plate','3','Steering plate','squeezed right under the bearing',1,'notyet','ON HOLD: cardboard test first, then laser cut'],['collar','4','Collar','Ruland, pinches the plate from below',1,'cart','IN CART: Zoro, 2 x $12.79'],['black','5','Black plate','on 4 standoffs, shock + wheel',1,'have','YOU HAVE IT. Standoffs IN CART: 10 mm + 5 mm stacked = 15 mm'],
- ['tie','6','Tie rod','200 mm 5/16-24 rod, to the left wheel',-1,'cart','IN CART: 7.9 in (200 mm) rod $7.89 + 2 heims $9.99, Amazon'],['act','7','Actuator','Glideforce LACT4P + bracket, pushes the plate',-1,'cart','IN CART: Pololu, actuator $194.88 + bracket $24.07']];
+const LABS=[['hinge','1','Bearing','UCF204-12, bolted under 2 rails',1,'cart','ORDERED: eBay, 2 for $19.98'],['pin','2','Pin','3/4 x 2 in clevis pin, head on top',1,'cart','ORDERED: Zoro, 2 x $4.75'],
+ ['plate','3','Steering plate','squeezed right under the bearing',1,'notyet','ON HOLD: cardboard test first, then laser cut'],['collar','4','Collar','Ruland, pinches the plate from below',1,'cart','ORDERED: Zoro, 2 x $12.79'],['black','5','Black plate','on 4 standoffs, shock + wheel',1,'have','YOU HAVE IT. Standoffs ORDERED: 10 mm + 5 mm stacked = 15 mm'],
+ ['tie','6','Tie rod','200 mm 5/16-24 rod, to the left wheel',-1,'cart','ORDERED: 7.9 in (200 mm) rod $7.89 + 2 heims $9.99, Amazon'],['act','7','Actuator','Glideforce LACT4P + bracket, pushes the plate',-1,'cart','ORDERED: Pololu, actuator $194.88 + bracket $24.07']];
 const labsEl=document.getElementById('labs'), svg=labsEl.querySelector('svg');
 LABS.forEach(l=>{ const d=document.createElement('div'); d.className='lab '+l[5]; d.innerHTML=`<b><i>${l[1]}</i>${l[2]}</b><span class="d">${l[3]}</span><em>${l[6]}</em>`; labsEl.appendChild(d); l.splice(5,2); l.push(d); });
 const anchor={hinge:()=>V(D.sqF/2-6,-D.sqF/2+6,zE+6).add(G.hinge.position), pin:()=>V(0,-D.shaftR,-40).add(G.pin.position), plate:()=>rotZ(V(50,-40,zP+3),turnPlate.rotation.z).add(G.plate.position),
@@ -310,27 +310,27 @@ document.getElementById('rv').onclick=resetView; document.getElementById('lb').o
 // [name, size, qty per corner, bolts to, where to buy, status]  status from PARTS-FRONT.md + the 11/16 Fable hold
 const AMZ=id=>`<a href="https://www.amazon.com/dp/${id}" target="_blank">Amazon ${id}</a>`;
 const INFO={rails:['2020 frame rails','20 x 20 mm, side rail + rail 64 mm in','2 + cross rail','the frame','you have them','HAVE'],
- bearing:['UCF204-12 flange bearing','3/4 in bore, 86 mm square','1','under both rails, 4 M5 x 18','<a href="https://www.ebay.com/itm/170523091215" target="_blank">eBay 170523091215</a> $19.98 for 2','IN CART'],
- pin:['Clevis pin 3/4 x 2 in','50.8 mm under the head (fits 50.8 to 54.3)','1','head on the bearing inner ring, set screws lock it','<a href="https://www.zoro.com/zoro-select-standard-clevis-pin-34-in-dia-steel-1-pk-u397970750200/i/G3393796/" target="_blank">Zoro G3393796</a> $4.75 each','IN CART'],
+ bearing:['UCF204-12 flange bearing','3/4 in bore, 86 mm square','1','under both rails, 4 M5 x 18','<a href="https://www.ebay.com/itm/170523091215" target="_blank">eBay 170523091215</a> $19.98 for 2','ORDERED'],
+ pin:['Clevis pin 3/4 x 2 in','50.8 mm under the head (fits 50.8 to 54.3)','1','head on the bearing inner ring, set screws lock it','<a href="https://www.zoro.com/zoro-select-standard-clevis-pin-34-in-dia-steel-1-pk-u397970750200/i/G3393796/" target="_blank">Zoro G3393796</a> $4.75 each','ORDERED'],
  plate:['Steering plate','1/4 in (6.35 mm), laser cut','1','between bearing and collar; 2 M6 into the collar','laser shop (DXF needs the Fix A update)','NOT YET'],
- collar:['Ruland face-mount collar FHT-MCL-12E-F','3/4 bore, 40 OD x 15 wide','1','clamps the pin under the plate','<a href="https://www.zoro.com/ruland-shaft-collar-mountable-fht-mcl-12e-f/i/G708673879" target="_blank">Zoro</a> $12.79 each','IN CART'],
+ collar:['Ruland face-mount collar FHT-MCL-12E-F','3/4 bore, 40 OD x 15 wide','1','clamps the pin under the plate','<a href="https://www.zoro.com/ruland-shaft-collar-mountable-fht-mcl-12e-f/i/G708673879" target="_blank">Zoro</a> $12.79 each','ORDERED'],
  black:['Your black plate + shock + wheel','on the robot now','1','4 M5 x 40 through standoffs','you have it','HAVE'],
- standoff:['Aluminum standoff','10 OD x 15 long, M5 hole','4','between black plate and steering plate',AMZ('B0CQ8DHY93')+' 10 mm + '+AMZ('B0CQ2NSH2V')+' 5 mm, stacked','IN CART'],
- tie:['Tie rod: 200 mm rod + 2 CF5 heims','5/16-24, 246 mm eye to eye','1 rod + 2 heims','arm holes in FRONT of the axle',AMZ('B0C9Y6S5CP')+' heims + '+AMZ('B0FRSM362Q')+' 200 mm rod','IN CART'],
- act:['Glideforce LACT4P actuator','246-346 mm, 4 in stroke','1','right plate actuator hole','<a href="https://www.pololu.com/product/3645" target="_blank">Pololu 3645</a> $194.88 + bracket 2314 $24.07','IN CART'],
- f_tnut:['M5 drop-in T-nut','for 2020 slot','4','rail bottom slots',AMZ('B0DMCS8KW4'),'IN CART'],
- f_slv:['Step sleeve','12 OD x 5.2 ID x 10 long','4','inside the bearing bolt holes',AMZ('B0BYT4HFFZ'),'IN CART'],
- f_wsh:['M5 flat washer','stainless','4','under each bearing bolt head',AMZ('B0DDH3QNH4'),'IN CART'],
- f_m5b:['M5 x 18 socket cap screw','stainless','4','up through the bearing into the T-nuts',AMZ('B019ETH1CC'),'IN CART'],
- f_set:['Bearing set screws','come with the UCF204','2','lock the pin to the inner ring','with the bearing','IN CART'],
- f_clamp:['Collar clamp screw','comes with the collar','1','squeezes the collar on the pin','with the collar','IN CART'],
- f_m6c:['M6 x 16 flat head','stainless, countersunk','2','down through the plate into the collar',AMZ('B09Y5PLLGD'),'IN CART'],
- f_m5:['M5 x 40 socket cap screw','stainless','4','black plate, standoff, steering plate','Amazon M5 x 40 (in the cart)','IN CART'],
- f_m5n:['M5 fender washer + nylock','15 OD washer','4 each','on top of the steering plate','washers Amazon B0DDH3QNH4 + nylocks Zoro G5355253 50 pk $1.99','IN CART'],
- f_heim:['5/16 x 1-1/2 bolt + nylock','5/16-18','1','down through the heim and the arm hole (past ~19° outboard lock its head reaches the bearing flange corner)',AMZ('B0CJQ3PWF5'),'IN CART'],
- f_hspc:['Heim spacer','8.2 ID x 16 OD x 8 long','1','under the heim, on the plate',AMZ('B0CBJGC6TK'),'IN CART'],
- f_act:['1/4-20 x 1-1/2 bolt + nylock','1/4-20','1','plate + actuator rod end',AMZ('B081FB7D6M'),'IN CART']};
-const STC={BUYING:'#1f9d4c','IN CART':'#1f9d4c','ON HOLD':'#d62828','NOT YET':'#8a6d00','NOT IN A CART':'#d62828',HAVE:'#555'};
+ standoff:['Aluminum standoff','10 OD x 15 long, M5 hole','4','between black plate and steering plate',AMZ('B0CQ8DHY93')+' 10 mm + '+AMZ('B0CQ2NSH2V')+' 5 mm, stacked','ORDERED'],
+ tie:['Tie rod: 200 mm rod + 2 CF5 heims','5/16-24, 246 mm eye to eye','1 rod + 2 heims','arm holes in FRONT of the axle',AMZ('B0C9Y6S5CP')+' heims + '+AMZ('B0FRSM362Q')+' 200 mm rod','ORDERED'],
+ act:['Glideforce LACT4P actuator','246-346 mm, 4 in stroke','1','right plate actuator hole','<a href="https://www.pololu.com/product/3645" target="_blank">Pololu 3645</a> $194.88 + bracket 2314 $24.07','ORDERED'],
+ f_tnut:['M5 drop-in T-nut','for 2020 slot','4','rail bottom slots',AMZ('B0DMCS8KW4'),'ORDERED'],
+ f_slv:['Step sleeve','12 OD x 5.2 ID x 10 long','4','inside the bearing bolt holes',AMZ('B0BYT4HFFZ'),'ORDERED'],
+ f_wsh:['M5 flat washer','stainless','4','under each bearing bolt head',AMZ('B0DDH3QNH4'),'ORDERED'],
+ f_m5b:['M5 x 18 socket cap screw','stainless','4','up through the bearing into the T-nuts',AMZ('B019ETH1CC'),'ORDERED'],
+ f_set:['Bearing set screws','come with the UCF204','2','lock the pin to the inner ring','with the bearing','ORDERED'],
+ f_clamp:['Collar clamp screw','comes with the collar','1','squeezes the collar on the pin','with the collar','ORDERED'],
+ f_m6c:['M6 x 16 flat head','stainless, countersunk','2','down through the plate into the collar',AMZ('B09Y5PLLGD'),'ORDERED'],
+ f_m5:['M5 x 40 socket cap screw','stainless','4','black plate, standoff, steering plate','Amazon M5 x 40 (in the cart)','ORDERED'],
+ f_m5n:['M5 fender washer + nylock','15 OD washer','4 each','on top of the steering plate','washers Amazon B0DDH3QNH4 + nylocks Zoro G5355253 50 pk $1.99','ORDERED'],
+ f_heim:['5/16 x 1-1/2 bolt + nylock','5/16-18','1','down through the heim and the arm hole (past ~19° outboard lock its head reaches the bearing flange corner)',AMZ('B0CJQ3PWF5'),'ORDERED'],
+ f_hspc:['Heim spacer','8.2 ID x 16 OD x 8 long','1','under the heim, on the plate',AMZ('B0CBJGC6TK'),'ORDERED'],
+ f_act:['1/4-20 x 1-1/2 bolt + nylock','1/4-20','1','plate + actuator rod end',AMZ('B081FB7D6M'),'ORDERED']};
+const STC={BUYING:'#1f9d4c','IN CART':'#1f9d4c',ORDERED:'#1f9d4c','ON HOLD':'#d62828','NOT YET':'#8a6d00','NOT IN A CART':'#d62828',HAVE:'#555'};
 G.rails.children.forEach(c=>{ if(!FAST.some(f=>f.obj===c)) c.userData.info='rails'; }); bearingG.userData.info='bearing'; turnPin.userData.info='pin'; turnPlate.userData.info='plate'; turnBlack.userData.info='black'; tie.userData.info='tie'; act.userData.info='act'; turnCol.userData.info='collar';
 FAST.forEach(f=>f.obj.userData.info='f_'+f.grp);
 const ray=new THREE.Raycaster(), infoEl=document.getElementById('info'); let sel=null; const ORANGE=new THREE.Color(0xe8730c);
@@ -354,7 +354,7 @@ const CUTCOL={pin:[0xe8730c,0xb4520a],collar:[0xf7a64c,0xd9832a],plate:[0xc24f00
 const CL=[['set','Set screws lock the pin',-1],['colb','Plate squeezed: bearing above, collar below',1],['m6c','2 M6 flat heads: plate into collar',1],['pe','Pin ends 3.5 mm above the collar bottom',-1]];
 CL.forEach(c=>{ const d=document.createElement('div'); d.className='clab'; d.textContent=c[1]; document.getElementById('labs').appendChild(d); c.push(d); });
 const CUTHIDE=()=>[tie,act,armF,actF,ghost,turnBlack.children[1]]; // cut view: only the stack (rail, bearing, pin, collar, plate, black plate)
-function setCut(on){ cut=on; document.getElementById('cutb').textContent=on?'Whole view':'Cut in half'; document.getElementById('legend').style.display=on?'block':'none';
+function setCut(on){ cut=on; showLab=!on; document.getElementById('cutb').textContent=on?'Whole view':'Cut in half'; document.getElementById('legend').style.display=on?'block':'none';
   if(on){ stopPlay(); sK=1; kS.value=1; const ms=[]; scene.traverse(o=>{ if(o.isMesh&&o.geometry&&!CAPS.includes(o)) ms.push(o); });
     for(const o of ms){ const [fc,cc]=CUTCOL[catOf(o)]; SAVE.set(o,o.material); o.material=new THREE.MeshStandardMaterial({color:fc,metalness:0.3,roughness:0.5,side:THREE.FrontSide,clippingPlanes:[CUTP]});
       const cap=o.isInstancedMesh?new THREE.InstancedMesh(o.geometry,new THREE.MeshBasicMaterial({color:cc,side:THREE.BackSide,clippingPlanes:[CUTP]}),o.count):new THREE.Mesh(o.geometry,new THREE.MeshBasicMaterial({color:cc,side:THREE.BackSide,clippingPlanes:[CUTP]}));
@@ -363,11 +363,11 @@ function setCut(on){ cut=on; document.getElementById('cutb').textContent=on?'Who
   else { for(const [o,m] of SAVE) o.material=m; SAVE.clear(); CAPS.forEach(c=>c.parent.remove(c)); CAPS.length=0; CUTHIDE().forEach(o=>o.visible=true); CL.forEach(c=>c[3].style.display='none'); resetView(); } }
 document.getElementById('cutb').onclick=()=>setCut(!cut);
 const _c=new THREE.Vector3();
-function placeCut(){ if(!cut) return; const W=canvas.clientWidth,H=canvas.clientHeight; let lines=''; const used={'-1':[],'1':[]};
+function placeCut(){ if(!cut) return; if(!showLab){ for(const c of CL) c[3].style.display='none'; return; } const W=canvas.clientWidth,H=canvas.clientHeight; let lines=''; const used={'-1':[],'1':[]};
   const anc={set:()=>FAST.find(f=>f.grp==='set').obj.getWorldPosition(_c).clone(),colb:()=>turnPlate.localToWorld(V(-D.shaftR-6,0,zP+D.plateT/2)),
     m6c:()=>FAST.find(f=>f.grp==='m6c').obj.localToWorld(V(0,0,-8)),pe:()=>turnPin.localToWorld(V(0,0,-PIN.L))};
   for(const c of CL){ const p=anc[c[0]]().project(cam), d=c[3]; d.style.display='block'; const ax=(p.x+1)/2*W, ay=(1-p.y)/2*H, w=d.offsetWidth, h=d.offsetHeight;
-    let x=c[2]<0?24:W-w-24, y=Math.max(110,Math.min(H-h-90,ay-h/2)); for(const b of used[c[2]]) if(y<b+10) y=b+10; used[c[2]].push(y+h);
+    let x=c[2]<0?(PH?6:24):W-w-(PH?6:24), y=Math.max(PH?130:110,Math.min(H-h-90,ay-h/2)); for(const b of used[c[2]]) if(y<b+10) y=b+10; used[c[2]].push(y+h);
     d.style.transform=`translate(${x}px,${y}px)`; const ex=c[2]<0?x+w:x; lines+=`<line x1="${ex}" y1="${y+h/2}" x2="${ax}" y2="${ay}" stroke="#e8730c" stroke-width="2"/><circle cx="${ax}" cy="${ay}" r="4.5" fill="#e8730c" stroke="#fff" stroke-width="1.5"/>`; }
   svg.insertAdjacentHTML('beforeend',lines); }
 window.__cut=on=>{ setCut(on); window.__frame(); };
