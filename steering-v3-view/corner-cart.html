@@ -25,13 +25,24 @@ canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
 .slab.cart{background:#e5f7ec;border-color:#1f9d4c} .slab.have{background:#eef0f2;border-color:#8a8f98} .slab.notyet{background:#fff5d6;border-color:#c98a00}
 #key{position:absolute;top:58px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.96);padding:6px 14px;border-radius:9px;font-size:15px;z-index:6;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.12)}
 #key span{display:inline-block;padding:1px 10px;border-radius:8px;margin:0 4px;font-weight:700}
+@media (max-width:700px){
+#top{top:6px;font-size:13px;padding:6px 10px;white-space:normal;text-align:center;width:calc(100% - 16px);justify-content:center}
+#key{top:62px;font-size:11px;padding:4px 8px} #key span{padding:1px 6px;margin:0 2px}
+#hint{top:94px;font-size:11px;width:calc(100% - 16px);text-align:center}
+#ctl{left:6px;right:6px;bottom:8px;transform:none;flex-wrap:wrap;justify-content:center;gap:8px 10px;padding:8px;font-size:13px;white-space:normal}
+#ctl label{display:flex;align-items:center;gap:6px;flex:1 1 100%;justify-content:center} #ctl input{width:auto;flex:1;max-width:220px;height:28px}
+#ctl button{font-size:13px;padding:9px 10px;min-height:40px}
+#info{left:8px;right:8px;width:auto;bottom:178px;font-size:13px}
+.lab{width:auto;max-width:150px;padding:5px 9px;font-size:12px} .lab b{font-size:14px;margin:0} .lab i{width:22px;height:22px;line-height:22px;font-size:13px;margin-right:5px}
+.lab .d,.lab em{display:none} #legend{font-size:11px;top:114px;white-space:normal;width:calc(100% - 16px)}
+}
 </style></head><body>
 <div id="top">Front steering corner &nbsp;·&nbsp; ordered parts, actuator hole moved (11/18)</div><div id="key"><span style="background:#e5f7ec;color:#1f9d4c;border:1px solid #1f9d4c">IN CART</span><span style="background:#eef0f2;color:#5b6068;border:1px solid #8a8f98">YOU HAVE IT</span><span style="background:#fff5d6;color:#a06c00;border:1px solid #c98a00">NOT IN CART YET</span></div>
 <div id="ctl"><label>Apart <input id="kS" type="range" min="0" max="1" step="0.01" value="0"> Together</label>
 <label>Steer <input id="aS" type="range" min="-30" max="30" step="1" value="0"> <span id="aV">0°</span></label>
 <button id="play">▶ Play animation</button><button id="rv">Reset view</button><button id="lb">Labels on/off</button><button id="blb">Bolt labels on/off</button><button id="cutb">Cut in half</button></div>
 <div id="info"></div><div id="legend"><b>Turn together:</b><i style="background:#e8730c"></i>pin<i style="background:#c24f00"></i>plate<i style="background:#f7a64c"></i>collar<i style="background:#ffd23f"></i>screws<i style="background:#2a2b2e"></i>black plate &nbsp; <b>Never move:</b><i style="background:#9a9ea4"></i>frame + bearing housing</div>
-<div id="hint">Drag to turn · scroll or pinch to zoom · right-drag to move · click any part or bolt</div>
+<div id="hint">Drag to turn · scroll or pinch to zoom · right-drag to move · click any part or bolt</div><script>if(matchMedia("(max-width:700px)").matches)document.getElementById("hint").textContent="Drag to turn · pinch to zoom · tap any part"</script>
 <div id="labs"><svg></svg></div><div id="phase"></div>
 <canvas id="c"></canvas>
 <script src="steps-4ws.js"></script>
@@ -182,6 +193,7 @@ renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESF
 const scene=new THREE.Scene(); scene.background=new THREE.Color(0xe6e7ea);
 const pm=new THREE.PMREMGenerator(renderer); scene.environment=pm.fromScene(new RoomEnvironment(),0.04).texture; pm.dispose();
 scene.add(new THREE.HemisphereLight(0xeef2ff,0x8a857c,0.6)); const key=new THREE.DirectionalLight(0xfff4e6,2.0); key.position.set(600,-900,1400); scene.add(key);
+const PH=matchMedia("(max-width:700px)").matches;
 const cam=new THREE.PerspectiveCamera(30,1,1,20000); cam.up.set(0,0,1);
 // pivot (pin axis) at x=y=0; side rail outboard at +x, 2nd rail 64 mm inboard
 const sx=1, G={}; for(const k of ['rails','hinge','pin','plate','collar','black']){ G[k]=new THREE.Group(); scene.add(G[k]); }
@@ -258,7 +270,7 @@ const LABS=[['hinge','1','Bearing','UCF204-12, bolted under 2 rails',1,'cart','I
  ['plate','3','Steering plate','squeezed right under the bearing',1,'notyet','ON HOLD: cardboard test first, then laser cut'],['collar','4','Collar','Ruland, pinches the plate from below',1,'cart','IN CART: Zoro, 2 x $12.79'],['black','5','Black plate','on 4 standoffs, shock + wheel',1,'have','YOU HAVE IT. Standoffs IN CART: 10 mm + 5 mm stacked = 15 mm'],
  ['tie','6','Tie rod','200 mm 5/16-24 rod, to the left wheel',-1,'cart','IN CART: 7.9 in (200 mm) rod $7.89 + 2 heims $9.99, Amazon'],['act','7','Actuator','Glideforce LACT4P + bracket, pushes the plate',-1,'cart','IN CART: Pololu, actuator $194.88 + bracket $24.07']];
 const labsEl=document.getElementById('labs'), svg=labsEl.querySelector('svg');
-LABS.forEach(l=>{ const d=document.createElement('div'); d.className='lab '+l[5]; d.innerHTML=`<b><i>${l[1]}</i>${l[2]}</b>${l[3]}<em>${l[6]}</em>`; labsEl.appendChild(d); l.splice(5,2); l.push(d); });
+LABS.forEach(l=>{ const d=document.createElement('div'); d.className='lab '+l[5]; d.innerHTML=`<b><i>${l[1]}</i>${l[2]}</b><span class="d">${l[3]}</span><em>${l[6]}</em>`; labsEl.appendChild(d); l.splice(5,2); l.push(d); });
 const anchor={hinge:()=>V(D.sqF/2-6,-D.sqF/2+6,zE+6).add(G.hinge.position), pin:()=>V(0,-D.shaftR,-40).add(G.pin.position), plate:()=>rotZ(V(50,-40,zP+3),turnPlate.rotation.z).add(G.plate.position),
   collar:()=>V(0,-20,zC+7).add(G.collar.position), black:()=>rotZ(V(D.fbpU+26,-45,zK+3),turnBlack.rotation.z).add(G.black.position),
   tie:()=>{ tie.updateMatrixWorld(); return tie.localToWorld(V(-125,0,0)); }, act:()=>act.position.clone().addScaledVector(ad,200).add(G.plate.position)};
@@ -273,8 +285,8 @@ function apply(k,a){ kNow=k; for(const g in APART) G[g].position.z=APART[g]*k;
 function state(t){ if(playing){ const [k,a]=phaseAt(((t%T)+T)%T); apply(k,a); kS.value=1-k; aS.value=Math.round(a*180/Math.PI); aV.textContent=aS.value+'°'; } else apply(1-sK,sA*Math.PI/180); }
 function placeLabels(){ const W=canvas.clientWidth,H=canvas.clientHeight; cam.updateMatrixWorld(); let lines=''; const used={'-1':[],'1':[]};
   const its=LABS.map(l=>{ const p=anchor[l[0]]().project(cam); if(!showLab||cut||p.z>1){ l[5].style.transform='translate(-9999px,0)'; return null; } return {l,ax:(p.x+1)/2*W,ay:(1-p.y)/2*H}; }).filter(Boolean).sort((a,b)=>a.ay-b.ay);
-  for(const it of its){ const d=it.l[5], side=it.l[4], w=d.offsetWidth, h=d.offsetHeight; let x=side<0?Math.max(16,Math.min(it.ax-w-90,W*0.30-w)):Math.min(W-w-16,Math.max(it.ax+90,W*0.70));
-    let y=Math.max(64,Math.min(H-h-60,it.ay-h/2)); for(const b of used[side]) if(y<b+8) y=b+8; used[side].push(y+h);
+  for(const it of its){ const d=it.l[5], side=it.l[4], w=d.offsetWidth, h=d.offsetHeight; let x=side<0?Math.max(PH?6:16,Math.min(it.ax-w-(PH?30:90),W*0.30-w)):Math.min(W-w-(PH?6:16),Math.max(it.ax+(PH?30:90),W*0.70));
+    let y=Math.max(PH?120:64,Math.min(H-h-(PH?190:60),it.ay-h/2)); for(const b of used[side]) if(y<b+8) y=b+8; used[side].push(y+h);
     d.style.transform=`translate(${x}px,${y}px)`; const ex=side<0?x+w:x, ey=y+h/2;
     lines+=`<line x1="${ex}" y1="${ey}" x2="${it.ax}" y2="${it.ay}" stroke="#1f5fb3" stroke-width="2"/><circle cx="${it.ax}" cy="${it.ay}" r="5" fill="#1f5fb3" stroke="#fff" stroke-width="2"/>`; }
   const rects=[...document.querySelectorAll('.lab,#top,#ctl,#info,#hint')].map(e=>e.getBoundingClientRect()); const hit=(a,b)=>a.l<b.right&&a.r>b.left&&a.t<b.bottom&&a.b>b.top; const _w=new THREE.Vector3();
@@ -286,9 +298,9 @@ function placeLabels(){ const W=canvas.clientWidth,H=canvas.clientHeight; cam.up
     const ex=Math.max(ok.l,Math.min(ok.r,ax)), ey=ay<ok.t?ok.t:(ay>ok.b?ok.b:(ok.t+ok.b)/2); lines+=`<line x1="${ex}" y1="${ey}" x2="${ax}" y2="${ay}" stroke="#6b7280" stroke-width="1.2"/><circle cx="${ax}" cy="${ay}" r="3" fill="#6b7280"/>`; }
   svg.innerHTML=lines; placeCut(); }
 const ctl=new OrbitControls(cam,renderer.domElement); ctl.enableDamping=true; ctl.dampingFactor=0.08; ctl.minDistance=250; ctl.maxDistance=4000;
-const HOME={p:null,t:V(10,0,-80)}; { const az=-0.95, el=0.32, r=1400; HOME.p=V(HOME.t.x+r*Math.cos(az)*Math.cos(el),HOME.t.y+r*Math.sin(az)*Math.cos(el),HOME.t.z+r*Math.sin(el)); }
+const HOME={p:null,t:V(10,0,-80)}; { const az=-0.95, el=0.32, r=PH?2500:1400; HOME.p=V(HOME.t.x+r*Math.cos(az)*Math.cos(el),HOME.t.y+r*Math.sin(az)*Math.cos(el),HOME.t.z+r*Math.sin(el)); }
 const resetView=()=>{ cam.position.copy(HOME.p); ctl.target.copy(HOME.t); ctl.update(); }; resetView();
-let showLab=true, showBolt=true;
+let showLab=true, showBolt=!PH;
 const kS=document.getElementById('kS'), aS=document.getElementById('aS'), aV=document.getElementById('aV'), playB=document.getElementById('play');
 const stopPlay=()=>{ if(playing){ playing=false; playB.textContent='▶ Play animation'; sK=+kS.value; sA=+aS.value; } };
 kS.oninput=()=>{ stopPlay(); sK=+kS.value; }; aS.oninput=()=>{ stopPlay(); sA=+aS.value; aV.textContent=sA+'°'; };
