@@ -28,7 +28,7 @@ A 1kW, four-hub-motor tank robot for a homestead, with its own firmware, a WebSo
 
 ---
 
-![Robot Diagram](docs/robot-diagram.png)
+![Cemani plan: 4-wheel steering and the reBot arm](arm-rebot/renders/cemani-4ws-arm-iso.jpg)
 
 ---
 
