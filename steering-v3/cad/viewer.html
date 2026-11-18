@@ -1,0 +1,102 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Cemani front steering CAD</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box} html,body{margin:0;height:100%;background:#0f1115;color:#e6e8ec;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+#side{position:fixed;top:12px;left:12px;bottom:12px;width:310px;background:rgba(22,25,31,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.08);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+#side h1{font-size:15px;margin:14px 14px 2px;font-weight:650} #side .sub{margin:0 14px 10px;color:#9aa1ad;font-size:11.5px}
+.bar{display:flex;gap:6px;flex-wrap:wrap;margin:0 14px 10px}
+.pill{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#dfe3ea;border-radius:999px;padding:4px 10px;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.pill:hover{background:rgba(255,255,255,.12)} .pill.on{background:#3b6fd8;border-color:#3b6fd8;color:#fff}
+#list{overflow:auto;flex:1;padding:0 8px 10px}
+.grp{color:#8d95a3;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;margin:10px 6px 4px}
+.it{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:8px;cursor:pointer}
+.it:hover{background:rgba(255,255,255,.06)} .it.sel{background:rgba(59,111,216,.28)}
+.sw{width:10px;height:10px;border-radius:3px;flex:none} .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .q{color:#9aa1ad;font-variant-numeric:tabular-nums}
+.tag{font-size:10px;border-radius:999px;padding:1px 6px;border:1px solid}
+.buy{color:#7fc4ff;border-color:#2c5a85}.have{color:#8de0a2;border-color:#2f6b40}.laser-cut{color:#ffcf7a;border-color:#7a5a20}.placeholder{color:#ff9a8a;border-color:#80392f}
+#info{position:fixed;right:12px;top:12px;width:300px;background:rgba(22,25,31,.82);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px 14px;display:none}
+#info b{font-size:14px} #info .k{color:#9aa1ad}
+#kin{position:fixed;right:12px;bottom:12px;background:rgba(22,25,31,.78);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px 12px;font-size:11.5px;color:#c5cad3}
+body.shot #side,body.shot #info,body.shot #kin{display:none}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script>
+<script src="viewer_data.js"></script>
+</head><body>
+<canvas id="c"></canvas>
+<div id="side"><h1>Cemani front steering</h1><div class="sub">STEP model, 2 front corners + front axle, straight ahead. Click a part to highlight, again to isolate.</div>
+<div class="bar"><span class="pill on" id="bAssy">Assembly</span><span class="pill" id="bExpl">Exploded right corner</span><span class="pill" id="bAll">Show all</span></div>
+<div id="list"></div></div>
+<div id="info"></div>
+<div id="kin"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const QS=new URLSearchParams(location.search); if(QS.has('shot')) document.body.classList.add('shot');
+THREE.Object3D.DEFAULT_UP.set(0,0,1);
+const cv=document.getElementById('c'), R=new THREE.WebGLRenderer({canvas:cv,antialias:true,preserveDrawingBuffer:true});
+R.setPixelRatio(QS.has('shot')?1:devicePixelRatio); R.toneMapping=THREE.ACESFilmicToneMapping; R.outputColorSpace=THREE.SRGBColorSpace;
+const S=new THREE.Scene(); S.background=new THREE.Color(0x1a1d23);
+const pm=new THREE.PMREMGenerator(R); S.environment=pm.fromScene(new RoomEnvironment(),0.04).texture; S.environmentIntensity=0.45;
+S.add(new THREE.HemisphereLight(0xffffff,0x333844,0.9)); const dl=new THREE.DirectionalLight(0xffffff,1.6); dl.position.set(400,-600,900); S.add(dl);
+const cam=new THREE.PerspectiveCamera(30,1,1,20000); cam.up.set(0,0,1); const ctl=new OrbitControls(cam,cv); ctl.enableDamping=true;
+const grid=new THREE.GridHelper(1200,24,0x3a404c,0x2a2f38); grid.rotation.x=Math.PI/2; grid.position.z=-229; S.add(grid);
+const P=window.CAD.parts; const b64=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer;};
+const typeOf=n=>{ // node name -> part type key in parts_list
+  const keys=Object.keys(P).sort((a,b)=>b.length-a.length); const low=n.toLowerCase();
+  const map=[['inboard_rail','2020_inboard_rail'],['cross_piece','2020_cross_piece'],['side_rail','2020_side_rail_front_portion'],['cross_rail','2020_cross_rail_265'],['l_bracket','2020_L_bracket'],['actuator_stub_2020','2020_actuator_stub'],
+   ['tnut','tnut_M6_dropin_2020'],['step_sleeve','step_sleeve_12x6.4x12'],['washer_m6','washer_M6'],['bolt_m6','bolt_M6x30_SHCS'],['housing','ucf204-12_housing'],['zerk','ucf204_zerk'],['insert','ucf204-12_insert'],['set_screw','ucf204_set_screw'],
+   ['shaft','shaft_3-4in'],['collar_placeholder','COLLAR_PLACEHOLDER_not_picked'],['clamp_screw','collar_clamp_screw_PLACEHOLDER'],['collar_bolt','collar_bolt_M5x12_flathead_PLACEHOLDER'],['steering_plate_right','steering_plate_right'],['steering_plate_left','steering_plate_left'],
+   ['black_shock','black_shock_plate'],['screw_m5','screw_M5x25_SHCS'],['fender','fender_washer_M5x20'],['nylock_m5','nylock_M5'],['shock_module','shock_module_envelope'],['wheel','wheel_8in_hub_motor_envelope'],['heim_bolt','bolt_5-16x1.25_hex'],['heim_nylock','nylock_5-16'],
+   ['actuator_bolt','bolt_1-4x1.5_hex'],['actuator_nylock','nylock_1-4'],['heim_cf5','heim_CF5_5-16-24_RH'],['tie_rod','tie_rod_5-16-24'],['lact4p_body','actuator_LACT4P_body'],['lact4p_rod','actuator_LACT4P_rod'],['rear_pin_bracket','actuator_rear_pin_bracket_PLACEHOLDER'],['rear_pin_6','pin_6.35x40']];
+  for(const [k,t] of map) if(low.includes(k)) return t; return n; };
+const GROUP={'2020_':'Frame (2020)','tnut':'Bearing mount','step_':'Bearing mount','washer_M6':'Bearing mount','bolt_M6':'Bearing mount','ucf':'UCF204-12 bearing','shaft':'Turning stack','COLLAR':'Turning stack','collar':'Turning stack','steering':'Turning stack','black':'Black plate + wheel','screw_M5':'Black plate + wheel','fender':'Black plate + wheel','nylock_M5':'Black plate + wheel','shock':'Black plate + wheel','wheel':'Black plate + wheel','heim':'Tie rod','tie':'Tie rod','bolt_5':'Tie rod','nylock_5':'Tie rod','actuator':'Actuator','bolt_1':'Actuator','nylock_1':'Actuator','pin_':'Actuator'};
+const grpOf=t=>{ for(const k in GROUP) if(t.startsWith(k)) return GROUP[k]; return 'Other'; };
+let root=null, meshes=[], sel=null, iso=false;
+const loader=new GLTFLoader();
+function load(key){ return new Promise(res=>loader.parse(b64(window.CAD[key]),'',g=>{ if(root) S.remove(root); root=g.scene; S.add(root); meshes=[];
+  root.traverse(o=>{ if(o.isMesh){ o.geometry=o.geometry.index?o.geometry.toNonIndexed():o.geometry; o.geometry.computeVertexNormals(); const n=(o.name||o.parent.name); o.userData.type=typeOf(n); o.userData.pname=n; const hx=window.CAD.colors[n]; const c=hx?new THREE.Color().setStyle(hx,THREE.SRGBColorSpace):new THREE.Color(0x999999);
+    if(o.geometry.attributes.color) o.geometry.deleteAttribute('color');
+    o.material=new THREE.MeshStandardMaterial({color:c,metalness:0.35,roughness:0.5,side:THREE.DoubleSide}); o.userData.base=c.clone(); meshes.push(o);} });
+  buildList(); res(); })); }
+function bboxOf(t){ const b=new THREE.Box3(); meshes.filter(m=>m.userData.type===t).slice(0,1).forEach(m=>b.expandByObject(m)); const s=b.getSize(new THREE.Vector3()); return `${s.x.toFixed(1)} x ${s.y.toFixed(1)} x ${s.z.toFixed(1)} mm`; }
+function buildList(){ const L=document.getElementById('list'); L.innerHTML=''; const types=[...new Set(meshes.map(m=>m.userData.type))];
+  const groups={}; types.forEach(t=>(groups[grpOf(t)]=groups[grpOf(t)]||[]).push(t));
+  for(const g of Object.keys(groups)){ const h=document.createElement('div'); h.className='grp'; h.textContent=g; L.appendChild(h);
+    for(const t of groups[g]){ const m=meshes.find(m=>m.userData.type===t), info=P[t]||{}, n=meshes.filter(x=>x.userData.type===t).length;
+      const d=document.createElement('div'); d.className='it'; d.dataset.t=t; d.innerHTML=`<span class="sw" style="background:#${m.userData.base.getHexString()}"></span><span class="nm">${t}</span><span class="tag ${info.source||''}">${info.source||''}</span><span class="q">x${n}</span>`;
+      d.onclick=()=>pick(t); L.appendChild(d); } } }
+function paint(){ meshes.forEach(m=>{ const on=!sel||m.userData.type===sel; m.visible=!(iso&&!on); m.material.transparent=!on; m.material.opacity=on?1:0.12; m.material.depthWrite=on;
+  m.material.emissive=new THREE.Color(sel&&on?0x1e3d7a:0x000000); });
+  document.querySelectorAll('.it').forEach(d=>d.classList.toggle('sel',d.dataset.t===sel));
+  const I=document.getElementById('info'); if(!sel){ I.style.display='none'; return; } const info=P[sel]||{}, n=meshes.filter(x=>x.userData.type===sel).length;
+  I.style.display='block'; I.innerHTML=`<b>${sel}</b><br><span class="k">In view:</span> ${n} &nbsp; <span class="k">Total qty:</span> ${info.qty??'?'}<br><span class="k">Source:</span> <span class="tag ${info.source}">${info.source||''}</span><br><span class="k">Size (bbox):</span> ${bboxOf(sel)}<br><span class="k">Note:</span> ${info.note||''}<br><span class="k">STEP:</span> parts/${sel}.step<br><span class="pill" id="isoB">${iso?'Show context':'Isolate'}</span>`;
+  document.getElementById('isoB').onclick=()=>{ iso=!iso; paint(); }; }
+function pick(t){ if(sel===t){ iso=!iso; } else { sel=t; iso=false; } paint(); }
+cv.addEventListener('dblclick',e=>{ const r=cv.getBoundingClientRect(), p=new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+  const rc=new THREE.Raycaster(); rc.setFromCamera(p,cam); const h=rc.intersectObjects(meshes.filter(m=>m.visible&&m.material.opacity>0.5)); if(h.length) pick(h[0].object.userData.type); });
+document.getElementById('bAll').onclick=()=>{ sel=null; iso=false; paint(); };
+const views={iso:[[-700,1100,520],[0,140,-60]],front:[[0,1600,-60],[0,140,-60]],top:[[0,140,1700],[0,140,-60]],expl:[[760,820,140],[110,228,-140]],corner:[[480,520,120],[110,228,-60]]};
+function setView(v){ const [p,t]=views[v]; cam.position.set(...p); ctl.target.set(...t); if(v==='top') cam.up.set(0,1,0); else cam.up.set(0,0,1); ctl.update(); }
+document.getElementById('bAssy').onclick=async()=>{ await load('assy'); grid.visible=true; sel=null; paint(); setView('iso'); tog('bAssy'); };
+document.getElementById('bExpl').onclick=async()=>{ await load('expl'); grid.visible=false; sel=null; paint(); setView('expl'); tog('bExpl'); };
+const tog=id=>['bAssy','bExpl'].forEach(x=>document.getElementById(x).classList.toggle('on',x===id));
+const k=window.CAD.kin; document.getElementById('kin').innerHTML=`Pin-to-pin: <b>${k.straight.stroke.toFixed(1)}</b> straight, <b>${k['-30'].stroke.toFixed(1)}</b> / <b>${k['+30'].stroke.toFixed(1)}</b> at right wheel -30 / +30 (left ${k['-30'].aL.toFixed(1)} / ${k['+30'].aL.toFixed(1)} deg)`;
+function fit(){ const w=innerWidth,h=innerHeight; R.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix(); } addEventListener('resize',fit); fit();
+await load(QS.get('glb')==='expl'?'expl':'assy'); grid.visible=QS.get('glb')!=='expl'; paint(); setView(QS.get('view')||(QS.get('glb')==='expl'?'expl':'iso')); if(QS.get('glb')==='expl') tog('bExpl');
+(function loop(){ requestAnimationFrame(loop); ctl.update(); R.render(S,cam); })();
+
+const PT=QS.get('part'), MODE=QS.get('mode');
+if(PT){ const all=meshes.filter(m=>m.userData.type===PT); const pref=all.find(m=>m.userData.pname.startsWith('R_'))||all[0];
+  const box=new THREE.Box3();
+  if(MODE==='alone'){ S.background=new THREE.Color(0xf4f5f7); grid.visible=false; meshes.forEach(m=>m.visible=(m===pref)); box.expandByObject(pref); }
+  else { S.background=new THREE.Color(0xeef0f3); grid.visible=false; meshes.forEach(m=>{ const on=all.includes(m); m.material=new THREE.MeshStandardMaterial({color:on?0xff7a00:0x9aa0a8,emissive:on?0x552200:0,metalness:0.2,roughness:0.6,transparent:!on,opacity:on?1:0.28,depthWrite:on}); m.renderOrder=on?1:0; });
+    box.expandByObject(pref); const c=box.getCenter(new THREE.Vector3()); box.expandByPoint(c.clone().addScalar(170)); box.expandByPoint(c.clone().subScalar(170)); }
+  const c=box.getCenter(new THREE.Vector3()), r=box.getSize(new THREE.Vector3()).length()/2;
+  const dir=new THREE.Vector3(0.75,1.0,0.55).normalize(); cam.up.set(0,0,1); cam.position.copy(c).addScaledVector(dir,r/Math.sin(THREE.MathUtils.degToRad(15))*1.05); ctl.target.copy(c); ctl.update();
+  window.__count=all.length; }
+window.__ready=true;
+</script></body></html>

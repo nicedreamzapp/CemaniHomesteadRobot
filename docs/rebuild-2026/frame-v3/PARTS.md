@@ -1,3 +1,5 @@
+> Order status for the front axle: [steering-v3/PARTS-ORDERED.md](../../../steering-v3/PARTS-ORDERED.md).
+
 # 4-wheel steering parts (2026-11-16)
 
 Buy the front first, one part at a time, measuring each before buying the parts that bolt to it. The back comes after.

@@ -1,0 +1,192 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Cemani front corner: how the pivot works</title>
+<style>
+html,body{margin:0;height:100%;background:#14171d;color:#e8ecf2;font:15px -apple-system,Helvetica,Arial,sans-serif;overflow:hidden}
+#ui{position:absolute;left:16px;top:16px;width:340px;background:rgba(20,24,32,.92);border:1px solid #2c3442;border-radius:12px;padding:14px 16px;z-index:5}
+#ui h1{font-size:17px;margin:0 0 8px}
+#ui p{margin:6px 0;line-height:1.4;color:#c4cbd6}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+button{background:#273043;color:#e8ecf2;border:1px solid #3a465c;border-radius:8px;padding:8px 10px;font-size:14px;cursor:pointer}
+button.on{background:#e8913a;border-color:#e8913a;color:#111}
+input[type=range]{width:100%}
+#msg{margin-top:10px;padding:10px;border-radius:8px;background:#1d2533;min-height:44px;line-height:1.4}
+.key{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.lbl{background:rgba(10,12,16,.82);color:#fff;padding:3px 7px;border-radius:6px;font-size:12px;white-space:nowrap;border:1px solid #445;pointer-events:none}
+.lbl.turn{border-color:#e8913a}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script>
+</head><body>
+<div id="ui">
+  <h1>Front corner pivot (one wheel)</h1>
+  <p>Drag to spin the view, scroll to zoom.</p>
+  <div class="row">
+    <button id="b2" class="on">2 bearings (new)</button>
+    <button id="b1">1 bearing (old)</button>
+  </div>
+  <div class="row">
+    <button id="steer">▶ Steer left/right</button>
+    <button id="bump">Hit a bump</button>
+  </div>
+  <div class="row">
+    <button id="explode">Take apart</button>
+    <button id="xray">See inside</button>
+    <button id="labels" class="on">Labels</button>
+    <button id="wheel">Show wheel</button>
+  </div>
+  <label>Steering angle <span id="angv">0°</span></label>
+  <input id="ang" type="range" min="-30" max="30" value="0">
+  <div id="msg"></div>
+  <div class="key">
+    <span><span class="sw" style="background:#8f98a6"></span>frame (never moves)</span>
+    <span><span class="sw" style="background:#2f56c8"></span>bearing blocks (bolted, never move)</span>
+    <span><span class="sw" style="background:#e8913a"></span>parts that TURN together</span>
+  </div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// ---- units: mm. Y up. rail bottom face = y 0. pivot axis = Y axis.
+const W=innerWidth,H=innerHeight;
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(W,H);renderer.setPixelRatio(devicePixelRatio);document.body.appendChild(renderer.domElement);
+const lab=new CSS2DRenderer();lab.setSize(W,H);Object.assign(lab.domElement.style,{position:'absolute',top:0,left:0,pointerEvents:'none'});document.body.appendChild(lab.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x14171d);
+const cam=new THREE.PerspectiveCamera(38,W/H,1,5000);cam.position.set(170,50,210);
+const ctl=new OrbitControls(cam,renderer.domElement);ctl.target.set(0,-5,0);ctl.update();
+scene.add(new THREE.HemisphereLight(0xffffff,0x334,1.1));
+const dl=new THREE.DirectionalLight(0xffffff,1.6);dl.position.set(300,500,400);scene.add(dl);
+const dl2=new THREE.DirectionalLight(0xffffff,.5);dl2.position.set(-300,-100,-300);scene.add(dl2);
+const grid=new THREE.GridHelper(800,32,0x2a3140,0x20262f);grid.position.y=-285;scene.add(grid);
+
+const M=(c,o={})=>new THREE.MeshStandardMaterial({color:c,metalness:.35,roughness:.5,...o});
+const mFrame=M(0x8f98a6),mHouse=M(0x2f56c8,{transparent:true}),mTurn=M(0xe8913a),mSteel=M(0xd9dde3,{metalness:.7,roughness:.3});
+const mBlack=M(0x2a2d33),mTire=M(0x1b1c1f,{roughness:.9}),mHub=M(0xc9ccd2);
+const box=(w,h,d,m)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+const cyl=(r,h,m,seg=40)=>new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg),m);
+const tube=(ro,ri,h,m)=>{const s=new THREE.Shape();s.absarc(0,0,ro,0,Math.PI*2);const p=new THREE.Path();p.absarc(0,0,ri,0,Math.PI*2,true);s.holes.push(p);
+  const g=new THREE.ExtrudeGeometry(s,{depth:h,bevelEnabled:false,curveSegments:40});g.rotateX(-Math.PI/2);return new THREE.Mesh(g,m);};
+const labels=[];
+function label(obj,text,pos,turn=false){const d=document.createElement('div');d.className='lbl'+(turn?' turn':'');d.textContent=text;
+  const o=new CSS2DObject(d);o.position.copy(pos);obj.add(o);labels.push(o);return o;}
+
+// explode offsets per part (y shift when taken apart)
+const parts=[];function P(obj,ex){obj.userData.base=obj.position.clone();obj.userData.ex=ex;parts.push(obj);return obj;}
+
+// ---------- FRAME (static) ----------
+const frame=new THREE.Group();scene.add(frame);
+for(const z of[-32,32]){const r=box(260,20,20,mFrame);r.position.set(0,10,z);frame.add(r);}
+const cp=box(20,20,44,mFrame);cp.position.set(-110,10,0);frame.add(cp);
+label(frame,'frame rails',new THREE.Vector3(-90,30,-45));
+
+// ---------- bearing block builder ----------
+// housing: square flange 86 x 11 thick + round boss to 25.5 from mounting face. dir=-1 hangs down, +1 sits on top
+function bearing(mountY,dir,name){
+  const st=new THREE.Group();    // static housing
+  const fl=box(86,11,86,mHouse);fl.position.y=mountY+dir*5.5;st.add(fl);
+  const boss=cyl(30,14.5,mHouse);boss.position.y=mountY+dir*(11+7.25);st.add(boss);
+  for(const x of[-32,32])for(const z of[-32,32]){const b=cyl(4.5,6,mSteel,16);b.position.set(x,mountY+dir*(11+3),z);st.add(b);}
+  // turning centre: inner ring 31 long, from 2.3 to 33.3 off the mounting face
+  const ring=tube(16.5,9.6,31,mTurn);ring.position.y=dir>0?mountY+2.3:mountY-33.3;
+  const ss=[];for(const a of[0,Math.PI/2.4]){const s=cyl(2.5,9,mSteel,12);s.rotation.z=Math.PI/2;
+    const yy=dir>0?mountY+33.3-6:mountY-33.3+6;s.position.set(Math.cos(a)*19,yy,Math.sin(a)*19);s.rotation.y=-a;ss.push(s);}
+  return {st,ring,ss};
+}
+const bot=bearing(0,-1),top=bearing(20,1);
+frame.add(bot.st);frame.add(top.st);
+P(top.st,150);P(bot.st,-40);
+label(bot.st,'bottom bearing',new THREE.Vector3(48,-20,48));
+const topLbl=label(top.st,'top bearing',new THREE.Vector3(48,40,48));
+
+// ---------- TURNING ASSEMBLY ----------
+// pivot = tilt point for the bump demo (centre of bottom bearing)
+const pivot=new THREE.Group();pivot.position.y=-17;scene.add(pivot);
+const turn=new THREE.Group();turn.position.y=17;pivot.add(turn);   // turn rotates about Y (steering)
+const topRingG=new THREE.Group();turn.add(topRingG);topRingG.add(top.ring);top.ss.forEach(s=>topRingG.add(s));P(topRingG,150);
+const botRingG=new THREE.Group();turn.add(botRingG);botRingG.add(bot.ring);bot.ss.forEach(s=>botRingG.add(s));P(botRingG,-40);
+
+
+
+// pin: 3/4 in (19.05) x 108.3 usable, head on a washer on top of the top ring
+const PIN_TOP=53.3+1.6;
+const pinG=new THREE.Group();turn.add(pinG);
+const pin=cyl(9.5,108.3,mSteel);pin.position.y=PIN_TOP-108.3/2;pinG.add(pin);
+const head=cyl(15,6,mSteel);head.position.y=PIN_TOP+3;pinG.add(head);
+const wash=tube(17,9.8,1.6,mSteel);wash.position.y=53.3;pinG.add(wash);
+P(pinG,300);
+const pinLbl=label(pinG,'3/4" pin',new THREE.Vector3(-30,PIN_TOP+12,0),true);
+
+// steering plate under the bottom ring: y -33.3 .. -39.65 ; extends out toward wheel (+z)
+const plateG=new THREE.Group();turn.add(plateG);
+const plate=box(167,6.35,98,mTurn);plate.position.set(0,-33.3-3.175,30);plateG.add(plate);
+const arm=box(30,6.35,60,mTurn);arm.position.set(70,-36.5,-40);plateG.add(arm); // steering arm (tie rod / actuator)
+P(plateG,-110);
+label(plateG,'steering plate',new THREE.Vector3(-80,-36,75),true);
+
+
+// collar under the plate: y -39.65 .. -54.65
+const collarG=new THREE.Group();turn.add(collarG);
+const collar=tube(20,9.6,15,mTurn);collar.position.y=-54.65;collarG.add(collar);
+const cs=cyl(2.6,14,mSteel,12);cs.rotation.x=Math.PI/2;cs.position.set(14,-47,0);collarG.add(cs);
+P(collarG,-170);
+label(collarG,'clamp collar',new THREE.Vector3(-60,-50,-30),true);
+
+// black plate + standoffs + shock + wheel, hanging under steering plate
+const wheelG=new THREE.Group();turn.add(wheelG);
+const bp=box(100,6,56,mBlack);bp.position.set(0,-57.65,62);wheelG.add(bp);
+for(const x of[-32,32])for(const z of[42,82]){const s=cyl(5,15,mSteel,16);s.position.set(x,-47.15,z);wheelG.add(s);}
+const shock=box(46,120,40,mBlack);shock.position.set(0,-120,68);wheelG.add(shock);
+const spring=cyl(13,90,mSteel,20);spring.position.set(-34,-115,68);spring.rotation.z=.25;wheelG.add(spring);
+const tire=new THREE.Mesh(new THREE.TorusGeometry(76,26,20,48),mTire);tire.position.set(0,-180,130);wheelG.add(tire);
+const hub=cyl(62,56,mHub,40);hub.rotation.x=Math.PI/2;hub.position.set(0,-180,130);wheelG.add(hub);
+P(wheelG,-260);
+label(wheelG,'black plate, shock + wheel (hang from steering plate)',new THREE.Vector3(-110,-140,150),true);
+
+// pivot axis line
+const axis=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,120,0),new THREE.Vector3(0,-300,0)]),
+  new THREE.LineDashedMaterial({color:0xe8913a,dashSize:8,gapSize:6}));axis.computeLineDistances();scene.add(axis);
+
+// ---------- state + UI ----------
+let two=true,exploded=0,exTarget=0,steering=false,steerT=0,angle=0,bumpT=-1,xray=false;
+const $=id=>document.getElementById(id);
+const msg=$('msg');
+const say=t=>msg.innerHTML=t;
+function setMode(t){two=t;$('b2').classList.toggle('on',t);$('b1').classList.toggle('on',!t);
+  top.st.visible=t;topRingG.visible=t;topLbl.visible=t&&$('labels').classList.contains('on');
+  say(t?'<b>2 bearings:</b> the pin is held at two points about 2 in apart, so it can only spin, never lean. Press <b>Hit a bump</b>.'
+       :'<b>1 bearing:</b> the pin is held at only one point. The bearing\'s centre sits in a ball-shaped seat (made to self-align), so a hard hit can tip it. Press <b>Hit a bump</b>.');}
+$('b2').onclick=()=>setMode(true);$('b1').onclick=()=>setMode(false);
+$('steer').onclick=()=>{steering=!steering;$('steer').classList.toggle('on',steering);$('steer').textContent=steering?'■ Stop steering':'▶ Steer left/right';
+  if(steering)say('Everything <span style="color:#e8913a"><b>orange</b></span> turns together: spinning centres, pin, plate, collar and wheel. The blue blocks and gray rails never move.');};
+$('bump').onclick=()=>{bumpT=0;say(two?'<b>2 bearings:</b> bump hits, the wheel stays straight. The top bearing holds the top of the pin.'
+  :'<b>1 bearing:</b> bump hits, the whole wheel leans because the single bearing tips in its seat (shown bigger than real so you can see it).');};
+$('explode').onclick=()=>{exTarget=exTarget?0:1;$('explode').classList.toggle('on',!!exTarget);$('explode').textContent=exTarget?'Put together':'Take apart';
+  if(exTarget)say('<b>Build order:</b> bolt both bearing blocks to the rails. Hold the plate and collar under the bottom bearing. Drop the pin in from the top through both spinning centres, the plate and the collar. Tighten the collar, then the 4 set screws.');};
+$('xray').onclick=()=>{xray=!xray;$('xray').classList.toggle('on',xray);mHouse.opacity=xray?.25:1;mHouse.depthWrite=!xray;mFrame.transparent=xray;mFrame.opacity=xray?.35:1;
+  if(xray)say('See inside: the pin runs straight down through both spinning centres. The set screws lock the pin to them.');};
+$('labels').onclick=()=>{const on=!$('labels').classList.contains('on');$('labels').classList.toggle('on',on);labels.forEach(l=>l.visible=on);if(on)topLbl.visible=two;};
+$('ang').oninput=e=>{steering=false;$('steer').classList.remove('on');$('steer').textContent='▶ Steer left/right';angle=+e.target.value;};
+setMode(true);
+let showWheel=false;wheelG.visible=false;arm.visible=false;grid.visible=false;
+$('wheel').onclick=()=>{showWheel=!showWheel;wheelG.visible=showWheel;arm.visible=showWheel;grid.visible=showWheel;$('wheel').classList.toggle('on',showWheel);
+  if(showWheel){cam.position.set(330,140,420);ctl.target.set(40,-60,40);}else{cam.position.set(170,50,210);ctl.target.set(0,-5,0);}};
+
+const clock=new THREE.Clock();
+function tick(){const dt=clock.getDelta();
+  if(steering){steerT+=dt;angle=30*Math.sin(steerT*1.2);$('ang').value=angle;}
+  $('angv').textContent=Math.round(angle)+'°';
+  turn.rotation.y=THREE.MathUtils.degToRad(angle);
+  // bump: tilt about bottom bearing centre (x axis = lean of the wheel)
+  let tilt=0;if(bumpT>=0){bumpT+=dt;const k=bumpT<.25?bumpT/.25:Math.max(0,1-(bumpT-.25)/1.4);
+    const wob=Math.sin(bumpT*18)*Math.exp(-bumpT*2.2);tilt=two?0.003*wob:(0.14*k+0.04*wob);if(bumpT>2.2)bumpT=-1;}
+  pivot.rotation.x=tilt;
+  if(!two){bot.ring.parent.rotation.x=0;}
+  exploded+= (exTarget-exploded)*Math.min(1,dt*4);
+  for(const p of parts)p.position.y=p.userData.base.y+p.userData.ex*exploded;
+  ctl.update();renderer.render(scene,cam);lab.render(scene,cam);requestAnimationFrame(tick);}
+tick();
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);lab.setSize(innerWidth,innerHeight);});
+window.__ok=true;
+</script></body></html>
