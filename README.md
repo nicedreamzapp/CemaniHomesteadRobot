@@ -22,6 +22,8 @@
 
 **Text it commands from your phone. It drives itself, avoids obstacles, detects 601 objects, builds 3D maps, and texts you back.**
 
+**Status, November 2026:** the original tank drives, detects, maps and takes text commands (videos below). It is now mid-rebuild: the new 2020 frame is built and front-steering parts are ordered. The reBot arms in the render below are a plan; they are not bought yet.
+
 A 1kW, four-hub-motor tank robot for a homestead, with its own firmware, a WebSocket control server, a browser command center, and a Jetson "brain" that turns text messages into obstacle-checked moves.
 
 [Demo](#demo) | [Quick Start](#quick-start) | [What I Built](#what-i-built) | [Robot Brain](#robot-brain) | [3D Mapping](#3d-mapping) | [AI Vision](#ai-vision) | [Architecture](#architecture) | [Hardware](#hardware) | [Roadmap](#roadmap)
@@ -29,6 +31,8 @@ A 1kW, four-hub-motor tank robot for a homestead, with its own firmware, a WebSo
 ---
 
 ![Cemani plan: 4-wheel steering and two reBot arms, each doing its own job](arm-rebot/renders/cemani-4ws-arm-iso.jpg)
+
+*Render of the planned build (steering ordered, arms not bought yet).*
 
 ---
 
