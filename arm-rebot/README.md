@@ -1,8 +1,8 @@
 # Two reBot B601-DM arms on Cemani (plan, not bought yet)
 
 Arm 1 sits on the front low box (unchanged, plate below). Arm 2 sits on the back of the tall box top, across the two black
-top rails (its plate is TBD). They work as a pair: arm 1 holds or grabs low and out front, arm 2 reaches forward over the body
-to help.
+top rails (its plate is TBD). Each arm does its own job on its own: arm 1 works low and out front (weeding, picking things up near the
+ground), arm 2 works up high off the back and sides (picking fruit, reaching shelves).
 
 Arm: Seeed reBot Arm B601-DM (open source, github.com/Seeed-Projects/reBot-DevArm). 6 joints + gripper, Damiao motors,
 4.7 kg, 1.5 kg rated payload, 767 mm reach with gripper, 24 V (runs off Cemani's 24 V LiFePO4 on its own breaker),
@@ -29,9 +29,9 @@ Tip check (model numbers, arm 1 alone): arm + 1.5 kg at full forward reach is ab
 
 ## What it will look like (plan as of 11/18/2026)
 4-wheel steering (rear axle = front axle mirrored, turning the opposite way for tight turns), the frame sized to the real
-robot, arm 1 on its plate on the front low box holding a feed pail, and arm 2 on the back of the tall box reaching over the
-body to pour a scoop of feed into it. Made by `render/render_cemani_with_arm.py` from the frame v3 model and
-Seeed's own arm model; arm 2's pose was solved from the same URDF so its gripper lands over the pail.
+robot, arm 1 on its plate on the front low box pulling a weed from a low garden bed, and arm 2 on the back of the tall box
+picking an apple off a branch up high, each on its own job. Made by `render/render_cemani_with_arm.py` from the frame v3 model and
+Seeed's own arm model; both poses were solved from the same URDF so the grippers land on the weed and the apple.
 
 ![Cemani with 4-wheel steering and two reBot arms](renders/cemani-4ws-arm-iso.jpg)
 
