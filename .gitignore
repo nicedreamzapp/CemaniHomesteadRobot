@@ -105,3 +105,6 @@ mac-visualizer/*_recovered.json
 mac-visualizer/*_clean.json
 mac-visualizer/*_pcd.ply
 mac-visualizer/gaussian_env/
+
+# Agent message folder, local only
+.claude-comms/
